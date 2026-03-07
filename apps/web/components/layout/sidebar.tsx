@@ -9,7 +9,7 @@ import {
   Bot, Settings, ChevronLeft, ChevronRight, X,
   Users, FolderOpen, Workflow, Sparkles, CheckSquare,
   FileSearch, Upload, Shield, Mail, Key,
-  Layers, Package, TrendingUp, HelpCircle, Newspaper,
+  Layers, Package, TrendingUp, HelpCircle,
   ScrollText, Brain, ShieldAlert, Gavel, MessageSquare,
 } from 'lucide-react';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
@@ -52,7 +52,6 @@ const settingsSubItems = [
   { label: 'Roles', href: '/settings/roles' },
   { label: 'Templates', href: '/settings/templates' },
   { label: 'API & Integrations', href: '/settings/api-setup' },
-  { label: 'News Management', href: '/settings/news' },
   { label: 'Profile', href: '/settings/profile' },
 ];
 

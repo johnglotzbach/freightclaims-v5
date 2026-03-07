@@ -172,7 +172,6 @@ export default function FeaturesPage() {
           <div className="flex gap-6">
             <Link href="/" className="hover:text-white transition-colors">Home</Link>
             <Link href="/about" className="hover:text-white transition-colors">About</Link>
-            <Link href="/news" className="hover:text-white transition-colors">Blog</Link>
             <Link href="/support" className="hover:text-white transition-colors">Support</Link>
           </div>
         </div>

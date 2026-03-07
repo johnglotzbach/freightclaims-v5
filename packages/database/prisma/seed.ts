@@ -72,28 +72,24 @@ async function main() {
   // ================================================================
   console.log('Creating roles...');
 
-  // Super Admin role (global, not tenant-scoped)
   const superAdminRole = await prisma.role.upsert({
     where: { name_corporateId: { name: 'Super Admin', corporateId: null as any } },
     update: { allPermissions: true, allClaims: true },
     create: { name: 'Super Admin', description: 'FreightClaims platform administrator', allPermissions: true, allClaims: true },
   });
 
-  // Admin role (tenant-scoped, full access within tenant)
   const adminRole = await prisma.role.upsert({
     where: { name_corporateId: { name: 'Admin', corporateId: null as any } },
     update: { allPermissions: true, allClaims: true },
     create: { name: 'Admin', description: 'Full access within the organization', allPermissions: true, allClaims: true },
   });
 
-  // Manager role
   const managerRole = await prisma.role.upsert({
     where: { name_corporateId: { name: 'Manager', corporateId: null as any } },
     update: {},
     create: { name: 'Manager', description: 'Manage claims, users, and reports' },
   });
 
-  // Assign manager permissions
   const managerPerms = [
     'claims.view', 'claims.create', 'claims.edit', 'claims.export',
     'documents.view', 'documents.upload',
@@ -116,7 +112,6 @@ async function main() {
     }
   }
 
-  // Claims Handler role
   const handlerRole = await prisma.role.upsert({
     where: { name_corporateId: { name: 'Claims Handler', corporateId: null as any } },
     update: {},
@@ -142,7 +137,6 @@ async function main() {
     }
   }
 
-  // Viewer role
   const viewerRole = await prisma.role.upsert({
     where: { name_corporateId: { name: 'Viewer', corporateId: null as any } },
     update: {},
@@ -178,7 +172,6 @@ async function main() {
     },
   });
 
-  // Demo customer under the platform
   const demoCustomer = await prisma.customer.upsert({
     where: { code: 'DEMO-001' },
     update: { corporateId: corpCustomer.id },
@@ -193,16 +186,67 @@ async function main() {
   });
 
   // ================================================================
-  // ADMIN USER
+  // ACME FREIGHT SOLUTIONS (Demo Company)
   // ================================================================
-  console.log('Creating admin user...');
-  const passwordHash = await bcrypt.hash('admin123!', 12);
+  console.log('Creating demo company (Acme Freight Solutions)...');
+  const acmeCustomer = await prisma.customer.upsert({
+    where: { code: 'ACME-001' },
+    update: { corporateId: corpCustomer.id },
+    create: {
+      name: 'Acme Freight Solutions',
+      code: 'ACME-001',
+      email: 'info@acmefreight.com',
+      phone: '(555) 100-2000',
+      industry: 'Third Party Logistics',
+      corporateId: corpCustomer.id,
+    },
+  });
+
+  // ================================================================
+  // USERS
+  // ================================================================
+  console.log('Creating users...');
+
+  // Owner account — John Glotzbach (Super Admin)
+  const ownerHash = await bcrypt.hash('FreightClaims2026!', 12);
+  const ownerUser = await prisma.user.upsert({
+    where: { email: 'john@freightclaims.com' },
+    update: { roleId: superAdminRole.id, isSuperAdmin: true, corporateId: corpCustomer.id },
+    create: {
+      email: 'john@freightclaims.com',
+      passwordHash: ownerHash,
+      firstName: 'John',
+      lastName: 'Glotzbach',
+      roleId: superAdminRole.id,
+      corporateId: corpCustomer.id,
+      isSuperAdmin: true,
+    },
+  });
+
+  // Test account — Claims Handler
+  const testHash = await bcrypt.hash('TestUser2026!', 12);
+  await prisma.user.upsert({
+    where: { email: 'test@freightclaims.com' },
+    update: { roleId: handlerRole.id, corporateId: corpCustomer.id, customerId: acmeCustomer.id },
+    create: {
+      email: 'test@freightclaims.com',
+      passwordHash: testHash,
+      firstName: 'Test',
+      lastName: 'User',
+      roleId: handlerRole.id,
+      corporateId: corpCustomer.id,
+      customerId: acmeCustomer.id,
+    },
+  });
+
+  // Admin account
+  const adminHash = await bcrypt.hash('admin123!', 12);
   await prisma.user.upsert({
     where: { email: 'admin@freightclaims.com' },
     update: { roleId: superAdminRole.id, isSuperAdmin: true, corporateId: corpCustomer.id },
     create: {
       email: 'admin@freightclaims.com',
-      passwordHash,
+      passwordHash: adminHash,
       firstName: 'System',
       lastName: 'Admin',
       roleId: superAdminRole.id,
@@ -211,7 +255,7 @@ async function main() {
     },
   });
 
-  // Demo user
+  // Demo account
   const demoHash = await bcrypt.hash('demo123!', 12);
   await prisma.user.upsert({
     where: { email: 'demo@freightclaims.com' },
@@ -226,6 +270,8 @@ async function main() {
       customerId: demoCustomer.id,
     },
   });
+
+  console.log('  4 user accounts created');
 
   // ================================================================
   // CARRIERS
@@ -265,7 +311,6 @@ async function main() {
     catIds[name] = cat.id;
   }
 
-  // Required documents per claim type
   const requiredMappings = [
     { category: 'Bill of Lading', types: ['damage', 'shortage', 'loss', 'concealed_damage', 'refused', 'theft'] },
     { category: 'Proof of Delivery', types: ['damage', 'shortage', 'loss', 'concealed_damage', 'refused'] },
@@ -302,9 +347,181 @@ async function main() {
     await prisma.country.upsert({ where: { code: c.code }, update: {}, create: c });
   }
 
-  console.log('\nSeed completed successfully!');
-  console.log('  Login: admin@freightclaims.com / admin123!');
-  console.log('  Demo:  demo@freightclaims.com / demo123!');
+  // ================================================================
+  // SAMPLE CLAIMS
+  // ================================================================
+  console.log('Creating sample claims...');
+
+  const sampleClaims = [
+    {
+      claimNumber: 'CLM-2026-0001',
+      status: 'pending',
+      claimType: 'damage',
+      claimAmount: 4250.00,
+      description: 'Pallet of electronics damaged during transit - visible crush damage on delivery',
+      proNumber: 'PRO-8847291',
+      filingDate: new Date('2026-01-08'),
+      deliveryDate: new Date('2026-01-01'),
+      shipDate: new Date('2025-12-28'),
+    },
+    {
+      claimNumber: 'CLM-2026-0002',
+      status: 'in_review',
+      claimType: 'shortage',
+      claimAmount: 1875.50,
+      description: 'Short 3 cases of product - BOL shows 12 cases, only 9 received',
+      proNumber: 'PRO-9921034',
+      filingDate: new Date('2026-01-15'),
+      deliveryDate: new Date('2026-01-08'),
+      shipDate: new Date('2026-01-04'),
+    },
+    {
+      claimNumber: 'CLM-2026-0003',
+      status: 'approved',
+      claimType: 'loss',
+      claimAmount: 12400.00,
+      description: 'Entire shipment lost in transit - never delivered',
+      proNumber: 'PRO-7734562',
+      filingDate: new Date('2026-01-22'),
+      deliveryDate: new Date('2026-01-15'),
+      shipDate: new Date('2026-01-10'),
+    },
+    {
+      claimNumber: 'CLM-2026-0004',
+      status: 'denied',
+      claimType: 'damage',
+      claimAmount: 890.25,
+      description: 'Water damage to carton of paper goods',
+      proNumber: 'PRO-3348901',
+      filingDate: new Date('2026-01-28'),
+      deliveryDate: new Date('2026-01-21'),
+      shipDate: new Date('2026-01-17'),
+    },
+    {
+      claimNumber: 'CLM-2026-0005',
+      status: 'pending',
+      claimType: 'concealed_damage',
+      claimAmount: 6750.00,
+      description: 'Concealed damage found upon unpacking - internal items crushed',
+      proNumber: 'PRO-5561278',
+      filingDate: new Date('2026-02-03'),
+      deliveryDate: new Date('2026-01-27'),
+      shipDate: new Date('2026-01-23'),
+    },
+    {
+      claimNumber: 'CLM-2026-0006',
+      status: 'in_review',
+      claimType: 'refused',
+      claimAmount: 3200.00,
+      description: 'Delivery refused - shipment arrived damaged and leaking',
+      proNumber: 'PRO-2290145',
+      filingDate: new Date('2026-02-10'),
+      deliveryDate: new Date('2026-02-03'),
+      shipDate: new Date('2026-01-30'),
+    },
+    {
+      claimNumber: 'CLM-2026-0007',
+      status: 'settled',
+      claimType: 'damage',
+      claimAmount: 8500.00,
+      settledAmount: 7200.00,
+      description: 'Forklift damage during unloading at destination',
+      proNumber: 'PRO-6678432',
+      filingDate: new Date('2026-02-14'),
+      deliveryDate: new Date('2026-02-07'),
+      shipDate: new Date('2026-02-03'),
+    },
+    {
+      claimNumber: 'CLM-2026-0008',
+      status: 'pending',
+      claimType: 'shortage',
+      claimAmount: 2100.00,
+      description: 'Missing 1 pallet from multi-stop shipment',
+      proNumber: 'PRO-4412987',
+      filingDate: new Date('2026-02-20'),
+      deliveryDate: new Date('2026-02-13'),
+      shipDate: new Date('2026-02-09'),
+    },
+  ];
+
+  for (const claim of sampleClaims) {
+    await prisma.claim.upsert({
+      where: { claimNumber: claim.claimNumber },
+      update: {
+        status: claim.status,
+        claimType: claim.claimType,
+        claimAmount: claim.claimAmount,
+        settledAmount: claim.settledAmount ?? null,
+        description: claim.description,
+      },
+      create: {
+        claimNumber: claim.claimNumber,
+        proNumber: claim.proNumber,
+        status: claim.status,
+        claimType: claim.claimType,
+        claimAmount: claim.claimAmount,
+        settledAmount: claim.settledAmount ?? null,
+        description: claim.description,
+        shipDate: claim.shipDate,
+        deliveryDate: claim.deliveryDate,
+        filingDate: claim.filingDate,
+        createdById: ownerUser.id,
+        customerId: acmeCustomer.id,
+        corporateId: corpCustomer.id,
+      },
+    });
+  }
+  console.log(`  ${sampleClaims.length} sample claims created`);
+
+  // ================================================================
+  // SAMPLE SHIPMENTS
+  // ================================================================
+  console.log('Creating sample shipments...');
+
+  const sampleShipments = [
+    { proNumber: 'SHP-2026-001', originCity: 'Atlanta', originState: 'GA', destinationCity: 'Dallas', destinationState: 'TX', weight: 4500, pieces: 12, shipDate: new Date('2026-01-05'), deliveryDate: new Date('2026-01-08') },
+    { proNumber: 'SHP-2026-002', originCity: 'Chicago', originState: 'IL', destinationCity: 'Los Angeles', destinationState: 'CA', weight: 8200, pieces: 24, shipDate: new Date('2026-01-12'), deliveryDate: new Date('2026-01-18') },
+    { proNumber: 'SHP-2026-003', originCity: 'New York', originState: 'NY', destinationCity: 'Miami', destinationState: 'FL', weight: 3100, pieces: 8, shipDate: new Date('2026-01-20'), deliveryDate: new Date('2026-01-24') },
+    { proNumber: 'SHP-2026-004', originCity: 'Seattle', originState: 'WA', destinationCity: 'Phoenix', destinationState: 'AZ', weight: 6800, pieces: 16, shipDate: new Date('2026-02-01'), deliveryDate: new Date('2026-02-05') },
+    { proNumber: 'SHP-2026-005', originCity: 'Houston', originState: 'TX', destinationCity: 'Nashville', destinationState: 'TN', weight: 2400, pieces: 6, shipDate: new Date('2026-02-10'), deliveryDate: new Date('2026-02-13') },
+  ];
+
+  for (const shipment of sampleShipments) {
+    const existing = await prisma.shipment.findFirst({
+      where: { proNumber: shipment.proNumber, corporateId: corpCustomer.id },
+    });
+    if (!existing) {
+      await prisma.shipment.create({
+        data: {
+          proNumber: shipment.proNumber,
+          originCity: shipment.originCity,
+          originState: shipment.originState,
+          destinationCity: shipment.destinationCity,
+          destinationState: shipment.destinationState,
+          weight: shipment.weight,
+          pieces: shipment.pieces,
+          shipDate: shipment.shipDate,
+          deliveryDate: shipment.deliveryDate,
+          customerId: acmeCustomer.id,
+          corporateId: corpCustomer.id,
+        },
+      });
+    }
+  }
+  console.log(`  ${sampleShipments.length} sample shipments created`);
+
+  // ================================================================
+  // SEED COMPLETE
+  // ================================================================
+  console.log('\n========================================');
+  console.log(' Seed completed successfully!');
+  console.log('========================================');
+  console.log('\nLogin accounts:');
+  console.log('  Owner:  john@freightclaims.com / FreightClaims2026!');
+  console.log('  Test:   test@freightclaims.com / TestUser2026!');
+  console.log('  Admin:  admin@freightclaims.com / admin123!');
+  console.log('  Demo:   demo@freightclaims.com / demo123!');
+  console.log('');
 }
 
 main()

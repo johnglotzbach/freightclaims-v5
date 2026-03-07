@@ -5,8 +5,6 @@ Orchestrates specialized agents that interact with carrier websites to file clai
 check statuses, upload documents, and negotiate settlements. Uses browser-use for
 agentic browsing and Playwright for reliable page automation.
 
-Now powered by Google Gemini instead of OpenAI.
-
 Location: apps/ai-agent/app.py
 Related: apps/ai-agent/tools.py (custom Playwright tools)
          apps/ai-agent/prompts/ (carrier-specific prompt templates)

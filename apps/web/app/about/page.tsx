@@ -226,12 +226,6 @@ export default function AboutPage() {
                 cta: 'Learn More',
                 href: '/features',
               },
-              {
-                title: 'PRESS RELEASES AND NEWS',
-                description: 'Stay up to date on the latest news, press and company announcements from FreightClaims.com.',
-                cta: 'Check Latest News',
-                href: '/news',
-              },
             ].map((card) => (
               <Link
                 key={card.title}
@@ -290,7 +284,6 @@ export default function AboutPage() {
               <h4 className="text-white font-semibold text-sm mb-4">About Us</h4>
               <ul className="space-y-2.5 text-sm">
                 <li><Link href="/about" className="hover:text-white transition-colors">About</Link></li>
-                <li><Link href="/news" className="hover:text-white transition-colors">News</Link></li>
                 <li><Link href="/contact" className="hover:text-white transition-colors">Contact</Link></li>
               </ul>
             </div>
@@ -299,7 +292,6 @@ export default function AboutPage() {
               <ul className="space-y-2.5 text-sm">
                 <li><Link href="/claim-assistance" className="hover:text-white transition-colors">Claim Assistance</Link></li>
                 <li><Link href="/features" className="hover:text-white transition-colors">Partnerships</Link></li>
-                <li><Link href="/news" className="hover:text-white transition-colors">Press Releases &amp; News</Link></li>
               </ul>
             </div>
           </div>

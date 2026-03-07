@@ -3,7 +3,7 @@
  *
  * Full marketing page matching the original site's flow plus v5.0 additions:
  * Navbar, Hero, Pain Points, Services, How It Works, Analytics/Dashboard,
- * AI Email Claim Entry, AI Agents, Partnerships, Blog, Stats,
+ * AI Email Claim Entry, AI Agents, Partnerships, Stats,
  * Testimonials, FAQ, CTA Banner, Footer.
  *
  * Location: apps/web/app/page.tsx
@@ -14,7 +14,7 @@ import {
   CheckCircle2, ArrowRight, ChevronDown, Zap, Lock,
   FileText, TrendingUp, Users, Headphones, Mail, Phone,
   Globe, Star, Award, Target, XCircle, AlertTriangle,
-  FileX, Ban, Crosshair, Camera, Newspaper,
+  FileX, Ban, Crosshair, Camera,
   CalendarDays, MonitorSmartphone, PieChart, Workflow,
   Banknote, Search, Handshake, ChevronRight, Sparkles,
   ExternalLink, BookOpen, Cog,
@@ -50,7 +50,6 @@ export default function HomePage() {
       <AIEmailClaimEntry />
       <AIAgents />
       <Partnerships />
-      <BlogPreview />
       <Stats />
       <Testimonials />
       <FAQ />
@@ -89,11 +88,9 @@ function Navbar() {
               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 w-52">
                 <Link href="/claim-assistance" className="block px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-primary-500 transition-colors">Claim Assistance</Link>
                 <Link href="/features#security" className="block px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-primary-500 transition-colors">Partnerships</Link>
-                <Link href="/news" className="block px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-primary-500 transition-colors">Press Releases &amp; News</Link>
               </div>
             </div>
           </div>
-          <Link href="/news" className="hover:text-primary-500 transition-colors">Blog</Link>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
@@ -771,85 +768,6 @@ function Partnerships() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Blog Preview                                                       */
-/* ------------------------------------------------------------------ */
-function BlogPreview() {
-  const posts = [
-    {
-      title: '3PL Systems Announces New Integration with FreightClaims.com to Streamline Freight Claims Management',
-      date: 'January 16, 2026',
-      excerpt: '3PL Systems Announces New Integration with FreightClaims.com to Streamline Freight [...]',
-      category: 'Press Release',
-      color: 'bg-primary-500',
-    },
-    {
-      title: 'Navigating Freight Claims in 2026: A Practical Guide for Shippers',
-      date: 'December 18, 2025',
-      excerpt: 'Freight Claims have become a core business risk. As [...]',
-      category: 'Guide',
-      color: 'bg-emerald-500',
-    },
-    {
-      title: 'The Top Types Of Freight Claims Every Shipper Should Know',
-      date: 'October 27, 2025',
-      excerpt: 'The Top Types Of Freight Claims Every Shipper Should Know [...]',
-      category: 'Education',
-      color: 'bg-accent-500',
-    },
-  ];
-
-  return (
-    <section className="py-20 sm:py-28 bg-slate-50 dark:bg-slate-900/50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Latest From The{' '}
-            <span className="text-accent-500">Blog</span>
-          </h2>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-          {posts.map((post) => (
-            <Link
-              key={post.title}
-              href="/news"
-              className="group rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 overflow-hidden hover:shadow-xl transition-all duration-300"
-            >
-              {/* Image placeholder */}
-              <div className="h-48 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 relative overflow-hidden">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Newspaper className="w-12 h-12 text-slate-300 dark:text-slate-600" />
-                </div>
-                <div className={`absolute top-3 left-3 ${post.color} text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide`}>
-                  {post.category}
-                </div>
-              </div>
-              <div className="p-5">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-snug mb-2 group-hover:text-primary-500 transition-colors line-clamp-2">
-                  {post.title}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">{post.date}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{post.excerpt}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-
-        <div className="text-center mt-10">
-          <Link
-            href="/news"
-            className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white px-6 py-2.5 rounded-lg font-semibold text-sm transition-all shadow-md shadow-accent-500/20"
-          >
-            View All Articles
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Stats                                                              */
 /* ------------------------------------------------------------------ */
 function Stats() {
@@ -1076,7 +994,6 @@ function Footer() {
             <h4 className="text-white font-semibold text-sm mb-4">About Us</h4>
             <ul className="space-y-2.5 text-sm">
               <li><Link href="/about" className="hover:text-white transition-colors">About</Link></li>
-              <li><Link href="/news" className="hover:text-white transition-colors">Blog</Link></li>
               <li><Link href="/contact" className="hover:text-white transition-colors">Contact Us</Link></li>
             </ul>
           </div>
@@ -1087,7 +1004,6 @@ function Footer() {
             <ul className="space-y-2.5 text-sm">
               <li><Link href="/claim-assistance" className="hover:text-white transition-colors">Claim Assistance</Link></li>
               <li><Link href="/features" className="hover:text-white transition-colors">Partnerships</Link></li>
-              <li><Link href="/news" className="hover:text-white transition-colors">Press Releases &amp; News</Link></li>
               <li><Link href="/support" className="hover:text-white transition-colors">Help Center</Link></li>
             </ul>
           </div>
