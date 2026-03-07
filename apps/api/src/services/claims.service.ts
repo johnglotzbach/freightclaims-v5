@@ -32,7 +32,7 @@ export const claimsService = {
 
     const filters = {
       status: query.status as string | undefined,
-      customerId: user.role === 'admin' ? (query.customerId as string) : user.customerId,
+      customerId: user.role === 'admin' ? (query.customerId as string) : (user.customerId ?? undefined),
       search: query.search as string | undefined,
       dateFrom: query.dateFrom as string | undefined,
       dateTo: query.dateTo as string | undefined,
@@ -154,11 +154,11 @@ export const claimsService = {
   async addIdentifier(claimId: string, data: Record<string, unknown>) { return claimsRepository.addIdentifier(claimId, data); },
 
   // --- Dashboard ---
-  async getDashboardStats(user: JwtPayload) { return claimsRepository.getDashboardStats(user.customerId); },
+  async getDashboardStats(user: JwtPayload) { return claimsRepository.getDashboardStats(user.customerId ?? undefined); },
 
   // --- Mass Upload ---
   async massUpload(data: Record<string, unknown>, user: JwtPayload) { return claimsRepository.massUpload(data, user.userId); },
-  async getMassUploadHistory(user: JwtPayload) { return claimsRepository.getMassUploadHistory(user.customerId); },
+  async getMassUploadHistory(user: JwtPayload) { return claimsRepository.getMassUploadHistory(user.customerId ?? undefined); },
 
   // --- Settings ---
   async getSettings() { return claimsRepository.getSettings(); },

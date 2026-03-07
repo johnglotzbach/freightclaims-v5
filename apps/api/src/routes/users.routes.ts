@@ -14,7 +14,7 @@ import { validate } from '../middleware/validate.middleware';
 import { usersController } from '../controllers/users.controller';
 import { loginSchema, registerSchema, updateUserSchema } from '../validators/users.validators';
 
-export const usersRouter = Router();
+export const usersRouter: Router = Router();
 
 // --- Public auth routes (rate-limited) ---
 usersRouter.post('/login', authLimiter, validate(loginSchema), usersController.login);

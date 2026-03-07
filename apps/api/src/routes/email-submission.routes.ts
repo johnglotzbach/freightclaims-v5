@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { prisma } from '../config/database';
 
-export const emailSubmissionRouter = Router();
+export const emailSubmissionRouter: Router = Router();
 
 emailSubmissionRouter.use(authenticate);
 
@@ -56,7 +56,7 @@ emailSubmissionRouter.put('/domains/:id', authorize(['admin']), async (req, res,
   try {
     const { isActive, domain } = req.body;
     const result = await prisma.approvedEmailDomain.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { ...(isActive !== undefined && { isActive }), ...(domain && { domain }) },
     });
     res.json({ success: true, data: result });
@@ -65,7 +65,7 @@ emailSubmissionRouter.put('/domains/:id', authorize(['admin']), async (req, res,
 
 emailSubmissionRouter.delete('/domains/:id', authorize(['admin']), async (req, res, next) => {
   try {
-    await prisma.approvedEmailDomain.delete({ where: { id: req.params.id } });
+    await prisma.approvedEmailDomain.delete({ where: { id: req.params.id as string } });
     res.json({ success: true });
   } catch (err) { next(err); }
 });
@@ -91,7 +91,7 @@ emailSubmissionRouter.put('/senders/:id', authorize(['admin']), async (req, res,
   try {
     const { isActive, email } = req.body;
     const result = await prisma.approvedEmailSender.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { ...(isActive !== undefined && { isActive }), ...(email && { email }) },
     });
     res.json({ success: true, data: result });
@@ -100,7 +100,7 @@ emailSubmissionRouter.put('/senders/:id', authorize(['admin']), async (req, res,
 
 emailSubmissionRouter.delete('/senders/:id', authorize(['admin']), async (req, res, next) => {
   try {
-    await prisma.approvedEmailSender.delete({ where: { id: req.params.id } });
+    await prisma.approvedEmailSender.delete({ where: { id: req.params.id as string } });
     res.json({ success: true });
   } catch (err) { next(err); }
 });

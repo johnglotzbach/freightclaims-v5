@@ -198,7 +198,7 @@ export default function ClaimDetailPage() {
         {activeTab === 'transportation' && <TransportationTab claim={claim} />}
         {activeTab === 'form-data' && <FormDataTab claim={claim} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
-        {activeTab === 'tasks' && <TasksTab tasks={claim.tasks || []} claimId={id} />}
+        {activeTab === 'tasks' && <TasksTab tasks={(claim as any).tasks || []} claimId={id} />}
         {activeTab === 'emails-automation' && <EmailsAutomationTab claimId={id} />}
         {activeTab === 'transactions' && <TransactionsTab claim={claim} />}
         {activeTab === 'additional' && <AdditionalInfoTab claim={claim} />}

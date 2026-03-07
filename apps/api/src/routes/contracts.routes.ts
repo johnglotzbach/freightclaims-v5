@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth.middleware';
 
-export const contractsRouter = Router();
+export const contractsRouter: Router = Router();
 contractsRouter.use(authenticate);
 
 function getTenantId(req: any): string | undefined {
@@ -103,13 +103,13 @@ contractsRouter.get('/insurance', async (req, res, next) => {
 
 contractsRouter.post('/insurance', async (req, res, next) => {
   try {
-    const { customerId, carrierId, certificateNumber, provider, policyNumber, coverageAmount, expirationDate } = req.body;
+    const { customerId, carrierId, certificateNumber, provider, policyType, coverageAmount, expirationDate } = req.body;
     if (!customerId || !certificateNumber || !expirationDate) {
       return res.status(400).json({ success: false, error: 'customerId, certificateNumber, and expirationDate are required' });
     }
     const corporateId = getTenantId(req);
     const cert = await prisma.insuranceCertificate.create({
-      data: { customerId, carrierId, corporateId, certificateNumber, provider, policyNumber, coverageAmount, expirationDate: new Date(expirationDate) },
+      data: { customerId, carrierId, corporateId, certificateNumber, provider, policyType, coverageAmount, expirationDate: new Date(expirationDate) },
     });
     res.status(201).json({ success: true, data: cert });
   } catch (err) { next(err); }

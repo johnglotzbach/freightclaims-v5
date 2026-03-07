@@ -9,7 +9,7 @@
  * Location: apps/api/src/middleware/auth.middleware.ts
  */
 import type { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 
@@ -17,6 +17,7 @@ import { logger } from '../utils/logger';
 export interface JwtPayload {
   userId: string;
   email: string;
+  role: string;
   roleId: string | null;
   corporateId: string | null;
   customerId: string | null;
@@ -53,21 +54,23 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
  * Includes corporateId, roleId, and permission names for stateless checks.
  */
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN,
+  const options: SignOptions = {
+    expiresIn: env.JWT_EXPIRES_IN as string,
     issuer: 'freightclaims.com',
     audience: 'freightclaims-api',
-  });
+  };
+  return jwt.sign(payload, env.JWT_SECRET, options);
 }
 
 /**
  * Generates a refresh token with a longer expiry.
  */
 export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId, type: 'refresh' }, env.JWT_SECRET, {
-    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
+  const options: SignOptions = {
+    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN as string,
     issuer: 'freightclaims.com',
-  });
+  };
+  return jwt.sign({ userId, type: 'refresh' }, env.JWT_SECRET, options);
 }
 
 /**

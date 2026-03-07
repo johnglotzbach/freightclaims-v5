@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { emailController } from '../controllers/email.controller';
 
-export const emailRouter = Router();
+export const emailRouter: Router = Router();
 
 emailRouter.use(authenticate);
 

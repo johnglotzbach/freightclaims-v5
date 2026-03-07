@@ -75,7 +75,7 @@ export const usersController = {
   }),
 
   getById: asyncHandler(async (req, res) => {
-    const user = await usersService.getById(req.params.id);
+    const user = await usersService.getById(req.params.id as string);
     res.json(user);
   }),
 
@@ -85,12 +85,12 @@ export const usersController = {
   }),
 
   update: asyncHandler(async (req, res) => {
-    const user = await usersService.update(req.params.id, req.body);
+    const user = await usersService.update(req.params.id as string, req.body);
     res.json(user);
   }),
 
   delete: asyncHandler(async (req, res) => {
-    await usersService.delete(req.params.id);
+    await usersService.delete(req.params.id as string);
     res.status(204).send();
   }),
 
@@ -105,7 +105,7 @@ export const usersController = {
   }),
 
   updateRole: asyncHandler(async (req, res) => {
-    const role = await usersService.updateRole(req.params.id, req.body);
+    const role = await usersService.updateRole(req.params.id as string, req.body);
     res.json(role);
   }),
 
@@ -115,7 +115,7 @@ export const usersController = {
   }),
 
   updatePermission: asyncHandler(async (req, res) => {
-    const perm = await usersService.updatePermission(req.params.id, req.body);
+    const perm = await usersService.updatePermission(req.params.id as string, req.body);
     res.json(perm);
   }),
 
@@ -130,7 +130,7 @@ export const usersController = {
   }),
 
   updateEmailTemplate: asyncHandler(async (req, res) => {
-    const template = await usersService.updateEmailTemplate(req.params.id, req.body);
+    const template = await usersService.updateEmailTemplate(req.params.id as string, req.body);
     res.json(template);
   }),
 
@@ -145,7 +145,7 @@ export const usersController = {
   }),
 
   updateLetterTemplate: asyncHandler(async (req, res) => {
-    const template = await usersService.updateLetterTemplate(req.params.id, req.body);
+    const template = await usersService.updateLetterTemplate(req.params.id as string, req.body);
     res.json(template);
   }),
 };

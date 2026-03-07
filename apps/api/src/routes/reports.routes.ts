@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { reportsController } from '../controllers/reports.controller';
 
-export const reportsRouter = Router();
+export const reportsRouter: Router = Router();
 
 reportsRouter.use(authenticate);
 

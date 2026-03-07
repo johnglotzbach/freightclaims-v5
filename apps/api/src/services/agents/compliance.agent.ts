@@ -39,20 +39,6 @@ Key Carmack Amendment rules you enforce:
 
 When analyzing claims, flag any violations, upcoming deadlines, and recommended actions.`;
 
-interface ComplianceCheck {
-  status: 'compliant' | 'at_risk' | 'violation';
-  overallScore: number;
-  deadlines: Array<{
-    name: string;
-    date: string;
-    daysRemaining: number;
-    status: 'ok' | 'warning' | 'overdue';
-  }>;
-  violations: string[];
-  warnings: string[];
-  recommendations: string[];
-}
-
 export const complianceAgent: BaseAgent = {
   type: 'compliance',
   name: 'Legal Compliance Agent',

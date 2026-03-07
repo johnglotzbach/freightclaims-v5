@@ -26,5 +26,5 @@ export const reportsController = {
   getMetricsPerCarrier: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getMetricsPerCarrier(req.body, user)); }),
   getMetricsPerDestination: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getMetricsPerDestination(req.body, user)); }),
   getWriteOffAmount: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getWriteOffAmount(req.body, user)); }),
-  exportReport: asyncHandler(async (req, res) => { const user = getUser(req); await reportsService.exportReport(req.params.type, req.query, user, res); }),
+  exportReport: asyncHandler(async (req, res) => { const user = getUser(req); await reportsService.exportReport(req.params.type as string, req.query, user, res); }),
 };

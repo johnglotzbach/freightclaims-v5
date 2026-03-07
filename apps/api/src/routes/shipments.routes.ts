@@ -16,7 +16,7 @@ import {
   updateShipmentSchema,
 } from '../validators/shipments.validators';
 
-export const shipmentsRouter = Router();
+export const shipmentsRouter: Router = Router();
 
 shipmentsRouter.use(authenticate);
 

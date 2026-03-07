@@ -90,7 +90,7 @@ export async function generateContent(
         throw new Error(`Gemini ${response.status}: ${errBody}`);
       }
 
-      const data: GeminiResponse = await response.json();
+      const data = await response.json() as GeminiResponse;
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) throw new Error('Empty Gemini response');
 
@@ -162,7 +162,7 @@ export async function chat(
     throw new Error(`Gemini ${response.status}: ${errBody}`);
   }
 
-  const data: GeminiResponse = await response.json();
+  const data = await response.json() as GeminiResponse;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 

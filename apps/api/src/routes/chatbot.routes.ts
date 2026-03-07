@@ -11,7 +11,7 @@ import { chat } from '../services/agents/gemini-client';
 import type { GeminiMessage } from '../services/agents/gemini-client';
 import rateLimit from 'express-rate-limit';
 
-export const chatbotRouter = Router();
+export const chatbotRouter: Router = Router();
 
 const chatLimiter = rateLimit({
   windowMs: 60_000,

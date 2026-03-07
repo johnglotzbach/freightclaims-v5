@@ -24,6 +24,7 @@ export async function initCache(): Promise<void> {
   }
 
   try {
+    // @ts-ignore - redis types may not be installed
     const { createClient } = await import('redis');
     redisClient = createClient({ url: env.REDIS_URL });
     redisClient.on('error', (err: Error) => logger.warn({ err }, 'Redis connection error'));

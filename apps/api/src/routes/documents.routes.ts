@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { documentsController } from '../controllers/documents.controller';
 
-export const documentsRouter = Router();
+export const documentsRouter: Router = Router();
 
 documentsRouter.use(authenticate);
 

@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth.middleware';
 
-export const onboardingRouter = Router();
+export const onboardingRouter: Router = Router();
 onboardingRouter.use(authenticate);
 
 // Get current user's onboarding state

@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { automationController } from '../controllers/automation.controller';
 
-export const automationRouter = Router();
+export const automationRouter: Router = Router();
 
 automationRouter.use(authenticate);
 

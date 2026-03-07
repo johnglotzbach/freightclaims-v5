@@ -7,9 +7,9 @@ import { searchRepository } from '../repositories/search.repository';
 import type { JwtPayload } from '../middleware/auth.middleware';
 
 export const searchService = {
-  async universalSearch(query: string, user: JwtPayload) { return searchRepository.universalSearch(query, user.customerId); },
-  async searchClaims(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchClaims(query, user.customerId); },
-  async searchCustomers(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchCustomers(query, user.customerId); },
+  async universalSearch(query: string, user: JwtPayload) { return searchRepository.universalSearch(query, user.customerId ?? undefined); },
+  async searchClaims(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchClaims(query, user.customerId ?? undefined); },
+  async searchCustomers(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchCustomers(query, user.customerId ?? undefined); },
   async searchCarriers(query: Record<string, unknown>) { return searchRepository.searchCarriers(query); },
-  async searchShipments(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchShipments(query, user.customerId); },
+  async searchShipments(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchShipments(query, user.customerId ?? undefined); },
 };

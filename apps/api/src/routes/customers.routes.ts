@@ -18,7 +18,7 @@ import {
   listCustomersQuerySchema,
 } from '../validators/customers.validators';
 
-export const customersRouter = Router();
+export const customersRouter: Router = Router();
 
 customersRouter.use(authenticate);
 

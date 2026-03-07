@@ -19,7 +19,7 @@ import {
   listClaimsQuerySchema,
 } from '../validators/claims.validators';
 
-export const claimsRouter = Router();
+export const claimsRouter: Router = Router();
 
 // All claim routes require authentication
 claimsRouter.use(authenticate);

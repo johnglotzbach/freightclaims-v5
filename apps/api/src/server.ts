@@ -41,7 +41,7 @@ import { newsRouter } from './routes/news.routes';
 import { onboardingRouter } from './routes/onboarding.routes';
 import { chatbotRouter } from './routes/chatbot.routes';
 
-const app = express();
+const app: express.Application = express();
 
 // ---------------------------------------------------------------------------
 // Global middleware (order matters)
@@ -107,7 +107,7 @@ app.get('/ready', async (_req, res) => {
 // API v1 routes
 // ---------------------------------------------------------------------------
 
-const v1 = express.Router();
+const v1: express.Router = express.Router();
 
 // Tenant isolation runs AFTER authenticate (inside each router),
 // so req.user is available when tenantIsolation reads corporateId.

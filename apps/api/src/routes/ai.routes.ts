@@ -13,7 +13,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { aiController } from '../controllers/ai.controller';
 
-export const aiRouter = Router();
+export const aiRouter: Router = Router();
 
 aiRouter.use(authenticate);
 

@@ -6,7 +6,7 @@
  * escalation notices. Monitors response deadlines.
  */
 import { prisma } from '../../config/database';
-import { generateContent, generateJSON } from './gemini-client';
+import { generateJSON } from './gemini-client';
 import { executeTool } from './tools';
 import type { BaseAgent, AgentContext, AgentResult } from './types';
 
@@ -25,7 +25,7 @@ export const communicationAgent: BaseAgent = {
   async run(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
 
-    let claimData = null;
+    let claimData: any = null;
     if (ctx.claimId) {
       const result = await executeTool('getClaim', { claimId: ctx.claimId }, ctx);
       if (result.success) claimData = result.data;

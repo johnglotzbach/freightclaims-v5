@@ -41,7 +41,7 @@ export const predictorAgent: BaseAgent = {
     const start = Date.now();
 
     // Get the claim details
-    let claimData = null;
+    let claimData: any = null;
     if (ctx.claimId) {
       const result = await executeTool('getClaim', { claimId: ctx.claimId }, ctx);
       if (result.success) claimData = result.data;

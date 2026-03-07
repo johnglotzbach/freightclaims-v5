@@ -80,17 +80,17 @@ export const customersController = {
   }),
 
   getNotes: asyncHandler(async (req, res) => {
-    const notes = await customersService.getNotes(req.params.id);
+    const notes = await customersService.getNotes(req.params.id as string);
     res.json(notes);
   }),
 
   addNote: asyncHandler(async (req, res) => {
-    const note = await customersService.addNote(req.params.id, req.body);
+    const note = await customersService.addNote(req.params.id as string, req.body);
     res.status(201).json(note);
   }),
 
   getReports: asyncHandler(async (req, res) => {
-    const reports = await customersService.getReports(req.params.id);
+    const reports = await customersService.getReports(req.params.id as string);
     res.json(reports);
   }),
 

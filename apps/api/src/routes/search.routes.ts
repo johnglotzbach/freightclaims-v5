@@ -12,7 +12,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { searchController } from '../controllers/search.controller';
 
-export const searchRouter = Router();
+export const searchRouter: Router = Router();
 
 searchRouter.use(authenticate);
 

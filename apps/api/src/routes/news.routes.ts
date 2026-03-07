@@ -6,9 +6,9 @@
  */
 import { Router } from 'express';
 import { prisma } from '../config/database';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 
-export const newsRouter = Router();
+export const newsRouter: Router = Router();
 
 // --- Public endpoints ---
 

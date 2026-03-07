@@ -32,7 +32,7 @@ export const fraudAgent: BaseAgent = {
   async run(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
 
-    let claimData = null;
+    let claimData: any = null;
     if (ctx.claimId) {
       const result = await executeTool('getClaim', { claimId: ctx.claimId }, ctx);
       if (result.success) claimData = result.data;
