@@ -13,6 +13,9 @@ export const usersRepository = {
         role: {
           include: { permissions: { include: { permission: true } } },
         },
+        corporate: {
+          select: { id: true, name: true, code: true },
+        },
       },
     });
   },
@@ -23,6 +26,9 @@ export const usersRepository = {
       include: {
         role: {
           include: { permissions: { include: { permission: true } } },
+        },
+        corporate: {
+          select: { id: true, name: true, code: true },
         },
       },
     });
@@ -38,10 +44,24 @@ export const usersRepository = {
     else if (!isSuperAdmin) where.corporateId = corporateId;
 
     const [users, total] = await Promise.all([
-      prisma.user.findMany({ where: where as any, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),
+      prisma.user.findMany({
+        where: where as any,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          role: { select: { id: true, name: true } },
+          corporate: { select: { id: true, name: true } },
+        },
+      }),
       prisma.user.count({ where: where as any }),
     ]);
-    return { data: users, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    const safeUsers = users.map(({ passwordHash: _pw, ...u }) => ({
+      ...u,
+      role: (u.role as any)?.name || 'User',
+      corporateName: (u.corporate as any)?.name || null,
+    }));
+    return { data: safeUsers, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },
   async getPreferences(userId: string) { return prisma.userPreference.findUnique({ where: { userId } }); },
   async updatePreferences(userId: string, data: Record<string, unknown>) { return prisma.userPreference.upsert({ where: { userId }, update: data as any, create: { userId, ...data } as any }); },

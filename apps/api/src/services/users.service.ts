@@ -12,6 +12,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { usersRepository } from '../repositories/users.repository';
+import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { generateToken, generateRefreshToken } from '../middleware/auth.middleware';
 import type { JwtPayload } from '../middleware/auth.middleware';
@@ -56,8 +57,13 @@ function buildJwtPayload(user: Record<string, unknown>): JwtPayload {
 /** Strips sensitive fields before returning user data to the client */
 function safeUser(user: Record<string, unknown>) {
   const { passwordHash: _pw, ...safe } = user;
+  const role = safe.role as Record<string, unknown> | null;
+  const corporate = safe.corporate as Record<string, unknown> | null;
   return {
     ...safe,
+    roleName: role?.name || null,
+    corporateName: corporate?.name || null,
+    corporateCode: corporate?.code || null,
     permissions: buildJwtPayload(user).permissions,
   };
 }
@@ -181,7 +187,23 @@ export const usersService = {
   },
 
   async update(id: string, data: Record<string, unknown>) {
-    return usersRepository.update(id, data);
+    const { timezone, ...userData } = data;
+    if (timezone) {
+      await prisma.userPreference.upsert({
+        where: { userId: id },
+        update: { timezone: String(timezone) },
+        create: { userId: id, timezone: String(timezone) },
+      }).catch(() => {});
+    }
+    const userFields: Record<string, unknown> = {};
+    if (userData.firstName !== undefined) userFields.firstName = userData.firstName;
+    if (userData.lastName !== undefined) userFields.lastName = userData.lastName;
+    if (userData.email !== undefined) userFields.email = userData.email;
+    if (userData.phone !== undefined) userFields.phone = userData.phone;
+    if (Object.keys(userFields).length > 0) {
+      return usersRepository.update(id, userFields);
+    }
+    return usersRepository.findById(id);
   },
 
   async delete(id: string) {

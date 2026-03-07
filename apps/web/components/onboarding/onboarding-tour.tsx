@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, put, post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import {
   X, ChevronRight, ChevronLeft, Check, Sparkles, FileText,
   Mail, Users, Bot, BarChart3, Settings, HelpCircle,
@@ -175,20 +176,32 @@ export function OnboardingTour() {
 
 /** Persistent checklist widget shown in the sidebar/dashboard */
 export function OnboardingChecklist() {
+  const queryClient = useQueryClient();
+  const [dismissed, setDismissed] = useState(false);
+
   const { data: onboarding } = useQuery({
     queryKey: ['onboarding'],
     queryFn: () => get<{ data: OnboardingState }>('/onboarding/me').then((r) => r.data),
     retry: false,
   });
 
-  if (!onboarding || onboarding.completedAt) return null;
+  const skipMutation = useMutation({
+    mutationFn: () => post('/onboarding/me/dismiss-tour', { tour: 'checklist' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding'] });
+      setDismissed(true);
+    },
+  });
+
+  if (dismissed || !onboarding || onboarding.completedAt) return null;
+  if (onboarding.dismissedTours?.includes('checklist')) return null;
 
   const steps = [
-    { key: 'profileCompleted', label: 'Complete your profile', done: onboarding.profileCompleted },
-    { key: 'firstClaimFiled', label: 'File your first claim', done: onboarding.firstClaimFiled },
-    { key: 'emailConfigured', label: 'Configure email settings', done: onboarding.emailConfigured },
-    { key: 'teamInvited', label: 'Invite team members', done: onboarding.teamInvited },
-    { key: 'aiTested', label: 'Try the AI features', done: onboarding.aiTested },
+    { key: 'profileCompleted', label: 'Complete your profile', href: '/settings/profile', done: onboarding.profileCompleted },
+    { key: 'firstClaimFiled', label: 'File your first claim', href: '/claims/new', done: onboarding.firstClaimFiled },
+    { key: 'emailConfigured', label: 'Configure email settings', href: '/settings', done: onboarding.emailConfigured },
+    { key: 'teamInvited', label: 'Invite team members', href: '/settings/users', done: onboarding.teamInvited },
+    { key: 'aiTested', label: 'Try the AI features', href: '/ai', done: onboarding.aiTested },
   ];
 
   const completed = steps.filter((s) => s.done).length;
@@ -203,9 +216,18 @@ export function OnboardingChecklist() {
       <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full mb-3">
         <div className="h-full bg-primary-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {steps.map((step) => (
-          <div key={step.key} className="flex items-center gap-2.5">
+          <Link
+            key={step.key}
+            href={step.done ? '#' : step.href}
+            className={cn(
+              'flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-colors -mx-1',
+              step.done
+                ? 'cursor-default'
+                : 'hover:bg-primary-50/50 dark:hover:bg-primary-500/5 cursor-pointer'
+            )}
+          >
             <div className={cn(
               'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0',
               step.done
@@ -215,14 +237,21 @@ export function OnboardingChecklist() {
               {step.done && <Check className="w-3 h-3" />}
             </div>
             <span className={cn(
-              'text-xs',
+              'text-xs flex-1',
               step.done ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-300'
             )}>
               {step.label}
             </span>
-          </div>
+            {!step.done && <ChevronRight className="w-3 h-3 text-slate-400" />}
+          </Link>
         ))}
       </div>
+      <button
+        onClick={() => skipMutation.mutate()}
+        className="w-full mt-3 text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium transition-colors"
+      >
+        Skip Getting Started
+      </button>
     </div>
   );
 }

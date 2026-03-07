@@ -24,8 +24,30 @@ export const shipmentsRepository = {
   async addContact(shipmentId: string, data: Record<string, unknown>) { return prisma.shipmentContact.create({ data: { ...data, shipmentId } as any }); },
   async listCarriers(query: Record<string, unknown>) { void query; return prisma.carrier.findMany({ orderBy: { name: 'asc' } }); },
   async getCarrier(id: string) { return prisma.carrier.findUnique({ where: { id } }); },
-  async createCarrier(data: Record<string, unknown>) { return prisma.carrier.create({ data: data as any }); },
-  async updateCarrier(id: string, data: Record<string, unknown>) { return prisma.carrier.update({ where: { id }, data: data as any }); },
+  async createCarrier(data: Record<string, unknown>) {
+    const payload: Record<string, unknown> = { name: String(data.name || '') };
+    if (data.scacCode) payload.scacCode = String(data.scacCode);
+    if (data.dotNumber) payload.dotNumber = String(data.dotNumber);
+    if (data.mcNumber) payload.mcNumber = String(data.mcNumber);
+    if (data.email) payload.email = String(data.email);
+    if (data.phone) payload.phone = String(data.phone);
+    if (data.website) payload.website = String(data.website);
+    if (data.isInternational !== undefined) payload.isInternational = Boolean(data.isInternational);
+    return prisma.carrier.create({ data: payload as any });
+  },
+  async updateCarrier(id: string, data: Record<string, unknown>) {
+    const payload: Record<string, unknown> = {};
+    if (data.name !== undefined) payload.name = String(data.name);
+    if (data.scacCode !== undefined) payload.scacCode = data.scacCode ? String(data.scacCode) : null;
+    if (data.dotNumber !== undefined) payload.dotNumber = data.dotNumber ? String(data.dotNumber) : null;
+    if (data.mcNumber !== undefined) payload.mcNumber = data.mcNumber ? String(data.mcNumber) : null;
+    if (data.email !== undefined) payload.email = data.email ? String(data.email) : null;
+    if (data.phone !== undefined) payload.phone = data.phone ? String(data.phone) : null;
+    if (data.website !== undefined) payload.website = data.website ? String(data.website) : null;
+    if (data.isActive !== undefined) payload.isActive = Boolean(data.isActive);
+    if (data.isInternational !== undefined) payload.isInternational = Boolean(data.isInternational);
+    return prisma.carrier.update({ where: { id }, data: payload as any });
+  },
   async deleteCarrier(id: string) { return prisma.carrier.delete({ where: { id } }); },
   async getCarrierContacts(carrierId: string) { return prisma.carrierContact.findMany({ where: { carrierId } }); },
   async addCarrierContact(carrierId: string, data: Record<string, unknown>) { return prisma.carrierContact.create({ data: { ...data, carrierId } as any }); },

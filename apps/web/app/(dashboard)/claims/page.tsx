@@ -11,6 +11,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { get } from '@/lib/api-client';
+import { useAuth } from '@/hooks/use-auth';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
@@ -45,6 +46,7 @@ const PLACEHOLDER: DashboardData = {
 };
 
 export default function ClaimsDashboard() {
+  const { user } = useAuth();
   const { data } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => get<DashboardData>('/reports/dashboard'),
@@ -53,12 +55,15 @@ export default function ClaimsDashboard() {
 
   const stats = data?.stats || PLACEHOLDER.stats;
   const statIcons = [FileText, Clock, CheckCircle, DollarSign];
+  const companyName = (user as any)?.corporateName;
 
   return (
     <div className="space-y-4 lg:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+            {companyName ? `${companyName} — Dashboard` : 'Dashboard'}
+          </h1>
           <p className="text-sm text-slate-500 mt-0.5">Overview of your claims portfolio</p>
         </div>
         <div className="flex gap-2">

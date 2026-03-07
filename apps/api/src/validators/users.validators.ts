@@ -25,4 +25,5 @@ export const updateUserSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   role: z.string().optional(),
+  timezone: z.string().optional(),
 });

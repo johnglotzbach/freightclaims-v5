@@ -67,6 +67,7 @@ function extractArray<T>(raw: unknown): T[] {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, logout } = useAuth();
+  const isAdmin = user?.isSuperAdmin || user?.permissions?.includes('settings.manage_users') || false;
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -254,14 +255,34 @@ export function Header({ onMenuClick }: HeaderProps) {
               </div>
               <div className="hidden md:block min-w-0">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{user?.firstName} {user?.lastName}</p>
-                <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
+                <p className="text-[11px] text-slate-400 truncate">{(user as any)?.corporateName || user?.email}</p>
               </div>
               <ChevronDown className="w-3 h-3 text-slate-400 hidden md:block" />
             </button>
             {userMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 py-1">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 py-1">
+                <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-[11px] text-slate-400">{user?.email}</p>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className={cn(
+                      'text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
+                      user?.isSuperAdmin
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                        : 'bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400'
+                    )}>
+                      {user?.isSuperAdmin ? 'Super Admin' : (user as any)?.roleName || 'User'}
+                    </span>
+                    {(user as any)?.corporateName && (
+                      <span className="text-[10px] text-slate-400 truncate">{(user as any).corporateName}</span>
+                    )}
+                  </div>
+                </div>
                 <Link href="/settings/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"><Settings className="w-4 h-4 text-slate-400" /> Personal Settings</Link>
                 <Link href="/settings" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"><Settings className="w-4 h-4 text-slate-400" /> System Settings</Link>
+                {isAdmin && (
+                  <Link href="/settings/users" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"><Users className="w-4 h-4 text-slate-400" /> Manage Users</Link>
+                )}
                 <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
                 <button onClick={() => { logout(); setUserMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 font-medium"><LogOut className="w-4 h-4" /> Sign Out</button>
               </div>

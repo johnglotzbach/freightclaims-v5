@@ -19,8 +19,10 @@ interface User {
   lastName: string;
   email: string;
   role: string;
+  corporateName?: string;
+  isSuperAdmin?: boolean;
   isActive: boolean;
-  lastLogin?: string;
+  lastLoginAt?: string;
   createdAt: string;
 }
 
@@ -145,7 +147,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><Users className="w-6 h-6 text-primary-500" /> User Management</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{users.length} users &middot; {users.filter(u => u.isActive).length} active</p>
+          <p className="text-sm text-slate-500 mt-0.5">{users.length} users &middot; {users.filter(u => u.isActive).length} active{currentUser?.isSuperAdmin && ' &middot; Viewing all accounts'}</p>
         </div>
         <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
           <UserPlus className="w-4 h-4" /> Invite User
@@ -188,6 +190,7 @@ export default function UsersPage() {
             <tr className="border-b border-slate-100 dark:border-slate-700">
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">User</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Role</th>
+              {currentUser?.isSuperAdmin && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Account</th>}
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Last Login</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
@@ -206,8 +209,18 @@ export default function UsersPage() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 hidden sm:table-cell"><span className="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{user.role}</span></td>
-                  <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    <span className={cn(
+                      'text-xs font-medium px-2 py-1 rounded',
+                      user.isSuperAdmin ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    )}>
+                      {user.isSuperAdmin ? 'Super Admin' : user.role}
+                    </span>
+                  </td>
+                  {currentUser?.isSuperAdmin && (
+                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{user.corporateName || '—'}</td>
+                  )}
+                  <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}</td>
                   <td className="px-4 py-3">
                     {user.isActive ? (
                       <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="w-3.5 h-3.5" /> Active</span>
@@ -227,7 +240,7 @@ export default function UsersPage() {
                 </tr>
                 {editingUserId === user.id && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
+                    <td colSpan={currentUser?.isSuperAdmin ? 6 : 5} className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
                       <UserEditForm user={user} onSave={(data) => updateUserMutation.mutate({ userId: user.id, data })} onCancel={() => setEditingUserId(null)} isSaving={updateUserMutation.isPending} />
                     </td>
                   </tr>

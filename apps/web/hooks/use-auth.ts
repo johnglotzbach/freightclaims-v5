@@ -9,7 +9,10 @@ interface User {
   firstName: string;
   lastName: string;
   roleId: string | null;
+  roleName: string | null;
   corporateId: string | null;
+  corporateName: string | null;
+  corporateCode: string | null;
   customerId: string | null;
   isSuperAdmin: boolean;
   permissions: string[];

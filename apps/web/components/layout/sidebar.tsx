@@ -11,6 +11,7 @@ import {
   FileSearch, Upload, Shield, Mail, Key,
   Layers, Package, TrendingUp, HelpCircle,
   ScrollText, Brain, ShieldAlert, Gavel, MessageSquare,
+  Crown,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
@@ -110,26 +111,59 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const showFull = !collapsed || mobileOpen;
 
+  const displayName = user?.corporateName || 'FreightClaims';
+  const roleBadge = user?.isSuperAdmin
+    ? 'Super Admin'
+    : user?.roleName || 'User';
+
   const sidebarContent = (
     <>
-      {/* Logo */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-700">
+      {/* Account Identity */}
+      <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-700">
         <Link href="/claims" className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-            <span className="text-white font-bold text-sm">FC</span>
+            <span className="text-white font-bold text-sm">
+              {displayName.slice(0, 2).toUpperCase()}
+            </span>
           </div>
           {showFull && (
-            <span className="text-lg font-bold text-slate-900 dark:text-white truncate">
-              FreightClaims
-            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">
+                {displayName}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {user?.isSuperAdmin && (
+                  <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                )}
+                <span className={cn(
+                  'text-[10px] font-semibold px-1.5 py-0.5 rounded-full truncate',
+                  user?.isSuperAdmin
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                    : 'bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400'
+                )}>
+                  {roleBadge}
+                </span>
+              </div>
+            </div>
           )}
         </Link>
         {mobileOpen && onMobileClose && (
-          <button onClick={onMobileClose} className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close menu">
+          <button onClick={onMobileClose} className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 absolute top-3 right-3" aria-label="Close menu">
             <X className="w-5 h-5" />
           </button>
         )}
       </div>
+
+      {/* Super Admin Indicator */}
+      {user?.isSuperAdmin && showFull && (
+        <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-500/20">
+          <div className="flex items-center gap-2">
+            <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Admin Panel</span>
+          </div>
+          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Viewing all account data</p>
+        </div>
+      )}
 
       {/* Primary Navigation */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
