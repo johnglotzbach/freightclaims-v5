@@ -8,8 +8,11 @@
  * Related: apps/api/src/controllers/documents.controller.ts
  */
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { documentsController } from '../controllers/documents.controller';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 export const documentsRouter: Router = Router();
 
@@ -18,7 +21,7 @@ documentsRouter.use(authenticate);
 // --- Document CRUD ---
 documentsRouter.get('/', documentsController.list);
 documentsRouter.get('/:id', documentsController.getById);
-documentsRouter.post('/upload', documentsController.upload);
+documentsRouter.post('/upload', upload.array('files', 20), documentsController.upload);
 documentsRouter.delete('/:id', documentsController.delete);
 
 // --- Document download / signed URL ---

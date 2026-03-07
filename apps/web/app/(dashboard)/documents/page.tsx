@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, getList } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { PdfViewer } from '@/components/pdf-viewer';
 import {
@@ -44,6 +46,8 @@ function getTypeColor(category: string) {
 }
 
 export default function DocumentsPage() {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -54,6 +58,32 @@ export default function DocumentsPage() {
     queryKey: ['documents'],
     queryFn: () => getList<Document>('/documents'),
   });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      return apiClient.post('/documents/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: () => {
+      toast.success('Documents uploaded successfully');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+    onError: () => toast.error('Upload failed. Please try again.'),
+  });
+
+  function handleUploadClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadMutation.mutate(e.target.files);
+      e.target.value = '';
+    }
+  }
 
   if (isLoading) {
     return (
@@ -73,9 +103,10 @@ export default function DocumentsPage() {
               <FolderOpen className="w-6 h-6 text-primary-500" /> Documents
             </h1>
           </div>
-          <button className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-            <Upload className="w-4 h-4" /> Upload Documents
+          <button onClick={handleUploadClick} disabled={uploadMutation.isPending} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+            <Upload className="w-4 h-4" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Documents'}
           </button>
+          <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif" className="hidden" onChange={handleFileChange} />
         </div>
         <EmptyState
           icon={FolderOpen}
@@ -129,9 +160,10 @@ export default function DocumentsPage() {
             <FolderOpen className="w-6 h-6 text-primary-500" /> Documents
           </h1>
         </div>
-        <button className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <Upload className="w-4 h-4" /> Upload Documents
+        <button onClick={handleUploadClick} disabled={uploadMutation.isPending} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+          <Upload className="w-4 h-4" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Documents'}
         </button>
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif" className="hidden" onChange={handleFileChange} />
       </div>
 
       {/* Accuracy Metrics */}

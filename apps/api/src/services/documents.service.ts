@@ -24,45 +24,52 @@ export const documentsService = {
   },
 
   async upload(req: Request) {
-    const file = (req as any).file;
-    if (!file) throw new Error('No file provided');
+    const files = (req as any).files as Express.Multer.File[] | undefined;
+    const singleFile = (req as any).file as Express.Multer.File | undefined;
+    const allFiles = files?.length ? files : singleFile ? [singleFile] : [];
+    if (allFiles.length === 0) throw new Error('No files provided');
 
     const user = (req as any).user;
     const claimId = req.body.claimId || 'unlinked';
     const category = req.body.categoryId || 'general';
-    const filename = `${randomUUID()}-${file.originalname}`;
+    const results = [];
 
-    const { key, size } = await storageService.uploadDocument(
-      claimId,
-      category,
-      filename,
-      file.buffer,
-      file.mimetype,
-    );
+    for (const file of allFiles) {
+      const filename = `${randomUUID()}-${file.originalname}`;
 
-    // Auto-convert to PDF if ConvertAPI is configured
-    let pdfKey: string | null = null;
-    const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
-    if (pdfConversion) {
-      const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
-      const pdfResult = await storageService.uploadDocument(claimId, category, pdfFilename, pdfConversion.buffer, 'application/pdf');
-      pdfKey = pdfResult.key;
-      logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
-    }
+      const { key, size } = await storageService.uploadDocument(
+        claimId,
+        category,
+        filename,
+        file.buffer,
+        file.mimetype,
+      );
 
-    const doc = await documentsRepository.create({
-      documentName: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: size,
-      s3Key: key,
-      pdfKey: pdfKey,
-      claimId: req.body.claimId,
+      let pdfKey: string | null = null;
+      const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
+      if (pdfConversion) {
+        const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
+        const pdfResult = await storageService.uploadDocument(claimId, category, pdfFilename, pdfConversion.buffer, 'application/pdf');
+        pdfKey = pdfResult.key;
+        logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
+      }
+
+      const doc = await documentsRepository.create({
+        documentName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: size,
+        s3Key: key,
+        pdfKey: pdfKey,
+        claimId: req.body.claimId,
       categoryId: req.body.categoryId || null,
       uploadedBy: user.userId,
     });
 
-    logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
-    return doc;
+      logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
+      results.push(doc);
+    }
+
+    return results.length === 1 ? results[0] : results;
   },
 
   async download(id: string, res: Response) {
