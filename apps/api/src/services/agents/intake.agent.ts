@@ -151,7 +151,7 @@ async function checkDuplicates(extraction: IntakeExtraction): Promise<Array<{ cl
     take: 5,
   });
 
-  return existing.map((c) => ({
+  return existing.map((c: any) => ({
     claimId: c.id,
     claimNumber: c.claimNumber,
     matchScore: c.proNumber?.toLowerCase() === extraction.proNumber?.toLowerCase() ? 0.95 : 0.6,

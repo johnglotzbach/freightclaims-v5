@@ -11,6 +11,7 @@ import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { documentsRepository } from '../repositories/documents.repository';
 import { storageService } from './storage.service';
+import { convertService } from './convert.service';
 import { logger } from '../utils/logger';
 
 export const documentsService = {
@@ -39,17 +40,28 @@ export const documentsService = {
       file.mimetype,
     );
 
+    // Auto-convert to PDF if ConvertAPI is configured
+    let pdfKey: string | null = null;
+    const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
+    if (pdfConversion) {
+      const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
+      const pdfResult = await storageService.uploadDocument(claimId, category, pdfFilename, pdfConversion.buffer, 'application/pdf');
+      pdfKey = pdfResult.key;
+      logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
+    }
+
     const doc = await documentsRepository.create({
       documentName: file.originalname,
       mimeType: file.mimetype,
       fileSize: size,
       s3Key: key,
+      pdfKey: pdfKey,
       claimId: req.body.claimId,
       categoryId: req.body.categoryId || null,
       uploadedBy: user.userId,
     });
 
-    logger.info({ docId: doc.id, key }, 'Document uploaded');
+    logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
     return doc;
   },
 
@@ -99,4 +111,75 @@ export const documentsService = {
   },
 
   async getExtractedData(id: string) { return documentsRepository.getExtractedData(id); },
+
+  /** Convert a document to PDF on demand */
+  async convertToPdf(id: string) {
+    const doc = await documentsRepository.findById(id);
+    if (!doc) throw new Error('Document not found');
+
+    if (doc.mimeType === 'application/pdf') {
+      return { id, status: 'already_pdf', message: 'Document is already a PDF' };
+    }
+
+    if (!convertService.isConfigured) {
+      throw new Error('ConvertAPI not configured — set CONVERT_API_SECRET');
+    }
+
+    const { body } = await storageService.downloadDocument(doc.s3Key);
+    const result = await convertService.autoConvertToPdf(body, doc.documentName ?? 'document', doc.mimeType ?? 'application/octet-stream');
+    if (!result) {
+      throw new Error(`Unsupported format for conversion: ${doc.mimeType}`);
+    }
+
+    const pdfFilename = `${randomUUID()}-${result.fileName}`;
+    const parts = doc.s3Key.split('/');
+    const claimId = parts[1] || 'unlinked';
+    const category = parts[2] || 'general';
+    const { key: pdfKey } = await storageService.uploadDocument(claimId, category, pdfFilename, result.buffer, 'application/pdf');
+
+    await documentsRepository.update(id, { pdfKey });
+
+    return { id, status: 'converted', pdfKey };
+  },
+
+  /** Merge multiple claim documents into a single PDF package */
+  async mergeClaimDocs(claimId: string, documentIds: string[]) {
+    if (!convertService.isConfigured) {
+      throw new Error('ConvertAPI not configured — set CONVERT_API_SECRET');
+    }
+
+    const files = [];
+    for (const docId of documentIds) {
+      const doc = await documentsRepository.findById(docId);
+      if (!doc) continue;
+      const { body } = await storageService.downloadDocument(doc.s3Key);
+
+      if (doc.mimeType !== 'application/pdf') {
+        const converted = await convertService.autoConvertToPdf(body, doc.documentName ?? 'document', doc.mimeType ?? 'application/octet-stream');
+        if (converted) {
+          files.push({ buffer: converted.buffer, fileName: converted.fileName });
+          continue;
+        }
+      }
+      files.push({ buffer: body, fileName: doc.documentName });
+    }
+
+    if (files.length === 0) throw new Error('No valid documents to merge');
+
+    const merged = await convertService.mergePdfs(files);
+    const mergedFilename = `${randomUUID()}-claim-package.pdf`;
+    const { key } = await storageService.uploadDocument(claimId, 'packages', mergedFilename, merged.buffer, 'application/pdf');
+
+    const doc = await documentsRepository.create({
+      documentName: `Claim Package - ${new Date().toISOString().split('T')[0]}.pdf`,
+      mimeType: 'application/pdf',
+      fileSize: merged.fileSize,
+      s3Key: key,
+      claimId,
+      categoryId: null,
+      uploadedBy: 'system',
+    });
+
+    return doc;
+  },
 };

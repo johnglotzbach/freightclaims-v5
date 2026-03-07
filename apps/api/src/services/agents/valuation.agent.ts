@@ -62,10 +62,8 @@ export const valuationAgent: BaseAgent = {
     const history = historyResult.data as Record<string, unknown>;
 
     const carrierParty = ((claim as any).parties || []).find((p: any) => p.type === 'carrier');
-    let _carrierData = null;
     if (carrierParty?.scacCode) {
-      const r = await executeTool('getCarrier', { scacCode: carrierParty.scacCode }, ctx);
-      if (r.success) _carrierData = r.data;
+      await executeTool('getCarrier', { scacCode: carrierParty.scacCode }, ctx);
     }
 
     // Get documents count to assess documentation strength

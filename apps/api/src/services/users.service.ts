@@ -31,6 +31,7 @@ function buildJwtPayload(user: Record<string, unknown>): JwtPayload {
   return {
     userId: user.id as string,
     email: user.email as string,
+    role: (user.roleName as string) || (role as any)?.name || 'user',
     roleId: (user.roleId as string) || null,
     corporateId: (user.corporateId as string) || null,
     customerId: (user.customerId as string) || null,

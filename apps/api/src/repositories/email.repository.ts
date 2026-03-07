@@ -1,27 +1,55 @@
 /**
  * EmailRepository - Database queries for email, notification, and queue entities
  *
+ * Sends email via SMTP (SendGrid / any provider) and logs every dispatch
+ * to the database for audit. Falls back to log-only when SMTP is not configured.
+ *
  * Location: apps/api/src/repositories/email.repository.ts
  */
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { smtpService } from '../services/smtp.service';
 
 export const emailRepository = {
-  /** Dispatches an email and logs it to the database */
+  /** Sends an email via SMTP and logs it to the database */
   async send(data: Record<string, unknown>) {
+    const from = (data.from as string) || 'claims@freightclaims.com';
+    const to = data.to as string;
+    const subject = data.subject as string;
+    const body = data.body as string;
+
+    let status = 'pending';
+    let messageId: string | null = null;
+
+    try {
+      const result = await smtpService.sendEmail({
+        to,
+        subject,
+        html: body,
+        text: body.replace(/<[^>]*>/g, ''),
+        from,
+      });
+      messageId = result.messageId;
+      status = 'sent';
+    } catch (err) {
+      logger.error({ err, to, subject }, 'Failed to send email via SMTP');
+      status = 'failed';
+    }
+
     const logEntry = await prisma.emailLog.create({
       data: {
-        from: (data.from as string) || 'claims@freightclaims.com',
-        to: data.to as string,
-        subject: data.subject as string,
-        body: data.body as string,
+        from,
+        to,
+        subject,
+        body,
         claimId: (data.claimId as string) || null,
-        status: 'sent',
+        status,
         direction: 'outbound',
       },
     });
-    logger.info({ emailId: logEntry.id, to: data.to }, 'Email dispatched');
-    return { sent: true, emailId: logEntry.id };
+
+    logger.info({ emailId: logEntry.id, to, status, messageId }, 'Email dispatched');
+    return { sent: status === 'sent', emailId: logEntry.id, messageId };
   },
 
   async getByClaimId(claimId: string) {

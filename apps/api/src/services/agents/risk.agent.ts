@@ -68,15 +68,15 @@ export const riskAgent: BaseAgent = {
 
     // Compute raw statistics
     const totalClaims = claims.length;
-    const settled = claims.filter((c) => ['settled', 'closed', 'approved'].includes(c.status));
-    const denied = claims.filter((c) => c.status === 'denied');
+    const settled = claims.filter((c: any) => ['settled', 'closed', 'approved'].includes(c.status));
+    const denied = claims.filter((c: any) => c.status === 'denied');
     const avgClaimAmount = totalClaims > 0
-      ? claims.reduce((s, c) => s + Number(c.claimAmount), 0) / totalClaims
+      ? claims.reduce((s: any, c: any) => s + Number(c.claimAmount), 0) / totalClaims
       : 0;
 
     const resolutionTimes = claims
-      .filter((c) => c.timeline.length > 1)
-      .map((c) => {
+      .filter((c: any) => c.timeline.length > 1)
+      .map((c: any) => {
         const firstEntry = c.timeline[0]?.createdAt;
         const lastEntry = c.timeline[c.timeline.length - 1]?.createdAt;
         if (firstEntry && lastEntry) return (lastEntry.getTime() - firstEntry.getTime()) / 86400000;
@@ -85,16 +85,16 @@ export const riskAgent: BaseAgent = {
       .filter(Boolean) as number[];
 
     const avgResolutionDays = resolutionTimes.length > 0
-      ? Math.round(resolutionTimes.reduce((s, d) => s + d, 0) / resolutionTimes.length)
+      ? Math.round(resolutionTimes.reduce((s: any, d: any) => s + d, 0) / resolutionTimes.length)
       : null;
 
     const paymentDelays = claims
-      .flatMap((c) => c.payments)
-      .filter((p) => p.receivedAt)
-      .map((p) => (p.receivedAt!.getTime() - p.createdAt.getTime()) / 86400000);
+      .flatMap((c: any) => c.payments)
+      .filter((p: any) => p.receivedAt)
+      .map((p: any) => (p.receivedAt!.getTime() - p.createdAt.getTime()) / 86400000);
 
     const avgPaymentDelay = paymentDelays.length > 0
-      ? Math.round(paymentDelays.reduce((s, d) => s + d, 0) / paymentDelays.length)
+      ? Math.round(paymentDelays.reduce((s: any, d: any) => s + d, 0) / paymentDelays.length)
       : null;
 
     const stats = {

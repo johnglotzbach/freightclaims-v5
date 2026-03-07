@@ -40,8 +40,8 @@ export const aiController = {
   // Copilot (conversational)
   chat: asyncHandler(async (req, res) => { res.json(await aiService.chat(req.body, getUser(req))); }),
   getConversations: asyncHandler(async (req, res) => { res.json(await aiService.getConversations(getUser(req).userId)); }),
-  getConversation: asyncHandler(async (req, res) => { res.json(await aiService.getConversation(req.params.id)); }),
-  deleteConversation: asyncHandler(async (req, res) => { await aiService.deleteConversation(req.params.id); res.status(204).send(); }),
+  getConversation: asyncHandler(async (req, res) => { res.json(await aiService.getConversation(req.params.id as string)); }),
+  deleteConversation: asyncHandler(async (req, res) => { await aiService.deleteConversation(req.params.id as string); res.status(204).send(); }),
 
   // Agent status
   getAgentStatus: asyncHandler(async (_req, res) => { res.json(await aiService.getAgentStatus()); }),

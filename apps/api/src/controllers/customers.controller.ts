@@ -20,7 +20,7 @@ export const customersController = {
   }),
 
   getById: asyncHandler(async (req, res) => {
-    const customer = await customersService.getById(req.params.id);
+    const customer = await customersService.getById(req.params.id as string);
     res.json(customer);
   }),
 
@@ -30,52 +30,52 @@ export const customersController = {
   }),
 
   update: asyncHandler(async (req, res) => {
-    const customer = await customersService.update(req.params.id, req.body);
+    const customer = await customersService.update(req.params.id as string, req.body);
     res.json(customer);
   }),
 
   delete: asyncHandler(async (req, res) => {
-    await customersService.delete(req.params.id);
+    await customersService.delete(req.params.id as string);
     res.status(204).send();
   }),
 
   getContacts: asyncHandler(async (req, res) => {
-    const contacts = await customersService.getContacts(req.params.id);
+    const contacts = await customersService.getContacts(req.params.id as string);
     res.json(contacts);
   }),
 
   addContact: asyncHandler(async (req, res) => {
-    const contact = await customersService.addContact(req.params.id, req.body);
+    const contact = await customersService.addContact(req.params.id as string, req.body);
     res.status(201).json(contact);
   }),
 
   updateContact: asyncHandler(async (req, res) => {
-    const contact = await customersService.updateContact(req.params.id, req.params.contactId, req.body);
+    const contact = await customersService.updateContact(req.params.id as string, req.params.contactId as string, req.body);
     res.json(contact);
   }),
 
   removeContact: asyncHandler(async (req, res) => {
-    await customersService.removeContact(req.params.id, req.params.contactId);
+    await customersService.removeContact(req.params.id as string, req.params.contactId as string);
     res.status(204).send();
   }),
 
   getAddresses: asyncHandler(async (req, res) => {
-    const addresses = await customersService.getAddresses(req.params.id);
+    const addresses = await customersService.getAddresses(req.params.id as string);
     res.json(addresses);
   }),
 
   addAddress: asyncHandler(async (req, res) => {
-    const address = await customersService.addAddress(req.params.id, req.body);
+    const address = await customersService.addAddress(req.params.id as string, req.body);
     res.status(201).json(address);
   }),
 
   updateAddress: asyncHandler(async (req, res) => {
-    const address = await customersService.updateAddress(req.params.id, req.params.addressId, req.body);
+    const address = await customersService.updateAddress(req.params.id as string, req.params.addressId as string, req.body);
     res.json(address);
   }),
 
   removeAddress: asyncHandler(async (req, res) => {
-    await customersService.removeAddress(req.params.id, req.params.addressId);
+    await customersService.removeAddress(req.params.id as string, req.params.addressId as string);
     res.status(204).send();
   }),
 

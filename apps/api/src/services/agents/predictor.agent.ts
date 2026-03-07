@@ -71,10 +71,10 @@ export const predictorAgent: BaseAgent = {
         orderBy: { createdAt: 'desc' },
       });
 
-      const approved = carrierClaims.filter((c) => ['settled', 'closed', 'approved'].includes(c.status));
-      const denied = carrierClaims.filter((c) => c.status === 'denied');
+      const approved = carrierClaims.filter((c: any) => ['settled', 'closed', 'approved'].includes(c.status));
+      const denied = carrierClaims.filter((c: any) => c.status === 'denied');
       const avgSettlement = approved.length > 0
-        ? approved.reduce((s, c) => s + Number(c.settledAmount || c.claimAmount), 0) / approved.length
+        ? approved.reduce((s: any, c: any) => s + Number(c.settledAmount || c.claimAmount), 0) / approved.length
         : 0;
 
       carrierHistory = {

@@ -78,14 +78,14 @@ export const fraudAgent: BaseAgent = {
       take: 500,
     });
 
-    const amounts = historicalAmounts.map((c) => Number(c.claimAmount));
+    const amounts = historicalAmounts.map((c: any) => Number(c.claimAmount));
     const currentAmount = Number(claimData.claimAmount);
     const percentile = amounts.length > 0
-      ? amounts.filter((a) => a <= currentAmount).length / amounts.length
+      ? amounts.filter((a: any) => a <= currentAmount).length / amounts.length
       : 0.5;
-    const mean = amounts.length > 0 ? amounts.reduce((s, a) => s + a, 0) / amounts.length : 0;
+    const mean = amounts.length > 0 ? amounts.reduce((s: any, a: any) => s + a, 0) / amounts.length : 0;
     const stdDev = amounts.length > 1
-      ? Math.sqrt(amounts.reduce((s, a) => s + (a - mean) ** 2, 0) / (amounts.length - 1))
+      ? Math.sqrt(amounts.reduce((s: any, a: any) => s + (a - mean) ** 2, 0) / (amounts.length - 1))
       : 0;
     const zScore = stdDev > 0 ? (currentAmount - mean) / stdDev : 0;
 
@@ -112,7 +112,7 @@ ${JSON.stringify({
 }, null, 2)}
 
 Potential Duplicates Found: ${potentialDuplicates.length}
-${JSON.stringify(potentialDuplicates.map((d) => ({ claimNumber: d.claimNumber, proNumber: d.proNumber, amount: Number(d.claimAmount) })), null, 2)}
+${JSON.stringify(potentialDuplicates.map((d: any) => ({ claimNumber: d.claimNumber, proNumber: d.proNumber, amount: Number(d.claimAmount) })), null, 2)}
 
 Amount Statistics:
 - Current amount: $${currentAmount}

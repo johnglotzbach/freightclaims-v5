@@ -53,10 +53,17 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().default(''),
   AI_MODEL: z.string().default('gemini-2.0-flash'),
 
+  // ConvertAPI (document conversion — PDF, Word, images, etc.)
+  CONVERT_API_SECRET: z.string().default(''),
+
+  // Twilio (SMS notifications)
+  TWILIO_ACCOUNT_SID: z.string().default(''),
+  TWILIO_AUTH_TOKEN: z.string().default(''),
+  TWILIO_PHONE_NUMBER: z.string().default(''),
+
   // External APIs
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   SMARTY_KEY: z.string().optional(),
-  CONVERT_API_SECRET: z.string().optional(),
   AMPLITUDE_API_KEY: z.string().optional(),
 
   // URLs

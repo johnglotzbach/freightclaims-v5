@@ -75,7 +75,7 @@ chatbotRouter.post('/message', async (req, res, next) => {
       take: 20,
     });
 
-    const messages: GeminiMessage[] = history.map((m) => ({
+    const messages: GeminiMessage[] = history.map((m: any) => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content }],
     }));

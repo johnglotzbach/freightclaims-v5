@@ -144,5 +144,5 @@ export async function getPermissionsForRole(roleId: string): Promise<string[]> {
     where: { roleId },
     include: { permission: { select: { name: true } } },
   });
-  return rolePerms.map((rp) => rp.permission.name);
+  return rolePerms.map((rp: any) => rp.permission.name);
 }

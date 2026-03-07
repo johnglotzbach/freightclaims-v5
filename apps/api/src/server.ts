@@ -40,6 +40,7 @@ import { contractsRouter } from './routes/contracts.routes';
 import { newsRouter } from './routes/news.routes';
 import { onboardingRouter } from './routes/onboarding.routes';
 import { chatbotRouter } from './routes/chatbot.routes';
+import { notificationsRouter } from './routes/notifications.routes';
 
 const app: express.Application = express();
 
@@ -129,6 +130,7 @@ v1.use('/contracts', contractsRouter);
 v1.use('/news', newsRouter);
 v1.use('/onboarding', onboardingRouter);
 v1.use('/chatbot', chatbotRouter);
+v1.use('/notifications', notificationsRouter);
 
 app.use('/api/v1', v1);
 

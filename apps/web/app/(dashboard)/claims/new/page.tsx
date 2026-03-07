@@ -115,7 +115,7 @@ export default function NewClaimPage() {
   });
 
   const createClaim = useMutation({
-    mutationFn: (data: Record<string, unknown>) => post('/claims', data),
+    mutationFn: (data: Record<string, unknown>) => post('/claims', data) as Promise<{ id: string }>,
     onSuccess: (result: { id: string }) => {
       toast.success('Claim created successfully');
       router.push(`/claims/${result.id}`);

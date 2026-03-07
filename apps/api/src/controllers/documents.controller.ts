@@ -34,4 +34,8 @@ export const documentsController = {
   // AI processing
   processWithAI: asyncHandler(async (req, res) => { res.json(await documentsService.processWithAI(req.params.id as string)); }),
   getExtractedData: asyncHandler(async (req, res) => { res.json(await documentsService.getExtractedData(req.params.id as string)); }),
+
+  // ConvertAPI conversions
+  convertToPdf: asyncHandler(async (req, res) => { res.json(await documentsService.convertToPdf(req.params.id as string)); }),
+  mergeClaimDocs: asyncHandler(async (req, res) => { res.json(await documentsService.mergeClaimDocs(req.body.claimId, req.body.documentIds)); }),
 };

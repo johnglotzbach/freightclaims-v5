@@ -59,7 +59,7 @@ export const rootcauseAgent: BaseAgent = {
     for (const claim of claims) {
       typeStats[claim.claimType] = (typeStats[claim.claimType] || 0) + 1;
 
-      const carrier = claim.parties.find((p) => p.type === 'carrier');
+      const carrier = claim.parties.find((p: any) => p.type === 'carrier');
       if (carrier?.scacCode) {
         if (!carrierStats[carrier.scacCode]) {
           carrierStats[carrier.scacCode] = { name: carrier.name, count: 0, denied: 0, totalAmount: 0, types: {} };
@@ -71,8 +71,8 @@ export const rootcauseAgent: BaseAgent = {
         if (claim.status === 'denied') cs.denied++;
       }
 
-      const origin = claim.parties.find((p) => p.type === 'shipper');
-      const dest = claim.parties.find((p) => p.type === 'consignee');
+      const origin = claim.parties.find((p: any) => p.type === 'shipper');
+      const dest = claim.parties.find((p: any) => p.type === 'consignee');
       if (origin?.state && dest?.state) {
         const route = `${origin.state}->${dest.state}`;
         routeStats[route] = (routeStats[route] || 0) + 1;
@@ -105,7 +105,7 @@ ${JSON.stringify(
 )}
 
 Sample damage descriptions:
-${claims.slice(0, 20).map((c) => c.description).filter(Boolean).join('\n')}
+${claims.slice(0, 20).map((c: any) => c.description).filter(Boolean).join('\n')}
 
 Identify root causes, patterns, correlations, and actionable recommendations.
 

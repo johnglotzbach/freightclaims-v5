@@ -1,5 +1,5 @@
 # ============================================================
-# FreightClaims v5.0 - Render Blueprint
+# FreightClaims v5.0 - Render Blueprint (Production)
 # ============================================================
 # This file defines all services for the Render platform.
 # Push to main triggers automatic deployment of all services.
@@ -8,6 +8,12 @@
 #   - PostgreSQL database (managed)
 #   - Redis cache (managed)
 #   - 3 web services (Web, API, AI Agent)
+#
+# Third-party integrations:
+#   - Google Gemini (AI agents)
+#   - SendGrid (SMTP email)
+#   - Twilio (SMS notifications)
+#   - ConvertAPI (document conversion)
 # ============================================================
 
 databases:
@@ -32,10 +38,16 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "4000"
       - key: DATABASE_URL
         fromDatabase:
           name: freightclaims-db
           property: connectionString
+      - key: DATABASE_POOL_MIN
+        value: "2"
+      - key: DATABASE_POOL_MAX
+        value: "10"
       - key: JWT_SECRET
         generateValue: true
       - key: ENCRYPTION_KEY
@@ -44,15 +56,42 @@ services:
         value: local
       - key: LOCAL_UPLOAD_DIR
         value: /opt/render/project/uploads
+      # --- AI / Gemini ---
       - key: GEMINI_API_KEY
         sync: false
       - key: AI_MODEL
         value: gemini-2.0-flash
+      # --- SendGrid SMTP ---
+      - key: SMTP_HOST
+        value: smtp.sendgrid.net
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: apikey
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        value: claims@freightclaims.com
+      # --- Twilio SMS ---
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      # --- ConvertAPI ---
+      - key: CONVERT_API_SECRET
+        sync: false
+      # --- Redis ---
       - key: REDIS_URL
         fromService:
           type: redis
           name: freightclaims-cache
           property: connectionString
+      # --- URLs ---
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://freightclaims-web.onrender.com
+      # --- Logging ---
       - key: LOG_FORMAT
         value: json
       - key: LOG_LEVEL

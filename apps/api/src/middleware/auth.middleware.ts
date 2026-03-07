@@ -55,7 +55,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
  */
 export function generateToken(payload: JwtPayload): string {
   const options: SignOptions = {
-    expiresIn: env.JWT_EXPIRES_IN as string,
+    expiresIn: env.JWT_EXPIRES_IN as any,
     issuer: 'freightclaims.com',
     audience: 'freightclaims-api',
   };
@@ -67,7 +67,7 @@ export function generateToken(payload: JwtPayload): string {
  */
 export function generateRefreshToken(userId: string): string {
   const options: SignOptions = {
-    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN as string,
+    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN as any,
     issuer: 'freightclaims.com',
   };
   return jwt.sign({ userId, type: 'refresh' }, env.JWT_SECRET, options);

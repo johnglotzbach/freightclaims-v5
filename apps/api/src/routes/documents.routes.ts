@@ -38,3 +38,7 @@ documentsRouter.post('/categories/mapping', authorize(['admin']), documentsContr
 // --- AI document processing ---
 documentsRouter.post('/:id/process', documentsController.processWithAI);
 documentsRouter.get('/:id/extracted-data', documentsController.getExtractedData);
+
+// --- Document conversion (ConvertAPI) ---
+documentsRouter.post('/:id/convert-pdf', documentsController.convertToPdf);
+documentsRouter.post('/merge', documentsController.mergeClaimDocs);

@@ -143,12 +143,12 @@ export async function checkDeadlines(): Promise<DeadlineAlert[]> {
       select: { id: true },
     });
 
-    const notifData = adminUsers.flatMap((user) =>
+    const notifData = adminUsers.flatMap((user: any) =>
       notifications.map((n) => ({ ...n, userId: user.id }))
     );
 
     if (notifData.length > 0) {
-      await prisma.notification.createMany({ data: notifData }).catch((err) =>
+      await prisma.notification.createMany({ data: notifData }).catch((err: any) =>
         logger.warn({ err }, 'Failed to create deadline notifications')
       );
     }

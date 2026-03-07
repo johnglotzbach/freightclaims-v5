@@ -72,7 +72,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction) {
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.headers['user-agent'] || null,
         },
-      }).catch((err) => {
+      }).catch((err: any) => {
         logger.warn({ err }, 'Failed to write audit log');
       });
     }

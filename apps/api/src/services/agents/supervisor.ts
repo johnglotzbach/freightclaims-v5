@@ -111,7 +111,7 @@ async function executeAgent(
         duration: result.durationMs,
         userId: ctx.userId,
       },
-    }).catch((err) => logger.warn({ err }, 'Failed to persist agent run'));
+    }).catch((err: any) => logger.warn({ err }, 'Failed to persist agent run'));
 
     // Merge any structured output into workflow memory for downstream agents
     if (result.structuredOutput) {

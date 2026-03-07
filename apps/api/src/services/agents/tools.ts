@@ -85,10 +85,10 @@ const checkMissingDocumentsTool: AgentTool = {
       }),
     ]);
 
-    const uploadedCategories = new Set(uploaded.map((d) => d.category?.name).filter(Boolean));
+    const uploadedCategories = new Set(uploaded.map((d: any) => d.category?.name).filter(Boolean));
     const missing = required
-      .filter((r) => !uploadedCategories.has(r.category.name))
-      .map((r) => r.category.name);
+      .filter((r: any) => !uploadedCategories.has(r.category.name))
+      .map((r: any) => r.category.name);
 
     return { uploaded: uploaded.length, required: required.length, missing };
   },
@@ -207,8 +207,8 @@ const getClaimHistoryTool: AgentTool = {
     });
 
     const amounts = claims
-      .filter((c) => c.settledAmount)
-      .map((c) => ({
+      .filter((c: any) => c.settledAmount)
+      .map((c: any) => ({
         claimed: Number(c.claimAmount),
         settled: Number(c.settledAmount),
         ratio: Number(c.settledAmount) / Number(c.claimAmount),
@@ -216,7 +216,7 @@ const getClaimHistoryTool: AgentTool = {
       }));
 
     const avgRatio = amounts.length > 0
-      ? amounts.reduce((sum, a) => sum + a.ratio, 0) / amounts.length
+      ? amounts.reduce((sum: any, a: any) => sum + a.ratio, 0) / amounts.length
       : 0;
 
     return { sampleSize: amounts.length, averageSettlementRatio: avgRatio, data: amounts };
