@@ -1,0 +1,32 @@
+{
+  "name": "freightclaims-v5",
+  "version": "5.0.0",
+  "private": true,
+  "description": "FreightClaims.com v5 - Consolidated freight claims management platform",
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:ai": "pnpm --filter ai-agent dev",
+    "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",
+    "build:api": "pnpm --filter api build",
+    "build:web": "pnpm --filter web build",
+    "build:ai": "pnpm --filter ai-agent build",
+    "lint": "pnpm --parallel --filter './apps/*' --filter './packages/*' lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "test": "pnpm --parallel --filter './apps/*' test",
+    "db:migrate": "pnpm --filter database prisma migrate deploy",
+    "db:seed": "pnpm --filter database prisma db seed",
+    "db:generate": "pnpm --filter database prisma generate",
+    "db:studio": "pnpm --filter database prisma studio",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules",
+    "setup": "pnpm install && pnpm db:generate && docker compose up -d && pnpm db:migrate && pnpm db:seed && echo 'Setup complete! Run pnpm dev to start.'",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down -v && docker compose up -d"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

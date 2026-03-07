@@ -1,0 +1,77 @@
+# ============================================================
+# FreightClaims v5.0 - Local Development Stack
+# ============================================================
+# Spins up PostgreSQL, Redis, and LocalStack (S3 emulation) for
+# local development without needing AWS credentials.
+#
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose logs -f db   # Watch database logs
+#   docker compose down -v      # Stop and remove volumes
+#
+# Location: local-dev/docker-compose.yml
+# ============================================================
+
+services:
+  # --- PostgreSQL 16 (mirrors AWS RDS) ---
+  db:
+    image: postgres:16-alpine
+    container_name: fc-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: fc_app
+      POSTGRES_PASSWORD: fc_local_dev_2026
+      POSTGRES_DB: freightclaims_v5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fc_app -d freightclaims_v5"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis 7 (caching, session store) ---
+  redis:
+    image: redis:7-alpine
+    container_name: fc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- LocalStack (S3 emulation for local dev) ---
+  localstack:
+    image: localstack/localstack:latest
+    container_name: fc-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-2
+      EAGER_SERVICE_LOADING: 1
+    volumes:
+      - ./init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh
+
+  # --- Mailpit (local email testing) ---
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: fc-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  pgdata:
+    driver: local

@@ -1,0 +1,1137 @@
+// ============================================================
+// FreightClaims v5.0 - Database Schema
+// ============================================================
+// Full PostgreSQL schema for the freight claims management platform.
+// Covers: users, customers, claims, shipments, carriers, documents,
+// email/notifications, AI agents, automation, and analytics.
+//
+// Location: packages/database/prisma/schema.prisma
+// Docs: docs/DATABASE.md
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USERS & AUTHENTICATION
+// ============================================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  phone         String?
+  roleId        String?   @map("role_id")
+  corporateId   String?   @map("corporate_id") // Tenant isolation key
+  customerId    String?   @map("customer_id")
+  isActive              Boolean   @default(true) @map("is_active")
+  isSuperAdmin          Boolean   @default(false) @map("is_super_admin")
+  lastLoginAt           DateTime? @map("last_login_at")
+  resetToken            String?   @map("reset_token")
+  resetTokenExpiresAt   DateTime? @map("reset_token_expires_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  // Relations
+  role          Role?              @relation(fields: [roleId], references: [id])
+  customer      Customer?          @relation(fields: [customerId], references: [id])
+  corporate     Customer?          @relation("CorporateUsers", fields: [corporateId], references: [id])
+  preferences   UserPreference?
+  claims           Claim[]            @relation("CreatedBy")
+  comments         ClaimComment[]
+  tasksCreated     ClaimTask[]        @relation("TaskCreator")
+  tasksAssigned    ClaimTask[]        @relation("TaskAssignee")
+  timelineChanges  ClaimTimeline[]    @relation("TimelineChanges")
+  conversations    AiConversation[]
+  notifications    Notification[]
+  activityLogs     ActivityLog[]
+
+  @@index([corporateId])
+  @@index([email])
+  @@map("users")
+}
+
+model UserPreference {
+  id                    String  @id @default(uuid())
+  userId                String  @unique @map("user_id")
+  emailNotifications    Boolean @default(true) @map("email_notifications")
+  pushNotifications     Boolean @default(true) @map("push_notifications")
+  dailyDigest           Boolean @default(false) @map("daily_digest")
+  theme                 String  @default("light")
+  timezone              String  @default("America/New_York")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_preferences")
+}
+
+model Role {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  corporateId   String?  @map("corporate_id") // Tenant-scoped roles (null = global)
+  allClaims     Boolean  @default(false) @map("all_claims") // Access all claims
+  allPermissions Boolean @default(false) @map("all_permissions") // Superuser for this tenant
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@unique([name, corporateId])
+  @@index([corporateId])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "claims.view", "claims.edit", "customers.manage"
+  description String?
+  module      String   // claims, customers, shipments, admin, reports, ai, settings
+  category    String?  // Groups permissions in the UI (e.g. "Claim Management")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String  @map("role_id")
+  permissionId String  @map("permission_id")
+  isView       Boolean @default(true) @map("is_view")  // Read access
+  isEdit       Boolean @default(false) @map("is_edit") // Write access
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// CUSTOMERS & COMPANIES
+// ============================================================
+
+model Customer {
+  id          String    @id @default(uuid())
+  name        String
+  code        String?   @unique
+  email       String?
+  phone       String?
+  website     String?
+  industry    String?
+  corporateId String?   @map("corporate_id") // Parent corp for multi-tenancy
+  parentId    String?   @map("parent_id")    // Parent-child customer hierarchy
+  isCorporate Boolean   @default(false) @map("is_corporate") // True = corporate account
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  parent         Customer?          @relation("CustomerHierarchy", fields: [parentId], references: [id])
+  children       Customer[]         @relation("CustomerHierarchy")
+  users          User[]
+  corporateUsers User[]             @relation("CorporateUsers")
+  contacts       CustomerContact[]
+  addresses      CustomerAddress[]
+  notes          CustomerNote[]
+  claims         Claim[]
+  shipments      Shipment[]
+
+  @@index([corporateId])
+  @@index([parentId])
+  @@map("customers")
+}
+
+model CustomerContact {
+  id         String   @id @default(uuid())
+  customerId String   @map("customer_id")
+  firstName  String   @map("first_name")
+  lastName   String   @map("last_name")
+  email      String?
+  phone      String?
+  title      String?
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@map("customer_contacts")
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid())
+  customerId String   @map("customer_id")
+  type       String   @default("billing") // billing, shipping, both
+  street1    String
+  street2    String?
+  city       String
+  state      String
+  zipCode    String   @map("zip_code")
+  country    String   @default("US")
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+model CustomerNote {
+  id         String   @id @default(uuid())
+  customerId String   @map("customer_id")
+  content    String
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@map("customer_notes")
+}
+
+model Country {
+  id   String @id @default(uuid())
+  name String
+  code String @unique // ISO 3166-1 alpha-2
+
+  @@map("countries")
+}
+
+// ============================================================
+// CLAIMS
+// ============================================================
+
+model Claim {
+  id                 String    @id @default(uuid())
+  claimNumber        String    @unique @map("claim_number")
+  proNumber          String    @map("pro_number")
+  status             String    @default("draft") // draft, pending, in_review, approved, denied, appealed, in_negotiation, settled, closed, cancelled
+  claimType          String    @map("claim_type") // damage, shortage, loss, concealed_damage, refused, theft
+  claimAmount        Decimal   @map("claim_amount") @db.Decimal(12, 2)
+  settledAmount      Decimal?  @map("settled_amount") @db.Decimal(12, 2)
+  description        String?
+  shipDate           DateTime? @map("ship_date")
+  deliveryDate       DateTime? @map("delivery_date")
+  filingDate         DateTime? @map("filing_date")
+  acknowledgmentDate DateTime? @map("acknowledgment_date")
+  corporateId        String?   @map("corporate_id") // Tenant isolation
+  customerId         String    @map("customer_id")
+  createdById        String    @map("created_by_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  // Relations
+  customer    Customer           @relation(fields: [customerId], references: [id])
+  createdBy   User               @relation("CreatedBy", fields: [createdById], references: [id])
+  parties     ClaimParty[]
+  products    ClaimProduct[]
+  comments    ClaimComment[]
+  documents   ClaimDocument[]
+  timeline    ClaimTimeline[]
+  tasks       ClaimTask[]
+  payments    ClaimPayment[]
+  identifiers ClaimIdentifier[]
+  emailLogs   EmailLog[]
+  aiDocuments AiDocument[]
+
+  @@index([corporateId])
+  @@index([customerId])
+  @@index([status])
+  @@index([claimNumber])
+  @@index([proNumber])
+  @@index([createdAt])
+  @@map("claims")
+}
+
+model ClaimParty {
+  id         String   @id @default(uuid())
+  claimId    String   @map("claim_id")
+  type       String   // claimant, carrier, payee, shipper, consignee
+  name       String
+  email      String?
+  phone      String?
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?  @map("zip_code")
+  scacCode   String?  @map("scac_code")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  claim Claim @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_parties")
+}
+
+model ClaimProduct {
+  id          String  @id @default(uuid())
+  claimId     String  @map("claim_id")
+  description String
+  quantity    Int     @default(1)
+  weight      Decimal? @db.Decimal(10, 2)
+  value       Decimal? @db.Decimal(12, 2)
+  damageType  String?  @map("damage_type")
+  nmfcCode    String?  @map("nmfc_code")
+  freightClass String? @map("freight_class")
+
+  claim Claim @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_products")
+}
+
+model ClaimComment {
+  id        String   @id @default(uuid())
+  claimId   String   @map("claim_id")
+  userId    String   @map("user_id")
+  content   String
+  type      String   @default("comment") // comment, note, system, email
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claim Claim @relation(fields: [claimId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_comments")
+}
+
+model ClaimDocument {
+  id                 String   @id @default(uuid())
+  claimId            String   @map("claim_id")
+  categoryId         String?  @map("category_id")
+  documentName       String   @map("document_name")
+  s3Key              String   @map("s3_key")
+  s3Bucket           String?  @map("s3_bucket")
+  fileSize           Int?     @map("file_size")
+  mimeType           String?  @map("mime_type")
+  uploadedBy         String   @map("uploaded_by")
+  aiProcessingStatus String?  @map("ai_processing_status") // null, processing, completed, failed
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  claim    Claim             @relation(fields: [claimId], references: [id])
+  category DocumentCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_documents")
+}
+
+model ClaimTimeline {
+  id          String   @id @default(uuid())
+  claimId     String   @map("claim_id")
+  status      String
+  description String?
+  changedById String   @map("changed_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  claim     Claim @relation(fields: [claimId], references: [id])
+  changedBy User  @relation("TimelineChanges", fields: [changedById], references: [id])
+
+  @@index([claimId])
+  @@map("claim_timeline")
+}
+
+model ClaimTask {
+  id          String    @id @default(uuid())
+  claimId     String    @map("claim_id")
+  title       String
+  description String?
+  status      String    @default("pending") // pending, in_progress, completed, cancelled
+  priority    String    @default("medium") // low, medium, high, urgent
+  dueDate     DateTime? @map("due_date")
+  assignedTo  String?   @map("assigned_to")
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  claim          Claim @relation(fields: [claimId], references: [id])
+  createdBy      User  @relation("TaskCreator", fields: [createdById], references: [id])
+  assignedToUser User? @relation("TaskAssignee", fields: [assignedTo], references: [id])
+
+  @@index([assignedTo])
+  @@index([status])
+  @@map("claim_tasks")
+}
+
+model ClaimPayment {
+  id          String   @id @default(uuid())
+  claimId     String   @map("claim_id")
+  amount      Decimal  @db.Decimal(12, 2)
+  type        String   // settlement, partial, insurance, salvage
+  method      String?  // check, wire, ach
+  reference   String?
+  receivedAt  DateTime? @map("received_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  claim Claim @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_payments")
+}
+
+model ClaimIdentifier {
+  id        String   @id @default(uuid())
+  claimId   String   @map("claim_id")
+  type      String   // bol, po, ref, tracking
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claim Claim @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@map("claim_identifiers")
+}
+
+model ClaimSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  label String?
+
+  @@map("claim_settings")
+}
+
+// ============================================================
+// DOCUMENTS & CATEGORIES
+// ============================================================
+
+model DocumentCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  documents ClaimDocument[]
+  mappings  DocumentCategoryMapping[]
+
+  @@map("document_categories")
+}
+
+model DocumentCategoryMapping {
+  id         String @id @default(uuid())
+  categoryId String @map("category_id")
+  claimType  String @map("claim_type")
+  isRequired Boolean @default(false) @map("is_required")
+
+  category DocumentCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("document_category_mappings")
+}
+
+// ============================================================
+// SHIPMENTS
+// ============================================================
+
+model Shipment {
+  id              String    @id @default(uuid())
+  proNumber       String    @map("pro_number")
+  bolNumber       String?   @map("bol_number")
+  carrierId       String?   @map("carrier_id")
+  customerId      String?   @map("customer_id")
+  corporateId     String?   @map("corporate_id")
+  shipDate        DateTime? @map("ship_date")
+  deliveryDate    DateTime? @map("delivery_date")
+  originCity      String?   @map("origin_city")
+  originState     String?   @map("origin_state")
+  destinationCity String?   @map("destination_city")
+  destinationState String?  @map("destination_state")
+  weight          Decimal?  @db.Decimal(10, 2)
+  pieces          Int?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  carrier   Carrier?          @relation(fields: [carrierId], references: [id])
+  customer  Customer?         @relation(fields: [customerId], references: [id])
+  contacts  ShipmentContact[]
+
+  @@index([proNumber])
+  @@index([corporateId])
+  @@map("shipments")
+}
+
+model ShipmentContact {
+  id         String @id @default(uuid())
+  shipmentId String @map("shipment_id")
+  name       String
+  email      String?
+  phone      String?
+  type       String // shipper, consignee, notify
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+
+  @@index([shipmentId])
+  @@map("shipment_contacts")
+}
+
+// ============================================================
+// CARRIERS
+// ============================================================
+
+model Carrier {
+  id              String   @id @default(uuid())
+  name            String
+  scacCode        String?  @unique @map("scac_code")
+  dotNumber       String?  @map("dot_number")
+  mcNumber        String?  @map("mc_number")
+  email           String?
+  phone           String?
+  website         String?
+  isInternational Boolean  @default(false) @map("is_international")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  shipments    Shipment[]
+  contacts     CarrierContact[]
+  integrations CarrierIntegration[]
+
+  @@map("carriers")
+}
+
+model CarrierContact {
+  id        String @id @default(uuid())
+  carrierId String @map("carrier_id")
+  name      String
+  email     String?
+  phone     String?
+  title     String?
+  department String? // claims, operations, billing
+
+  carrier Carrier @relation(fields: [carrierId], references: [id])
+
+  @@index([carrierId])
+  @@map("carrier_contacts")
+}
+
+model CarrierIntegration {
+  id        String   @id @default(uuid())
+  carrierId String   @map("carrier_id")
+  type      String   // api, portal, email
+  portalUrl String?  @map("portal_url")
+  apiKey    String?  @map("api_key") // Encrypted
+  username  String?  // Encrypted
+  password  String?  // Encrypted
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  carrier Carrier @relation(fields: [carrierId], references: [id])
+
+  @@index([carrierId])
+  @@map("carrier_integrations")
+}
+
+// ============================================================
+// INSURANCE & SUPPLIERS
+// ============================================================
+
+model Insurance {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  policyNumber String? @map("policy_number")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  contacts InsuranceContact[]
+
+  @@map("insurances")
+}
+
+model InsuranceContact {
+  id          String @id @default(uuid())
+  insuranceId String @map("insurance_id")
+  name        String
+  email       String?
+  phone       String?
+
+  insurance Insurance @relation(fields: [insuranceId], references: [id])
+
+  @@map("insurance_contacts")
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  addresses SupplierAddress[]
+
+  @@map("suppliers")
+}
+
+model SupplierAddress {
+  id         String @id @default(uuid())
+  supplierId String @map("supplier_id")
+  street1    String
+  street2    String?
+  city       String
+  state      String
+  zipCode    String @map("zip_code")
+  country    String @default("US")
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("supplier_addresses")
+}
+
+// ============================================================
+// EMAIL & NOTIFICATIONS
+// ============================================================
+
+model EmailLog {
+  id        String   @id @default(uuid())
+  claimId   String?  @map("claim_id")
+  from      String
+  to        String
+  subject   String
+  body      String?
+  status    String   @default("sent") // sent, failed, bounced
+  direction String   @default("outbound") // inbound, outbound
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claim Claim? @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@map("email_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  title     String
+  message   String
+  type      String    @default("info") // info, success, warning, error
+  link      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  subject   String
+  body      String
+  type      String   // claim_filed, claim_acknowledged, follow_up, etc.
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
+}
+
+model LetterTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  type      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("letter_templates")
+}
+
+model EmailQueue {
+  id        String    @id @default(uuid())
+  to        String
+  from      String    @default("claims@freightclaims.com")
+  subject   String
+  body      String
+  claimId   String?   @map("claim_id")
+  status    String    @default("pending") // pending, processing, sent, failed
+  error     String?
+  attempts  Int       @default(0)
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("email_queue")
+}
+
+// ============================================================
+// AI & AUTOMATION
+// ============================================================
+
+model AiConversation {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User          @relation(fields: [userId], references: [id])
+  messages AiMessage[]
+
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String   // user, assistant, system
+  content        String
+  metadata       Json?    // Agent type, tool calls, etc.
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+model AiDocument {
+  id            String   @id @default(uuid())
+  documentId    String?  @map("document_id")
+  claimId       String?  @map("claim_id")
+  agentType     String   @map("agent_type") // intake, compliance, etc.
+  extractedData Json?    @map("extracted_data")
+  confidence    Decimal? @db.Decimal(5, 4)
+  status        String   @default("processing") // processing, completed, failed
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  claim Claim? @relation(fields: [claimId], references: [id])
+
+  @@map("ai_documents")
+}
+
+model AiAgentRun {
+  id        String   @id @default(uuid())
+  agentType String   @map("agent_type")
+  input     Json
+  output    Json?
+  status    String   @default("running") // running, completed, failed
+  duration  Int?     // milliseconds
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([agentType])
+  @@index([createdAt])
+  @@map("ai_agent_runs")
+}
+
+model AutomationRule {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  corporateId     String?   @map("corporate_id")
+  trigger         String    // on_create, on_status_change, on_schedule, etc.
+  conditions      Json      // JSON rule conditions
+  actions         Json      // JSON actions to execute
+  isActive        Boolean   @default(true) @map("is_active")
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([corporateId])
+  @@map("automation_rules")
+}
+
+model AutomationTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // email, letter, notification
+  content     String
+  variables   Json?    // Available template variables
+  corporateId String?  @map("corporate_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([corporateId])
+  @@map("automation_templates")
+}
+
+// ============================================================
+// EMAIL SUBMISSION SETTINGS
+// ============================================================
+
+model EmailSubmissionConfig {
+  id              String   @id @default(uuid())
+  corporateId     String   @unique @map("corporate_id")
+  submissionPrefix String  @default("claimsubmission") @map("submission_prefix")
+  companyDomain   String   @map("company_domain")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  approvedDomains ApprovedEmailDomain[]
+  approvedSenders ApprovedEmailSender[]
+
+  @@map("email_submission_configs")
+}
+
+model ApprovedEmailDomain {
+  id        String   @id @default(uuid())
+  configId  String   @map("config_id")
+  domain    String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  config EmailSubmissionConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, domain])
+  @@map("approved_email_domains")
+}
+
+model ApprovedEmailSender {
+  id        String   @id @default(uuid())
+  configId  String   @map("config_id")
+  email     String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  config EmailSubmissionConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, email])
+  @@map("approved_email_senders")
+}
+
+// ============================================================
+// ANALYTICS & REPORTING
+// ============================================================
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  corporateId String?  @map("corporate_id")
+  action      String   // create, update, delete, login, etc.
+  entity      String   // claim, customer, user, etc.
+  entityId    String?  @map("entity_id")
+  metadata    Json?
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([corporateId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model InsightsCache {
+  id        String   @id @default(uuid())
+  reportType String  @map("report_type")
+  parameters Json
+  data       Json
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([reportType, expiresAt])
+  @@map("insights_cache")
+}
+
+// ============================================================
+// CONTRACTS & INSURANCE CERTIFICATES
+// ============================================================
+
+model Contract {
+  id            String    @id @default(uuid())
+  customerId    String    @map("customer_id")
+  carrierId     String?   @map("carrier_id")
+  corporateId   String?   @map("corporate_id")
+  name          String
+  contractNumber String?  @map("contract_number")
+  type          String    @default("shipping") // shipping, insurance, service
+  startDate     DateTime  @map("start_date")
+  endDate       DateTime? @map("end_date")
+  terms         Json?
+  maxLiability  Decimal?  @map("max_liability") @db.Decimal(12, 2)
+  releaseValue  Decimal?  @map("release_value") @db.Decimal(10, 2)
+  s3Key         String?   @map("s3_key")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([corporateId])
+  @@index([customerId])
+  @@index([carrierId])
+  @@map("contracts")
+}
+
+model InsuranceCertificate {
+  id              String    @id @default(uuid())
+  customerId      String?   @map("customer_id")
+  carrierId       String?   @map("carrier_id")
+  corporateId     String?   @map("corporate_id")
+  certificateNumber String  @map("certificate_number")
+  provider        String
+  policyType      String    @map("policy_type") // cargo, liability, general
+  coverageAmount  Decimal   @map("coverage_amount") @db.Decimal(12, 2)
+  deductible      Decimal?  @db.Decimal(10, 2)
+  effectiveDate   DateTime  @map("effective_date")
+  expirationDate  DateTime  @map("expiration_date")
+  s3Key           String?   @map("s3_key")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([customerId])
+  @@index([carrierId])
+  @@index([corporateId])
+  @@index([expirationDate])
+  @@map("insurance_certificates")
+}
+
+model CarrierTariff {
+  id          String   @id @default(uuid())
+  carrierId   String   @map("carrier_id")
+  name        String
+  effectiveDate DateTime @map("effective_date")
+  rules       Json
+  maxLiability Decimal? @map("max_liability") @db.Decimal(12, 2)
+  filingDeadlineDays Int? @map("filing_deadline_days")
+  s3Key       String?  @map("s3_key")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([carrierId])
+  @@map("carrier_tariffs")
+}
+
+model ReleaseValueTable {
+  id           String  @id @default(uuid())
+  carrierId    String  @map("carrier_id")
+  commodityCode String? @map("commodity_code")
+  nmfcCode     String? @map("nmfc_code")
+  minValue     Decimal @map("min_value") @db.Decimal(10, 2)
+  maxValue     Decimal @map("max_value") @db.Decimal(10, 2)
+  unit         String  @default("per_pound") // per_pound, per_piece, flat
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([carrierId])
+  @@map("release_value_tables")
+}
+
+// ============================================================
+// CARRIER RISK & FRAUD
+// ============================================================
+
+model CarrierRiskScore {
+  id            String   @id @default(uuid())
+  carrierId     String   @map("carrier_id")
+  overallScore  Decimal  @map("overall_score") @db.Decimal(5, 2) // 0-100
+  claimRate     Decimal? @map("claim_rate") @db.Decimal(5, 4)
+  avgResolutionDays Int? @map("avg_resolution_days")
+  denialRate    Decimal? @map("denial_rate") @db.Decimal(5, 4)
+  paymentSpeed  Decimal? @map("payment_speed") @db.Decimal(5, 2)
+  factors       Json?
+  calculatedAt  DateTime @default(now()) @map("calculated_at")
+
+  @@index([carrierId])
+  @@index([calculatedAt])
+  @@map("carrier_risk_scores")
+}
+
+model FraudFlag {
+  id          String   @id @default(uuid())
+  claimId     String   @map("claim_id")
+  type        String   // duplicate_claim, amount_anomaly, pattern_match, timing_suspicious
+  severity    String   @default("medium") // low, medium, high, critical
+  description String
+  evidence    Json?
+  status      String   @default("open") // open, investigating, dismissed, confirmed
+  reviewedBy  String?  @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([claimId])
+  @@index([status])
+  @@map("fraud_flags")
+}
+
+// ============================================================
+// CLAIM ARCHIVES & DUPLICATES
+// ============================================================
+
+model ClaimArchive {
+  id          String   @id @default(uuid())
+  claimId     String   @map("claim_id")
+  archivedBy  String   @map("archived_by")
+  reason      String?
+  archivedAt  DateTime @default(now()) @map("archived_at")
+
+  @@unique([claimId])
+  @@map("claim_archives")
+}
+
+model ClaimDuplicate {
+  id           String   @id @default(uuid())
+  claimId      String   @map("claim_id")
+  duplicateOfId String  @map("duplicate_of_id")
+  matchScore   Decimal  @map("match_score") @db.Decimal(5, 4)
+  matchFields  Json     @map("match_fields")
+  status       String   @default("pending") // pending, confirmed, dismissed
+  reviewedBy   String?  @map("reviewed_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([claimId])
+  @@index([duplicateOfId])
+  @@map("claim_duplicates")
+}
+
+// ============================================================
+// AI CHATBOT
+// ============================================================
+
+model ChatConversation {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  userId      String?  @map("user_id")
+  visitorEmail String? @map("visitor_email")
+  channel     String   @default("web") // web, api
+  status      String   @default("active") // active, resolved, escalated
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  messages ChatMessage[]
+
+  @@index([sessionId])
+  @@index([userId])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String   // user, assistant, system
+  content        String
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("chat_messages")
+}
+
+// ============================================================
+// NEWS / NEWSLETTER
+// ============================================================
+
+model NewsPost {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  excerpt     String?
+  content     String
+  coverImage  String?   @map("cover_image")
+  categoryId  String?   @map("category_id")
+  authorId    String    @map("author_id")
+  status      String    @default("draft") // draft, published, archived
+  publishedAt DateTime? @map("published_at")
+  isPinned    Boolean   @default(false) @map("is_pinned")
+  viewCount   Int       @default(0) @map("view_count")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  category NewsCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([status, publishedAt])
+  @@index([slug])
+  @@map("news_posts")
+}
+
+model NewsCategory {
+  id    String @id @default(uuid())
+  name  String @unique
+  slug  String @unique
+  color String @default("#3B82F6")
+
+  posts NewsPost[]
+
+  @@map("news_categories")
+}
+
+model NewsSubscriber {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  isActive      Boolean   @default(true) @map("is_active")
+  subscribedAt  DateTime  @default(now()) @map("subscribed_at")
+  unsubscribedAt DateTime? @map("unsubscribed_at")
+
+  @@map("news_subscribers")
+}
+
+// ============================================================
+// ONBOARDING
+// ============================================================
+
+model UserOnboarding {
+  id                String    @id @default(uuid())
+  userId            String    @unique @map("user_id")
+  completedSteps    Json      @default("[]") @map("completed_steps")
+  dismissedTours    Json      @default("[]") @map("dismissed_tours")
+  currentStep       String?   @map("current_step")
+  profileCompleted  Boolean   @default(false) @map("profile_completed")
+  firstClaimFiled   Boolean   @default(false) @map("first_claim_filed")
+  emailConfigured   Boolean   @default(false) @map("email_configured")
+  teamInvited       Boolean   @default(false) @map("team_invited")
+  aiTested          Boolean   @default(false) @map("ai_tested")
+  completedAt       DateTime? @map("completed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_onboarding")
+}
+
+// ============================================================
+// AI PREDICTIONS
+// ============================================================
+
+model ClaimPrediction {
+  id           String   @id @default(uuid())
+  claimId      String   @map("claim_id")
+  type         String   // outcome, settlement_amount, resolution_time, denial_risk
+  prediction   Json
+  confidence   Decimal  @db.Decimal(5, 4)
+  modelVersion String   @map("model_version")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([claimId])
+  @@index([type])
+  @@map("claim_predictions")
+}
+
+model DamageAnalysis {
+  id            String   @id @default(uuid())
+  claimId       String   @map("claim_id")
+  documentId    String   @map("document_id")
+  damageType    String   @map("damage_type")
+  severity      String   // minor, moderate, severe, total_loss
+  description   String
+  estimatedCost Decimal? @map("estimated_cost") @db.Decimal(12, 2)
+  aiNotes       String?  @map("ai_notes")
+  imageRegions  Json?    @map("image_regions")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([claimId])
+  @@map("damage_analyses")
+}

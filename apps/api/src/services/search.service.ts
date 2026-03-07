@@ -1,0 +1,15 @@
+/**
+ * SearchService - Universal cross-entity search
+ *
+ * Location: apps/api/src/services/search.service.ts
+ */
+import { searchRepository } from '../repositories/search.repository';
+import type { JwtPayload } from '../middleware/auth.middleware';
+
+export const searchService = {
+  async universalSearch(query: string, user: JwtPayload) { return searchRepository.universalSearch(query, user.customerId); },
+  async searchClaims(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchClaims(query, user.customerId); },
+  async searchCustomers(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchCustomers(query, user.customerId); },
+  async searchCarriers(query: Record<string, unknown>) { return searchRepository.searchCarriers(query); },
+  async searchShipments(query: Record<string, unknown>, user: JwtPayload) { return searchRepository.searchShipments(query, user.customerId); },
+};

@@ -1,0 +1,13 @@
+/**
+ * Theme Provider - Dark/light mode support using next-themes
+ *
+ * Location: apps/web/components/providers/theme-provider.tsx
+ */
+'use client';
+
+import { ThemeProvider as NextThemesProvider } from 'next-themes';
+import type { ThemeProviderProps } from 'next-themes';
+
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}

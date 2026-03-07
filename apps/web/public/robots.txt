@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /claims/
+Disallow: /customers/
+Disallow: /settings/
+Disallow: /ai/
+
+Sitemap: https://freightclaims.com/sitemap.xml

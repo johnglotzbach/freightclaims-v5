@@ -1,0 +1,105 @@
+# ============================================================
+# FreightClaims v5.0 - Render Blueprint
+# ============================================================
+# This file defines all services for the Render platform.
+# Push to main triggers automatic deployment of all services.
+#
+# Infrastructure on Render:
+#   - PostgreSQL database (managed)
+#   - Redis cache (managed)
+#   - 3 web services (Web, API, AI Agent)
+# ============================================================
+
+databases:
+  - name: freightclaims-db
+    plan: starter
+    databaseName: freightclaims
+    user: fc_admin
+    region: ohio
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+services:
+  # --- Backend API ---
+  - type: web
+    name: freightclaims-api
+    runtime: node
+    region: ohio
+    plan: starter
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter database generate && pnpm --filter api build
+    startCommand: pnpm --filter api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: freightclaims-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: STORAGE_MODE
+        value: local
+      - key: LOCAL_UPLOAD_DIR
+        value: /opt/render/project/uploads
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-2.0-flash
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: freightclaims-cache
+          property: connectionString
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: info
+
+  # --- Frontend (Next.js) ---
+  - type: web
+    name: freightclaims-web
+    runtime: node
+    region: ohio
+    plan: starter
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter web build
+    startCommand: pnpm --filter web start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: freightclaims-api
+          property: hostport
+      - key: NEXT_PUBLIC_AI_URL
+        fromService:
+          type: web
+          name: freightclaims-ai
+          property: hostport
+
+  # --- AI Agent Service (Python/FastAPI) ---
+  - type: web
+    name: freightclaims-ai
+    runtime: python
+    region: ohio
+    plan: starter
+    buildCommand: cd apps/ai-agent && pip install -r requirements.txt && playwright install chromium
+    startCommand: cd apps/ai-agent && uvicorn app:app --host 0.0.0.0 --port 8000
+    healthCheckPath: /healthz
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-2.0-flash
+
+  # --- Redis Cache ---
+  - type: redis
+    name: freightclaims-cache
+    plan: starter
+    region: ohio
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
