@@ -14,7 +14,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
-import { CopilotWidget } from '@/components/ai/copilot-widget';
 import { OnboardingTour } from '@/components/onboarding/onboarding-tour';
 import { ChatbotWidget } from '@/components/ai/chatbot-widget';
 
@@ -58,7 +57,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
-      <CopilotWidget />
       <ChatbotWidget />
       <OnboardingTour />
     </div>

@@ -15,6 +15,9 @@ export const reportsRouter: Router = Router();
 
 reportsRouter.use(authenticate);
 
+// --- Dashboard overview ---
+reportsRouter.get('/dashboard', reportsController.getDashboard);
+
 // --- Insights / dashboard analytics ---
 reportsRouter.post('/insights', reportsController.getInsightsReport);
 reportsRouter.post('/insights/top-customers', reportsController.getTopCustomers);
