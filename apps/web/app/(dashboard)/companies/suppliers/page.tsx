@@ -4,24 +4,16 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  Package, Plus, Edit2, Trash2, Search,
-  MapPin, Phone, Mail, CheckCircle, XCircle, X, Save,
+  Package, Plus, Edit2, Trash2, Search, X, Save,
 } from 'lucide-react';
 
 interface Supplier {
   id: string;
   name: string;
-  code?: string;
   email?: string;
   phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  isActive: boolean;
 }
 
 export default function SuppliersPage() {
@@ -32,10 +24,11 @@ export default function SuppliersPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: Supplier) => {
+      const payload = { name: data.name, email: data.email, phone: data.phone };
       if (data.id) {
-        return put(`/shipments/suppliers/${data.id}`, data);
+        return put(`/shipments/suppliers/${data.id}`, payload);
       }
-      return post('/shipments/suppliers', data);
+      return post('/shipments/suppliers', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
@@ -60,7 +53,7 @@ export default function SuppliersPage() {
     queryFn: () => getList<Supplier>('/shipments/suppliers/all'),
   });
 
-  const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.code?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.email || '').toLowerCase().includes(search.toLowerCase()));
 
   if (isLoading) {
     return (
@@ -83,7 +76,7 @@ export default function SuppliersPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><Package className="w-6 h-6 text-primary-500" /> Suppliers</h1>
           </div>
-          <button onClick={() => { setEditing({ id: '', name: '', isActive: true }); setCreating(true); }} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+          <button onClick={() => { setEditing({ id: '', name: '' }); setCreating(true); }} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
             <Plus className="w-4 h-4" /> Add Supplier
           </button>
         </div>
@@ -97,9 +90,9 @@ export default function SuppliersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><Package className="w-6 h-6 text-primary-500" /> Suppliers</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{suppliers.length} suppliers &middot; {suppliers.filter(s => s.isActive).length} active</p>
+          <p className="text-sm text-slate-500 mt-0.5">{suppliers.length} suppliers</p>
         </div>
-        <button onClick={() => { setEditing({ id: '', name: '', isActive: true }); setCreating(true); }} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+        <button onClick={() => { setEditing({ id: '', name: '' }); setCreating(true); }} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
           <Plus className="w-4 h-4" /> Add Supplier
         </button>
       </div>
@@ -116,14 +109,8 @@ export default function SuppliersPage() {
             <button onClick={() => { setEditing(null); setCreating(false); }}><X className="w-4 h-4 text-slate-400" /></button>
           </div>
           <div className="grid md:grid-cols-3 gap-3">
-            <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Supplier Name" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-            <input type="text" value={editing.code || ''} onChange={(e) => setEditing({ ...editing, code: e.target.value })} placeholder="Code" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input type="text" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Supplier Name *" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
             <input type="email" value={editing.email || ''} onChange={(e) => setEditing({ ...editing, email: e.target.value })} placeholder="Email" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-          </div>
-          <div className="grid md:grid-cols-4 gap-3">
-            <input type="text" value={editing.city || ''} onChange={(e) => setEditing({ ...editing, city: e.target.value })} placeholder="City" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-            <input type="text" value={editing.state || ''} onChange={(e) => setEditing({ ...editing, state: e.target.value })} placeholder="State" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-            <input type="text" value={editing.zipCode || ''} onChange={(e) => setEditing({ ...editing, zipCode: e.target.value })} placeholder="Zip" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
             <input type="tel" value={editing.phone || ''} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} placeholder="Phone" className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
           </div>
           <div className="flex justify-end gap-2">
@@ -138,10 +125,8 @@ export default function SuppliersPage() {
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-700">
               <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Supplier</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Code</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Contact</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Location</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Status</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Email</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Phone</th>
               <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Actions</th>
             </tr>
           </thead>
@@ -149,12 +134,8 @@ export default function SuppliersPage() {
             {filtered.map(s => (
               <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                 <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{s.name}</td>
-                <td className="px-4 py-3 hidden sm:table-cell font-mono text-xs text-slate-500">{s.code || '—'}</td>
                 <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{s.email || '—'}</td>
-                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{s.city && s.state ? `${s.city}, ${s.state}` : '—'}</td>
-                <td className="px-4 py-3">
-                  {s.isActive ? <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="w-3.5 h-3.5" /> Active</span> : <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>}
-                </td>
+                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{s.phone || '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => { setEditing(s); setCreating(false); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
                   <button onClick={() => { if (confirm('Delete this supplier?')) deleteMutation.mutate(s.id); }} disabled={deleteMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>

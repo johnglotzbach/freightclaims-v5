@@ -35,6 +35,7 @@ export const shipmentsController = {
   getCarrier: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await shipmentsService.getCarrier(req.params.id as string, user)); }),
   createCarrier: asyncHandler(async (req, res) => { const user = getUser(req); res.status(201).json(await shipmentsService.createCarrier(req.body, user)); }),
   updateCarrier: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await shipmentsService.updateCarrier(req.params.id as string, req.body, user)); }),
+  deleteCarrier: asyncHandler(async (req, res) => { const user = getUser(req); await shipmentsService.deleteCarrier(req.params.id as string, user); res.status(204).send(); }),
 
   // Carrier contacts
   getCarrierContacts: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await shipmentsService.getCarrierContacts(req.params.id as string, user)); }),

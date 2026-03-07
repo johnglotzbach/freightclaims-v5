@@ -27,6 +27,7 @@ interface DashboardData {
   monthlyTrend: { month: string; filed: number; settled: number; amount: number }[];
   topCarriers: { name: string; claims: number; avgSettlement: number }[];
   recentClaims: { id: string; claimNumber: string; title: string; status: string; amount: number; createdAt: string }[];
+  complianceAlerts?: string[];
 }
 
 const PLACEHOLDER: DashboardData = {
@@ -108,20 +109,22 @@ export default function ClaimsDashboard() {
 
       <DashboardCharts data={data || PLACEHOLDER} />
 
-      <div className="card p-4 border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-slate-900 dark:text-white">Carmack Compliance Alerts</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-              3 claims approaching 120-day disposition deadline. 1 claim past 30-day acknowledgment window.
-            </p>
-            <Link href="/claims/list?filter=compliance" className="text-sm text-amber-600 dark:text-amber-400 font-medium hover:underline mt-1 inline-block">
-              Review Now →
-            </Link>
+      {(data?.complianceAlerts && data.complianceAlerts.length > 0) && (
+        <div className="card p-4 border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-slate-900 dark:text-white">Carmack Compliance Alerts</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                {data.complianceAlerts.join('. ')}.
+              </p>
+              <Link href="/claims/list?filter=compliance" className="text-sm text-amber-600 dark:text-amber-400 font-medium hover:underline mt-1 inline-block">
+                Review Now →
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

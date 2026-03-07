@@ -46,6 +46,23 @@ export const reportsRepository = {
       count: t._count,
     }));
 
+    const complianceAlerts: string[] = [];
+    const now = new Date();
+    const openClaims = await prisma.claim.findMany({
+      where: { ...where, status: { notIn: ['settled', 'closed', 'denied'] }, filingDate: { not: null } } as any,
+      select: { filingDate: true },
+    });
+    let approaching120 = 0;
+    let past30 = 0;
+    for (const c of openClaims) {
+      if (!c.filingDate) continue;
+      const daysSinceFiling = Math.floor((now.getTime() - c.filingDate.getTime()) / 86400000);
+      if (daysSinceFiling >= 100 && daysSinceFiling <= 120) approaching120++;
+      if (daysSinceFiling > 30) past30++;
+    }
+    if (approaching120 > 0) complianceAlerts.push(`${approaching120} claim${approaching120 > 1 ? 's' : ''} approaching 120-day disposition deadline`);
+    if (past30 > 0) complianceAlerts.push(`${past30} claim${past30 > 1 ? 's' : ''} past 30-day acknowledgment window`);
+
     return {
       stats: [
         { label: 'Total Claims', value: total, change: 0 },
@@ -65,6 +82,7 @@ export const reportsRepository = {
         amount: c.claimAmount ? Number(c.claimAmount) : 0,
         createdAt: c.createdAt.toISOString(),
       })),
+      complianceAlerts,
     };
   },
 

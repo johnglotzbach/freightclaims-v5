@@ -26,6 +26,7 @@ export const shipmentsRepository = {
   async getCarrier(id: string) { return prisma.carrier.findUnique({ where: { id } }); },
   async createCarrier(data: Record<string, unknown>) { return prisma.carrier.create({ data: data as any }); },
   async updateCarrier(id: string, data: Record<string, unknown>) { return prisma.carrier.update({ where: { id }, data: data as any }); },
+  async deleteCarrier(id: string) { return prisma.carrier.delete({ where: { id } }); },
   async getCarrierContacts(carrierId: string) { return prisma.carrierContact.findMany({ where: { carrierId } }); },
   async addCarrierContact(carrierId: string, data: Record<string, unknown>) { return prisma.carrierContact.create({ data: { ...data, carrierId } as any }); },
   async getCarrierData() { return prisma.carrier.findMany({ select: { id: true, name: true, scacCode: true } }); },
@@ -36,16 +37,18 @@ export const shipmentsRepository = {
   async getInsurance(id: string) { return prisma.insurance.findUnique({ where: { id } }); },
   async createInsurance(data: Record<string, unknown>) { return prisma.insurance.create({ data: data as any }); },
   async getInsuranceContacts(id: string) { return prisma.insuranceContact.findMany({ where: { insuranceId: id } }); },
-  async listSuppliers() { return prisma.supplier.findMany(); },
+  async listSuppliers() { return prisma.supplier.findMany({ orderBy: { name: 'asc' } }); },
   async createSupplier(data: Record<string, unknown>) {
-    const payload = { name: String(data.name ?? ''), email: data.email as string | undefined, phone: data.phone as string | undefined };
-    return prisma.supplier.create({ data: payload });
+    const payload: Record<string, unknown> = { name: String(data.name ?? '') };
+    if (data.email != null) payload.email = String(data.email);
+    if (data.phone != null) payload.phone = String(data.phone);
+    return prisma.supplier.create({ data: payload as any });
   },
   async updateSupplier(id: string, data: Record<string, unknown>) {
     const payload: Record<string, unknown> = {};
-    if (data.name != null) payload.name = data.name;
-    if (data.email != null) payload.email = data.email;
-    if (data.phone != null) payload.phone = data.phone;
+    if (data.name != null) payload.name = String(data.name);
+    if (data.email != null) payload.email = String(data.email);
+    if (data.phone != null) payload.phone = String(data.phone);
     return prisma.supplier.update({ where: { id }, data: payload as any });
   },
   async deleteSupplier(id: string) { return prisma.supplier.delete({ where: { id } }); },

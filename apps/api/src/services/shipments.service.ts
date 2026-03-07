@@ -25,7 +25,22 @@ export const shipmentsService = {
   },
 
   async create(data: Record<string, unknown>, user: JwtPayload) {
-    return shipmentsRepository.create({ ...data, corporateId: user.corporateId });
+    const payload: Record<string, unknown> = {
+      proNumber: String(data.proNumber || ''),
+      corporateId: user.corporateId,
+    };
+    if (data.bolNumber) payload.bolNumber = String(data.bolNumber);
+    if (data.carrierId) payload.carrierId = String(data.carrierId);
+    if (data.customerId) payload.customerId = String(data.customerId);
+    if (data.originCity) payload.originCity = String(data.originCity);
+    if (data.originState) payload.originState = String(data.originState);
+    if (data.destinationCity) payload.destinationCity = String(data.destinationCity);
+    if (data.destinationState) payload.destinationState = String(data.destinationState);
+    if (data.shipDate) payload.shipDate = new Date(String(data.shipDate));
+    if (data.deliveryDate) payload.deliveryDate = new Date(String(data.deliveryDate));
+    if (data.weight != null && String(data.weight).trim()) payload.weight = Number(data.weight);
+    if (data.pieces != null && String(data.pieces).trim()) payload.pieces = parseInt(String(data.pieces), 10);
+    return shipmentsRepository.create(payload);
   },
 
   async update(id: string, data: Record<string, unknown>, user: JwtPayload) {
@@ -53,6 +68,7 @@ export const shipmentsService = {
   async getCarrier(id: string, _user: JwtPayload) { return shipmentsRepository.getCarrier(id); },
   async createCarrier(data: Record<string, unknown>, _user: JwtPayload) { return shipmentsRepository.createCarrier(data); },
   async updateCarrier(id: string, data: Record<string, unknown>, _user: JwtPayload) { return shipmentsRepository.updateCarrier(id, data); },
+  async deleteCarrier(id: string, _user: JwtPayload) { return shipmentsRepository.deleteCarrier(id); },
   async getCarrierContacts(carrierId: string, _user: JwtPayload) { return shipmentsRepository.getCarrierContacts(carrierId); },
   async addCarrierContact(carrierId: string, data: Record<string, unknown>, _user: JwtPayload) { return shipmentsRepository.addCarrierContact(carrierId, data); },
   async getCarrierData(_user: JwtPayload) { return shipmentsRepository.getCarrierData(); },

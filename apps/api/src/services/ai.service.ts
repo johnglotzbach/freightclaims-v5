@@ -22,6 +22,17 @@ export const aiService = {
    */
   async runAgent(agentType: string, input: Record<string, unknown>, user: JwtPayload) {
     logger.info({ agentType, userId: user.userId }, 'Running AI agent');
+
+    if (!env.GEMINI_API_KEY?.trim()) {
+      return {
+        agentType,
+        status: 'failed',
+        result: 'AI features require a Gemini API key. Please configure GEMINI_API_KEY in your environment variables.',
+        summary: 'Missing API key',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const result = await runAgent(agentType as AgentType, input, user.userId);
     return {
       agentType: result.agentType,
@@ -41,6 +52,13 @@ export const aiService = {
   async chat(input: { message: string; conversationId?: string }, user: JwtPayload) {
     logger.info({ userId: user.userId, conversationId: input.conversationId }, 'AI copilot chat');
 
+    if (!env.GEMINI_API_KEY?.trim()) {
+      return {
+        response: 'AI features require a Gemini API key. Please configure GEMINI_API_KEY in your environment variables to enable the AI Copilot.',
+        conversationId: input.conversationId,
+      };
+    }
+
     const { result } = await runWorkflow(
       { message: input.message },
       user.userId,
@@ -49,6 +67,13 @@ export const aiService = {
         conversationId: input.conversationId,
       },
     );
+
+    if (result.status === 'failed') {
+      return {
+        response: 'I encountered an issue processing your request. This may be due to AI service configuration. Please check that GEMINI_API_KEY is set correctly, or try again in a moment.',
+        conversationId: input.conversationId,
+      };
+    }
 
     return {
       response: result.result as string,
