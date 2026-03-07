@@ -41,7 +41,7 @@ export const reportsRepository = {
         { label: 'Total Claims', value: total, change: 0 },
         { label: 'Pending Review', value: pending, change: 0 },
         { label: 'Settlement Rate', value: settlementRate, change: 0 },
-        { label: 'Avg Settlement', value: 0, change: 0 },
+        { label: 'Denied', value: denied, change: 0 },
       ],
       claimsByStatus,
       claimsByType,
