@@ -70,16 +70,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NEXT_PUBLIC_API_URL
+      - key: INTERNAL_API_HOST
         fromService:
           type: web
           name: freightclaims-api
           property: hostport
-      - key: NEXT_PUBLIC_AI_URL
-        fromService:
-          type: web
-          name: freightclaims-ai
-          property: hostport
+      - key: NEXT_PUBLIC_API_URL
+        value: /api/v1
 
   # --- AI Agent Service (Python/FastAPI) ---
   - type: web

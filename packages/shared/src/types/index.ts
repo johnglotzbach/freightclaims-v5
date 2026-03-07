@@ -27,6 +27,9 @@ export interface Claim {
   comments?: ClaimComment[];
   documents?: ClaimDocument[];
   timeline?: ClaimTimeline[];
+  tasks?: ClaimTask[];
+  payments?: ClaimPayment[];
+  identifiers?: ClaimIdentifier[];
 }
 
 export type ClaimStatus =
@@ -201,4 +204,40 @@ export interface AgentRunResult {
   status: 'completed' | 'failed' | 'running';
   result: string;
   timestamp: string;
+}
+
+// --- Tasks ---
+export interface ClaimTask {
+  id: string;
+  claimId: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority: string;
+  dueDate?: string;
+  assignedTo?: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Payments ---
+export interface ClaimPayment {
+  id: string;
+  claimId: string;
+  amount: number;
+  type: string;
+  method?: string;
+  reference?: string;
+  receivedAt?: string;
+  createdAt: string;
+}
+
+// --- Identifiers ---
+export interface ClaimIdentifier {
+  id: string;
+  claimId: string;
+  type: string;
+  value: string;
+  createdAt: string;
 }

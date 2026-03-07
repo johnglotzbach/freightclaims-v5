@@ -178,8 +178,10 @@ async def connect_playwright(cdp_url: str):
         playwright_page = await ctx.new_page()
 
 
+PROMPTS_DIR = Path(__file__).parent / "prompts"
+
 def load_prompt(scac_code: str) -> str:
-    """Fetch the carrier-specific prompt template from S3."""
+    """Fetch the carrier-specific prompt template. Checks local prompts/ dir first, then S3."""
     scac_map = {
         "SEFL": "southeastern.txt",
         "XPOL": "xpo.txt",
@@ -190,6 +192,15 @@ def load_prompt(scac_code: str) -> str:
         raise HTTPException(400, f"Unknown SCAC code: {scac_code}")
 
     filename = scac_map[normalized]
+
+    local_path = PROMPTS_DIR / filename
+    if local_path.exists():
+        return local_path.read_text(encoding="utf-8")
+
+    aws_key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    if not aws_key:
+        raise HTTPException(500, f"Prompt '{filename}' not found locally and AWS credentials not configured")
+
     try:
         s3 = boto3.client("s3", region_name=AWS_REGION)
         obj = s3.get_object(Bucket=S3_PROMPTS_BUCKET, Key=filename)
@@ -203,6 +214,14 @@ def load_prompt(scac_code: str) -> str:
 
 async def download_claim_docs(claim_documents: list) -> list[str]:
     """Download claim docs from S3 and return local file paths."""
+    if not claim_documents:
+        return []
+
+    aws_key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    if not aws_key:
+        logger.warning("AWS credentials not configured — skipping document download")
+        return []
+
     files_dir = Path("/tmp/fc-agent-files")
     files_dir.mkdir(parents=True, exist_ok=True)
     s3 = boto3.client("s3", region_name=AWS_REGION)

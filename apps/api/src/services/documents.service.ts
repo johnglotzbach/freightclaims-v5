@@ -1,23 +1,17 @@
 /**
- * DocumentsService - S3 document storage and category management
+ * DocumentsService - Document storage and category management
  *
- * Handles document upload to S3, download streaming, signed URL generation,
- * category CRUD, and AI-powered document processing (OCR/extraction).
+ * Delegates file I/O to storageService (S3 or local disk depending on
+ * STORAGE_MODE). Handles category CRUD and AI-powered document processing.
  *
  * Location: apps/api/src/services/documents.service.ts
- * Related: apps/api/src/config/aws.ts (S3 client)
+ * Related: apps/api/src/services/storage.service.ts
  */
 import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { documentsRepository } from '../repositories/documents.repository';
-import { env } from '../config/env';
+import { storageService } from './storage.service';
 import { logger } from '../utils/logger';
-import type { Readable } from 'stream';
-
-const s3 = new S3Client({ region: env.AWS_REGION });
-const BUCKET = env.S3_DOCUMENTS_BUCKET;
 
 export const documentsService = {
   async list(query: Record<string, unknown>) {
@@ -28,79 +22,62 @@ export const documentsService = {
     return documentsRepository.findById(id);
   },
 
-  /** Uploads a file to S3 and stores metadata in the database */
   async upload(req: Request) {
     const file = (req as any).file;
     if (!file) throw new Error('No file provided');
 
     const user = (req as any).user;
-    const key = `${user.corporateId || 'global'}/${randomUUID()}/${file.originalname}`;
+    const claimId = req.body.claimId || 'unlinked';
+    const category = req.body.categoryId || 'general';
+    const filename = `${randomUUID()}-${file.originalname}`;
 
-    await s3.send(new PutObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-      Metadata: {
-        uploadedBy: user.userId,
-        originalName: file.originalname,
-      },
-    }));
+    const { key, size } = await storageService.uploadDocument(
+      claimId,
+      category,
+      filename,
+      file.buffer,
+      file.mimetype,
+    );
 
     const doc = await documentsRepository.create({
       documentName: file.originalname,
       mimeType: file.mimetype,
-      fileSize: file.size,
+      fileSize: size,
       s3Key: key,
-      s3Bucket: BUCKET,
       claimId: req.body.claimId,
       categoryId: req.body.categoryId || null,
       uploadedBy: user.userId,
     });
 
-    logger.info({ docId: doc.id, key }, 'Document uploaded to S3');
+    logger.info({ docId: doc.id, key }, 'Document uploaded');
     return doc;
   },
 
-  /** Streams a document from S3 back to the response */
   async download(id: string, res: Response) {
     const doc = await documentsRepository.findById(id);
     if (!doc) throw new Error('Document not found');
 
-    const response = await s3.send(new GetObjectCommand({
-      Bucket: doc.s3Bucket || BUCKET,
-      Key: doc.s3Key,
-    }));
+    const { body, contentType } = await storageService.downloadDocument(doc.s3Key);
 
-    res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${doc.documentName}"`);
-    if (response.ContentLength) res.setHeader('Content-Length', String(response.ContentLength));
-
-    const stream = response.Body as Readable;
-    stream.pipe(res);
+    res.setHeader('Content-Length', String(body.length));
+    res.end(body);
   },
 
   async delete(id: string) {
     const doc = await documentsRepository.findById(id);
     if (doc?.s3Key) {
-      await s3.send(new DeleteObjectCommand({
-        Bucket: doc.s3Bucket || BUCKET,
-        Key: doc.s3Key,
-      }));
+      await storageService.deleteDocument(doc.s3Key);
     }
     return documentsRepository.delete(id);
   },
 
-  /** Generates a pre-signed URL for direct browser download */
   async getSignedUrl(id: string) {
     const doc = await documentsRepository.findById(id);
     if (!doc) throw new Error('Document not found');
 
-    const url = await getSignedUrl(s3, new GetObjectCommand({
-      Bucket: doc.s3Bucket || BUCKET,
-      Key: doc.s3Key,
-    }), { expiresIn: 3600 });
-
+    const url = await storageService.getSignedDownloadUrl(doc.s3Key);
     return { url, fileName: doc.documentName, expiresIn: 3600 };
   },
 
@@ -111,7 +88,6 @@ export const documentsService = {
   async getCategoryMapping() { return documentsRepository.getCategoryMapping(); },
   async updateCategoryMapping(data: Record<string, unknown>) { return documentsRepository.updateCategoryMapping(data); },
 
-  /** Sends a document to the AI agent for OCR/extraction */
   async processWithAI(id: string) {
     const doc = await documentsRepository.findById(id);
     if (!doc) throw new Error('Document not found');

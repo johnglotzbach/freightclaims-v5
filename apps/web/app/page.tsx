@@ -14,7 +14,7 @@ import {
   CheckCircle2, ArrowRight, ChevronDown, Zap, Lock,
   FileText, TrendingUp, Users, Headphones, Mail, Phone,
   Globe, Star, Award, Target, XCircle, AlertTriangle,
-  FileX, Ban, Crosshair, Camera, HandshakeIcon, Newspaper,
+  FileX, Ban, Crosshair, Camera, Newspaper,
   CalendarDays, MonitorSmartphone, PieChart, Workflow,
   Banknote, Search, Handshake, ChevronRight, Sparkles,
   ExternalLink, BookOpen, Cog,

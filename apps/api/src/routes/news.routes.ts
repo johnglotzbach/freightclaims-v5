@@ -16,7 +16,7 @@ newsRouter.get('/', async (req, res, next) => {
   try {
     const { category, page = '1', limit = '12', search } = req.query;
     const where: Record<string, unknown> = { status: 'published' };
-    if (category) where.category = { slug: category };
+    if (category) where.category = { slug: category as string };
     if (search) {
       where.OR = [
         { title: { contains: search as string, mode: 'insensitive' } },
@@ -93,7 +93,7 @@ newsRouter.get('/admin/posts', async (req, res, next) => {
   try {
     const { status, page = '1', limit = '25' } = req.query;
     const where: Record<string, unknown> = {};
-    if (status) where.status = status;
+    if (status) where.status = status as string;
 
     const skip = (Number(page) - 1) * Number(limit);
     const [data, total] = await Promise.all([

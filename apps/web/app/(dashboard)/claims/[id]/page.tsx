@@ -8,33 +8,13 @@ import { toast } from 'sonner';
 import { get, put, post } from '@/lib/api-client';
 import { cn, getStatusBadgeClass } from '@/lib/utils';
 import { formatCurrency, formatDate, formatDateTime, CLAIM_STATUSES, CARMACK_TIMELINES, daysBetween } from 'shared';
-import type { Claim, ClaimComment } from 'shared';
+import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
 import {
   Edit2, Mail, MoreHorizontal, ChevronRight,
   Plus, AlertTriangle, CheckCircle, Clock, Send,
 } from 'lucide-react';
 
 type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'emails-automation' | 'transactions' | 'additional' | 'comments';
-
-interface ClaimTask {
-  id: string;
-  title: string;
-  description?: string;
-  priority: string;
-  status?: string;
-  dueDate?: string;
-  assignedTo?: string;
-}
-
-interface ClaimPayment {
-  id: string;
-  type: string;
-  amount: number;
-  method?: string;
-  reference?: string;
-  receivedAt?: string;
-  createdAt: string;
-}
 
 interface CarrierParty {
   id: string;
@@ -198,7 +178,7 @@ export default function ClaimDetailPage() {
         {activeTab === 'transportation' && <TransportationTab claim={claim} />}
         {activeTab === 'form-data' && <FormDataTab claim={claim} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
-        {activeTab === 'tasks' && <TasksTab tasks={(claim as any).tasks || []} claimId={id} />}
+        {activeTab === 'tasks' && <TasksTab tasks={claim.tasks || []} claimId={id} />}
         {activeTab === 'emails-automation' && <EmailsAutomationTab claimId={id} />}
         {activeTab === 'transactions' && <TransactionsTab claim={claim} />}
         {activeTab === 'additional' && <AdditionalInfoTab claim={claim} />}
@@ -590,9 +570,9 @@ function AdditionalInfoTab({ claim }: { claim: Claim }) {
 
       <div className="card p-6 space-y-4">
         <h3 className="font-semibold text-slate-900 dark:text-white">Payment History</h3>
-        {claim.payments && (claim.payments as any[]).length > 0 ? (
+        {claim.payments && claim.payments.length > 0 ? (
           <div className="space-y-2">
-            {(claim.payments as any[]).map((p: ClaimPayment) => (
+            {claim.payments.map((p: ClaimPayment) => (
               <div key={p.id} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
                 <div>
                   <p className="text-sm font-medium capitalize">{p.type}</p>

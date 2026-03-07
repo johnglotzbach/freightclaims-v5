@@ -12,10 +12,12 @@ const nextConfig = {
     ],
   },
   async rewrites() {
+    const host = process.env.INTERNAL_API_HOST;
+    const apiBase = host ? `http://${host}` : 'http://localhost:4000';
     return [
       {
         source: '/api/v1/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'}/:path*`,
+        destination: `${apiBase}/api/v1/:path*`,
       },
     ];
   },
