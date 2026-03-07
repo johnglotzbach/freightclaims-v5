@@ -120,7 +120,7 @@ export default function ClaimDetailPage() {
             </div>
             <div className="text-center">
               <p className="text-xs text-slate-500">Remaining Amount</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(claim.claimAmount - (claim.settledAmount || 0))}</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency((claim.claimAmount ?? 0) - (claim.settledAmount ?? 0))}</p>
             </div>
             <div className="flex items-center gap-1">
               <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
@@ -308,7 +308,7 @@ function FormDataTab({ claim }: { claim: Claim }) {
         <h3 className="font-semibold text-slate-900 dark:text-white">Claim Information</h3>
         <dl className="space-y-3 text-sm">
           <DetailRow label="Claim Number" value={claim.claimNumber} />
-          <DetailRow label="Claim Type" value={claim.claimType.replace('_', ' ')} />
+          <DetailRow label="Claim Type" value={(claim.claimType || 'N/A').replace('_', ' ')} />
           <DetailRow label="Status" value={CLAIM_STATUSES[claim.status as keyof typeof CLAIM_STATUSES] || claim.status} />
           <DetailRow label="Filed Amount" value={formatCurrency(claim.claimAmount)} />
           {claim.settledAmount && <DetailRow label="Settled Amount" value={formatCurrency(claim.settledAmount)} />}
@@ -689,7 +689,7 @@ function CommentsActivityTab({ comments, timeline, claimId }: { comments: ClaimC
                 )}
                 <div className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900 border-2 border-primary-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">{event.status.replace('_', ' ')}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">{(event.status || '').replace('_', ' ')}</p>
                   {event.description && <p className="text-sm text-slate-500 mt-0.5">{event.description}</p>}
                   <p className="text-xs text-slate-400 mt-1">{formatDateTime(event.createdAt)}</p>
                 </div>

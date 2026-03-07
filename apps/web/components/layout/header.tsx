@@ -103,8 +103,17 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const searchResults: SearchResult[] = rawSearchResults ? toSearchResults(rawSearchResults) : [];
 
-  const [currentCorporateId, setCurrentCorporateId] = useState<string | null>(null);
+  const [currentCorporateId, setCurrentCorporateId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('fc-impersonate-corporate');
+    return null;
+  });
   const currentCorporate = corporateAccounts.find(a => a.id === currentCorporateId) || corporateAccounts[0];
+
+  function switchCorporate(id: string) {
+    setCurrentCorporateId(id);
+    localStorage.setItem('fc-impersonate-corporate', id);
+    window.location.reload();
+  }
 
   const unreadCount = notifications.filter(n => !n.readAt).length;
 
@@ -161,7 +170,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 ml-2">
-          {corporateAccounts.length > 1 && (
+          {user?.isSuperAdmin && corporateAccounts.length > 0 && (
             <div ref={impRef} className="relative hidden sm:block">
               <button onClick={() => setImpersonateOpen(!impersonateOpen)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                 <Eye className="w-3.5 h-3.5" />
@@ -174,7 +183,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <p className="text-[10px] font-semibold uppercase text-slate-400">Switch Corporate Account</p>
                   </div>
                   {corporateAccounts.map(acc => (
-                    <button key={acc.id} onClick={() => { setCurrentCorporateId(acc.id); setImpersonateOpen(false); }} className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors', currentCorporate?.id === acc.id && 'bg-primary-50 dark:bg-primary-500/10')}>
+                    <button key={acc.id} onClick={() => { switchCorporate(acc.id); setImpersonateOpen(false); }} className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors', currentCorporate?.id === acc.id && 'bg-primary-50 dark:bg-primary-500/10')}>
                       <Building2 className="w-4 h-4 text-slate-400" />
                       <span className="flex-1 text-left font-medium text-slate-700 dark:text-slate-300">{acc.name}</span>
                       <span className="text-xs text-slate-400 font-mono">{acc.code}</span>

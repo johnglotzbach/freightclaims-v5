@@ -8,7 +8,9 @@ import { customersRepository } from '../repositories/customers.repository';
 import { NotFoundError } from '../utils/errors';
 
 export const customersService = {
-  async list(query: Record<string, unknown>) { return customersRepository.findMany(query); },
+  async list(query: Record<string, unknown>, corporateId?: string | null, isSuperAdmin = false) {
+    return customersRepository.findMany(query, corporateId, isSuperAdmin);
+  },
 
   async getById(id: string) {
     const customer = await customersRepository.findById(id);

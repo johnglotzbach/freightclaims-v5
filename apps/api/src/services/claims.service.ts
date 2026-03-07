@@ -14,6 +14,7 @@ import { claimsRepository } from '../repositories/claims.repository';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import type { JwtPayload } from '../middleware/auth.middleware';
+import type { TenantContext } from '../middleware/tenant.middleware';
 import { smtpService } from './smtp.service';
 import { env } from '../config/env';
 import { prisma } from '../config/database';
@@ -28,14 +29,19 @@ export const claimsService = {
    * @param user - Authenticated user context (for corporate scoping)
    * @returns Paginated list of claims with total count
    */
-  async list(query: Record<string, unknown>, user: JwtPayload) {
+  async list(query: Record<string, unknown>, user: JwtPayload, tenant?: TenantContext) {
     const page = Number(query.page) || 1;
     const limit = Math.min(Number(query.limit) || 25, 100);
     const offset = (page - 1) * limit;
 
+    const effectiveCorporateId = tenant?.effectiveCorporateId ?? user.corporateId ?? null;
+    const isSuperAdmin = tenant?.isSuperAdmin ?? false;
+
     const filters = {
       status: query.status as string | undefined,
-      customerId: user.role === 'admin' ? (query.customerId as string) : (user.customerId ?? undefined),
+      customerId: query.customerId as string | undefined,
+      corporateId: isSuperAdmin && !effectiveCorporateId ? undefined : effectiveCorporateId,
+      isSuperAdmin,
       search: query.search as string | undefined,
       dateFrom: query.dateFrom as string | undefined,
       dateTo: query.dateTo as string | undefined,
@@ -173,7 +179,14 @@ export const claimsService = {
   async addIdentifier(claimId: string, data: Record<string, unknown>) { return claimsRepository.addIdentifier(claimId, data); },
 
   // --- Dashboard ---
-  async getDashboardStats(user: JwtPayload) { return claimsRepository.getDashboardStats(user.customerId ?? undefined); },
+  async getDashboardStats(user: JwtPayload, tenant?: TenantContext) {
+    const effectiveCorporateId = tenant?.effectiveCorporateId ?? user.corporateId ?? null;
+    const isSuperAdmin = tenant?.isSuperAdmin ?? false;
+    return claimsRepository.getDashboardStats(
+      user.customerId ?? undefined,
+      isSuperAdmin && !effectiveCorporateId ? undefined : effectiveCorporateId,
+    );
+  },
 
   // --- Mass Upload ---
   async massUpload(data: Record<string, unknown>, user: JwtPayload) { return claimsRepository.massUpload(data, user.userId); },

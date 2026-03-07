@@ -54,6 +54,7 @@ export const useAuth = create<AuthState>((set, getState) => ({
   logout: () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('fc-impersonate-corporate');
     set({ user: null, isAuthenticated: false, _loaded: false, isLoading: false });
     window.location.href = '/login';
   },

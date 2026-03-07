@@ -12,17 +12,20 @@
 import type { Request, Response, NextFunction } from 'express';
 import { claimsService } from '../services/claims.service';
 import type { JwtPayload } from '../middleware/auth.middleware';
+import type { TenantContext } from '../middleware/tenant.middleware';
 
-/** Helper to wrap async route handlers and forward errors to Express */
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch(next);
   };
 }
 
-/** Extracts the authenticated user from the request */
 function getUser(req: Request): JwtPayload {
   return (req as Request & { user: JwtPayload }).user;
+}
+
+function getTenant(req: Request): TenantContext {
+  return req.tenant || { corporateId: null, isSuperAdmin: false, effectiveCorporateId: null };
 }
 
 export const claimsController = {
@@ -32,7 +35,8 @@ export const claimsController = {
    */
   list: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
-    const result = await claimsService.list(req.query, user);
+    const tenant = getTenant(req);
+    const result = await claimsService.list(req.query, user, tenant);
     res.json(result);
   }),
 
@@ -189,7 +193,8 @@ export const claimsController = {
   // --- Dashboard ---
   getDashboardStats: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
-    const stats = await claimsService.getDashboardStats(user);
+    const tenant = getTenant(req);
+    const stats = await claimsService.getDashboardStats(user, tenant);
     res.json(stats);
   }),
 

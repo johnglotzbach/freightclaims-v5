@@ -19,7 +19,13 @@ function getUser(req: Request): JwtPayload {
 }
 
 export const reportsController = {
-  getDashboard: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getDashboard(user)); }),
+  getDashboard: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const tenant = req.tenant;
+    const effectiveCorp = tenant?.effectiveCorporateId ?? user.corporateId ?? null;
+    const isSuperAdmin = tenant?.isSuperAdmin ?? false;
+    res.json(await reportsService.getDashboard(user, isSuperAdmin && !effectiveCorp ? null : effectiveCorp));
+  }),
   getInsightsReport: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getInsightsReport(req.body, user)); }),
   getTopCustomers: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getTopCustomers(req.body, user)); }),
   getTopCarriers: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getTopCarriers(req.body, user)); }),

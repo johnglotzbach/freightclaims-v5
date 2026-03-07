@@ -8,7 +8,9 @@ import { reportsRepository } from '../repositories/reports.repository';
 import type { JwtPayload } from '../middleware/auth.middleware';
 
 export const reportsService = {
-  async getDashboard(user: JwtPayload) { return reportsRepository.getDashboard(user.corporateId); },
+  async getDashboard(user: JwtPayload, overrideCorporateId?: string | null) {
+    return reportsRepository.getDashboard(overrideCorporateId !== undefined ? overrideCorporateId : user.corporateId);
+  },
   async getInsightsReport(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getInsightsReport(body, user.customerId ?? undefined); },
   async getTopCustomers(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getTopCustomers(body, user.customerId ?? undefined); },
   async getTopCarriers(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getTopCarriers(body, user.customerId ?? undefined); },

@@ -16,15 +16,16 @@ type CompanyType = 'all' | 'customer' | 'carrier' | 'insurance';
 interface Company {
   id: string;
   name: string;
-  type: 'customer' | 'carrier' | 'insurance';
+  type?: string;
   code?: string;
   email?: string;
   phone?: string;
   city?: string;
   state?: string;
-  isActive: boolean;
-  claimCount: number;
+  isActive?: boolean;
+  claimCount?: number;
   isCorporate?: boolean;
+  industry?: string;
 }
 
 const typeConfig: Record<string, { icon: typeof Building2; color: string; label: string }> = {
@@ -80,20 +81,22 @@ export default function CompaniesPage() {
 
   const filtered = companies
     .filter(c => {
-      if (typeFilter !== 'all' && c.type !== typeFilter) return false;
-      if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.code?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (typeFilter !== 'all' && getType(c) !== typeFilter) return false;
+      if (search && !c.name?.toLowerCase().includes(search.toLowerCase()) && !c.code?.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     })
     .sort((a, b) => {
-      if (sortBy === 'claims') return b.claimCount - a.claimCount;
-      return a.name.localeCompare(b.name);
+      if (sortBy === 'claims') return (b.claimCount || 0) - (a.claimCount || 0);
+      return (a.name || '').localeCompare(b.name || '');
     });
+
+  const getType = (c: Company): string => c.type || (c.isCorporate ? 'customer' : 'customer');
 
   const counts = {
     all: companies.length,
-    customer: companies.filter(c => c.type === 'customer').length,
-    carrier: companies.filter(c => c.type === 'carrier').length,
-    insurance: companies.filter(c => c.type === 'insurance').length,
+    customer: companies.filter(c => getType(c) === 'customer').length,
+    carrier: companies.filter(c => getType(c) === 'carrier').length,
+    insurance: companies.filter(c => getType(c) === 'insurance').length,
   };
 
   return (
@@ -181,7 +184,7 @@ export default function CompaniesPage() {
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
               {filtered.map((company) => {
-                const config = typeConfig[company.type];
+                const config = typeConfig[getType(company)] || typeConfig.customer;
                 const TypeIcon = config.icon;
                 return (
                   <tr
@@ -212,10 +215,10 @@ export default function CompaniesPage() {
                       {company.city && company.state ? `${company.city}, ${company.state}` : '—'}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">{company.claimCount}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-white">{company.claimCount || 0}</span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
-                      {company.isActive ? (
+                      {company.isActive !== false ? (
                         <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="w-3.5 h-3.5" /> Active</span>
                       ) : (
                         <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>

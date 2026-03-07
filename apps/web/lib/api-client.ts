@@ -15,6 +15,10 @@ client.interceptors.request.use((config) => {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const corpId = localStorage.getItem('fc-impersonate-corporate');
+    if (corpId) {
+      config.headers['X-Corporate-Id'] = corpId;
+    }
   }
   return config;
 });

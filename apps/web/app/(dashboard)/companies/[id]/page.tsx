@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { get, put, post, del } from '@/lib/api-client';
+import { get, getList, put, post, del } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { TableSkeleton, StatsSkeleton, CardSkeleton, EmptyState } from '@/components/ui/loading';
@@ -27,11 +27,11 @@ interface CompanyDetail {
   industry?: string;
   isActive: boolean;
   isCorporate?: boolean;
-  address: { address1: string; city: string; state: string; zipCode: string; country: string };
-  claimCount: number;
-  totalClaimValue: number;
-  openClaims: number;
-  settledClaims: number;
+  address?: { address1?: string; city?: string; state?: string; zipCode?: string; country?: string } | null;
+  claimCount?: number;
+  totalClaimValue?: number;
+  openClaims?: number;
+  settledClaims?: number;
 }
 
 interface Location {
@@ -58,17 +58,17 @@ export default function CompanyEditorPage() {
 
   const { data: locations = [], isLoading: locationsLoading } = useQuery({
     queryKey: ['customer-locations', id],
-    queryFn: () => get<Location[]>(`/customers/${id}/addresses`),
+    queryFn: () => getList<Location>(`/customers/${id}/addresses`),
   });
 
   const { data: contacts = [], isLoading: contactsLoading } = useQuery({
     queryKey: ['customer-contacts', id],
-    queryFn: () => get<Contact[]>(`/customers/${id}/contacts`),
+    queryFn: () => getList<Contact>(`/customers/${id}/contacts`),
   });
 
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ['customer-products', id],
-    queryFn: () => get<Product[]>(`/customers/${id}/products`),
+    queryFn: () => getList<Product>(`/customers/${id}/products`),
   });
 
   if (companyLoading) {
@@ -103,7 +103,7 @@ export default function CompanyEditorPage() {
     { key: 'locations', label: 'Locations', icon: MapPin, count: locations.length },
     { key: 'contacts', label: 'Contacts', icon: Users, count: contacts.length },
     { key: 'products', label: 'Products', icon: Package, count: products.length },
-    { key: 'claims', label: 'Claims', icon: FileText, count: company.claimCount },
+    { key: 'claims', label: 'Claims', icon: FileText, count: company.claimCount ?? 0 },
   ];
 
   return (
@@ -139,8 +139,8 @@ export default function CompanyEditorPage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="grid grid-cols-2 gap-4 text-center">
-              <div><p className="text-xl font-bold text-slate-900 dark:text-white">{company.openClaims}</p><p className="text-[10px] text-slate-500 uppercase">Open</p></div>
-              <div><p className="text-xl font-bold text-emerald-500">{company.settledClaims}</p><p className="text-[10px] text-slate-500 uppercase">Settled</p></div>
+              <div><p className="text-xl font-bold text-slate-900 dark:text-white">{company.openClaims ?? 0}</p><p className="text-[10px] text-slate-500 uppercase">Open</p></div>
+              <div><p className="text-xl font-bold text-emerald-500">{company.settledClaims ?? 0}</p><p className="text-[10px] text-slate-500 uppercase">Settled</p></div>
             </div>
             <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Edit2 className="w-4 h-4 text-slate-400" /></button>
           </div>
@@ -193,16 +193,16 @@ function OverviewTab({ company }: { company: CompanyDetail }) {
           <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="font-medium">{company.email}</span></div>
           <div className="flex justify-between"><span className="text-slate-500">Phone</span><span className="font-medium">{company.phone}</span></div>
           <div className="flex justify-between"><span className="text-slate-500">Website</span><span className="font-medium text-primary-500">{company.website}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Address</span><span className="font-medium text-right">{company.address.address1}<br />{company.address.city}, {company.address.state} {company.address.zipCode}</span></div>
+          {company.address && <div className="flex justify-between"><span className="text-slate-500">Address</span><span className="font-medium text-right">{company.address.address1}<br />{company.address.city}, {company.address.state} {company.address.zipCode}</span></div>}
         </div>
       </div>
       <div className="card p-6 md:col-span-2">
         <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Claims Summary</h3>
         <div className="grid grid-cols-4 gap-4 text-center">
-          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">{company.claimCount}</p><p className="text-xs text-slate-500">Total Claims</p></div>
-          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">{company.openClaims}</p><p className="text-xs text-slate-500">Open</p></div>
-          <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl"><p className="text-2xl font-bold text-emerald-600">{company.settledClaims}</p><p className="text-xs text-slate-500">Settled</p></div>
-          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">${(company.totalClaimValue / 1000).toFixed(1)}k</p><p className="text-xs text-slate-500">Total Value</p></div>
+          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">{company.claimCount ?? 0}</p><p className="text-xs text-slate-500">Total Claims</p></div>
+          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">{company.openClaims ?? 0}</p><p className="text-xs text-slate-500">Open</p></div>
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl"><p className="text-2xl font-bold text-emerald-600">{company.settledClaims ?? 0}</p><p className="text-xs text-slate-500">Settled</p></div>
+          <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"><p className="text-2xl font-bold">${((company.totalClaimValue ?? 0) / 1000).toFixed(1)}k</p><p className="text-xs text-slate-500">Total Value</p></div>
         </div>
       </div>
     </div>
@@ -263,7 +263,7 @@ function ContactsTab({ contacts }: { contacts: Contact[] }) {
                 <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-xs font-bold text-primary-600">{c.firstName[0]}{c.lastName[0]}</div>
+                      <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-xs font-bold text-primary-600">{(c.firstName || '?')[0]}{(c.lastName || '?')[0]}</div>
                       <div>
                         <span className="font-medium text-slate-900 dark:text-white">{c.firstName} {c.lastName}</span>
                         {c.isPrimary && <span className="ml-1.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Primary</span>}

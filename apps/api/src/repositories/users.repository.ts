@@ -30,12 +30,16 @@ export const usersRepository = {
   async create(data: Record<string, unknown>) { return prisma.user.create({ data: data as any }); },
   async update(id: string, data: Record<string, unknown>) { return prisma.user.update({ where: { id }, data: data as any }); },
   async softDelete(id: string) { return prisma.user.update({ where: { id }, data: { deletedAt: new Date() } }); },
-  async findMany(query: Record<string, unknown>) {
+  async findMany(query: Record<string, unknown>, corporateId?: string | null, isSuperAdmin = false) {
     const page = Number(query.page) || 1;
     const limit = Math.min(Number(query.limit) || 25, 100);
+    const where: Record<string, unknown> = {};
+    if (corporateId) where.corporateId = corporateId;
+    else if (!isSuperAdmin) where.corporateId = corporateId;
+
     const [users, total] = await Promise.all([
-      prisma.user.findMany({ skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),
-      prisma.user.count(),
+      prisma.user.findMany({ where: where as any, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),
+      prisma.user.count({ where: where as any }),
     ]);
     return { data: users, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },

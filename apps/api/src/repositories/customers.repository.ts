@@ -6,12 +6,17 @@
 import { prisma } from '../config/database';
 
 export const customersRepository = {
-  async findMany(query: Record<string, unknown>) {
+  async findMany(query: Record<string, unknown>, corporateId?: string | null, isSuperAdmin = false) {
     const page = Number(query.page) || 1;
     const limit = Math.min(Number(query.limit) || 25, 100);
+    const where: Record<string, unknown> = { deletedAt: null };
+    if (corporateId) where.corporateId = corporateId;
+    else if (!isSuperAdmin) where.corporateId = corporateId;
+    if (query.type === 'corporate') where.isCorporate = true;
+
     const [customers, total] = await Promise.all([
-      prisma.customer.findMany({ where: { deletedAt: null }, skip: (page - 1) * limit, take: limit, orderBy: { name: 'asc' } }),
-      prisma.customer.count({ where: { deletedAt: null } }),
+      prisma.customer.findMany({ where: where as any, skip: (page - 1) * limit, take: limit, orderBy: { name: 'asc' } }),
+      prisma.customer.count({ where: where as any }),
     ]);
     return { data: customers, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },

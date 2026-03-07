@@ -12,6 +12,8 @@ import { prisma } from '../config/database';
 interface ClaimFilters {
   status?: string;
   customerId?: string;
+  corporateId?: string | null;
+  isSuperAdmin?: boolean;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -21,6 +23,7 @@ export const claimsRepository = {
   async findMany(filters: ClaimFilters, pagination: { limit: number; offset: number }) {
     const where: Record<string, unknown> = { deletedAt: null };
 
+    if (filters.corporateId) where.corporateId = filters.corporateId;
     if (filters.status) where.status = filters.status;
     if (filters.customerId) where.customerId = filters.customerId;
     if (filters.search) {
@@ -116,8 +119,9 @@ export const claimsRepository = {
   async addIdentifier(claimId: string, data: Record<string, unknown>) { return prisma.claimIdentifier.create({ data: { ...data, claimId } as any }); },
 
   // Dashboard
-  async getDashboardStats(customerId?: string) {
+  async getDashboardStats(customerId?: string, corporateId?: string | null) {
     const where: Record<string, unknown> = { deletedAt: null };
+    if (corporateId) where.corporateId = corporateId;
     if (customerId) where.customerId = customerId;
     const [total, pending, inReview, settled] = await Promise.all([
       prisma.claim.count({ where: where as any }),

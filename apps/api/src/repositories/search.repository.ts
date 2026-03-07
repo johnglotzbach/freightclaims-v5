@@ -6,16 +6,25 @@
 import { prisma } from '../config/database';
 
 export const searchRepository = {
-  async universalSearch(query: string, customerId?: string) {
-    const searchTerm = `%${query}%`;
-    void customerId;
-    // Full-text search across claims, customers, carriers, shipments
+  async universalSearch(query: string, corporateId?: string | null, isSuperAdmin = false) {
+    const claimWhere: Record<string, unknown> = {
+      OR: [{ claimNumber: { contains: query, mode: 'insensitive' } }, { proNumber: { contains: query, mode: 'insensitive' } }],
+    };
+    const customerWhere: Record<string, unknown> = { name: { contains: query, mode: 'insensitive' } };
+
+    if (corporateId) {
+      claimWhere.corporateId = corporateId;
+      customerWhere.corporateId = corporateId;
+    } else if (!isSuperAdmin) {
+      claimWhere.corporateId = corporateId;
+      customerWhere.corporateId = corporateId;
+    }
+
     const [claims, customers, carriers] = await Promise.all([
-      prisma.claim.findMany({ where: { OR: [{ claimNumber: { contains: query, mode: 'insensitive' } }, { proNumber: { contains: query, mode: 'insensitive' } }] }, take: 10 }),
-      prisma.customer.findMany({ where: { name: { contains: query, mode: 'insensitive' } }, take: 10 }),
+      prisma.claim.findMany({ where: claimWhere as any, take: 10 }),
+      prisma.customer.findMany({ where: customerWhere as any, take: 10 }),
       prisma.carrier.findMany({ where: { OR: [{ name: { contains: query, mode: 'insensitive' } }, { scacCode: { contains: query, mode: 'insensitive' } }] }, take: 10 }),
     ]);
-    void searchTerm;
     return { claims, customers, carriers };
   },
   async searchClaims(query: Record<string, unknown>, customerId?: string) { void customerId; void query; return []; },

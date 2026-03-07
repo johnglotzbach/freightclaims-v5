@@ -15,9 +15,9 @@ import {
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
 
 const navItems = [
-  { label: 'Claims', href: '/claims', icon: FileText },
+  { label: 'Claims', href: '/claims/list', icon: FileText },
+  { label: 'Dashboard', href: '/claims', icon: BarChart3 },
   { label: 'AI Entry', href: '/ai-entry', icon: Sparkles },
-  { label: 'Insights', href: '/reports', icon: BarChart3 },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
   { label: 'Companies', href: '/companies', icon: Building2 },
   { label: 'Shipments', href: '/shipments', icon: Truck },
@@ -93,8 +93,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   }
 
   function isActive(href: string) {
-    if (href === '/claims') return pathname === '/claims' || pathname === '/claims/list' || (pathname.startsWith('/claims/') && !pathname.startsWith('/claims/settings'));
-    if (href === '/reports') return pathname === '/reports';
+    if (href === '/claims/list') return pathname === '/claims/list' || (pathname.startsWith('/claims/') && !pathname.startsWith('/claims/settings') && pathname !== '/claims');
+    if (href === '/claims') return pathname === '/claims';
     if (href === '/reports/export') return pathname === '/reports/export' || pathname.startsWith('/reports/new');
     if (href === '/companies') return pathname === '/companies' && !pathname.includes('/');
     if (href === '/ai') return pathname === '/ai' || pathname.startsWith('/ai/');

@@ -67,7 +67,7 @@ export default function ClaimEmailPage() {
 
   function handleReply(thread: EmailThread) {
     setComposing(true);
-    setTo(thread.isInbound ? thread.from : thread.to.join(', '));
+    setTo(thread.isInbound ? thread.from : (thread.to ?? []).join(', '));
     setSubject(thread.subject.startsWith('RE:') ? thread.subject : `RE: ${thread.subject}`);
     setBody(`\n\n---\nOn ${new Date(thread.date).toLocaleDateString()}, ${thread.from} wrote:\n\n${thread.body}`);
   }
@@ -240,7 +240,7 @@ export default function ClaimEmailPage() {
                       <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{thread.from}</p>
                       <span className="text-[10px] text-slate-400 flex-shrink-0">{new Date(thread.date).toLocaleDateString()} {new Date(thread.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <p className="text-xs text-slate-500 truncate">To: {thread.to.join(', ')}</p>
+                    <p className="text-xs text-slate-500 truncate">To: {(thread.to ?? []).join(', ')}</p>
                     <p className="text-sm text-slate-600 dark:text-slate-400 truncate mt-0.5">{thread.subject}</p>
                   </div>
                 </div>

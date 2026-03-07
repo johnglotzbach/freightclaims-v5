@@ -100,10 +100,10 @@ export default function AIEntryPage() {
     documents.reduce((acc, d) => acc + d.confidence, 0) / documents.length * 100
   );
 
-  const dataCaptureAccuracy = Math.round(
-    documents.flatMap(d => d.extractedFields).reduce((acc, f) => acc + f.confidence, 0) /
-    documents.flatMap(d => d.extractedFields).length * 100
-  );
+  const allFields = documents.flatMap(d => d.extractedFields ?? []);
+  const dataCaptureAccuracy = allFields.length > 0
+    ? Math.round(allFields.reduce((acc, f) => acc + (f.confidence ?? 0), 0) / allFields.length * 100)
+    : 0;
 
   const filtered = documents.filter(d =>
     d.fileName.toLowerCase().includes(search.toLowerCase()) ||
@@ -382,7 +382,7 @@ function ReviewDataCapture({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {doc.extractedFields.map((field) => (
+              {(doc.extractedFields ?? []).map((field) => (
                 <div key={field.key} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">{field.label}</label>

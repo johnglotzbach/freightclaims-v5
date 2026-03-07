@@ -15,7 +15,10 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 
 export const customersController = {
   list: asyncHandler(async (req, res) => {
-    const result = await customersService.list(req.query);
+    const tenant = req.tenant;
+    const effectiveCorporateId = tenant?.effectiveCorporateId ?? null;
+    const isSuperAdmin = tenant?.isSuperAdmin ?? false;
+    const result = await customersService.list(req.query, effectiveCorporateId, isSuperAdmin);
     res.json(result);
   }),
 

@@ -21,7 +21,8 @@ function getUser(req: Request): JwtPayload {
 export const searchController = {
   universalSearch: asyncHandler(async (req, res) => {
     const user = getUser(req);
-    const results = await searchService.universalSearch(req.query.q as string, user);
+    const tenant = req.tenant;
+    const results = await searchService.universalSearch(req.query.q as string, user, tenant);
     res.json(results);
   }),
 

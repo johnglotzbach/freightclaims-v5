@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success('Welcome back!');
-      router.push('/claims');
+      router.push('/claims/list');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (message.includes('network') || message.includes('fetch')) {
