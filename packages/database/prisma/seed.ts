@@ -72,23 +72,19 @@ async function main() {
   // ================================================================
   console.log('Creating roles...');
 
-  const superAdminRole = await prisma.role.upsert({
-    where: { name_corporateId: { name: 'Super Admin', corporateId: null as any } },
-    update: { allPermissions: true, allClaims: true },
-    create: { name: 'Super Admin', description: 'FreightClaims platform administrator', allPermissions: true, allClaims: true },
-  });
+  async function findOrCreateRole(name: string, description: string, opts: { allPermissions?: boolean; allClaims?: boolean } = {}) {
+    let role = await prisma.role.findFirst({ where: { name, corporateId: null } });
+    if (!role) {
+      role = await prisma.role.create({ data: { name, description, allPermissions: opts.allPermissions ?? false, allClaims: opts.allClaims ?? false } });
+    } else {
+      role = await prisma.role.update({ where: { id: role.id }, data: { allPermissions: opts.allPermissions ?? role.allPermissions, allClaims: opts.allClaims ?? role.allClaims } });
+    }
+    return role;
+  }
 
-  const adminRole = await prisma.role.upsert({
-    where: { name_corporateId: { name: 'Admin', corporateId: null as any } },
-    update: { allPermissions: true, allClaims: true },
-    create: { name: 'Admin', description: 'Full access within the organization', allPermissions: true, allClaims: true },
-  });
-
-  const managerRole = await prisma.role.upsert({
-    where: { name_corporateId: { name: 'Manager', corporateId: null as any } },
-    update: {},
-    create: { name: 'Manager', description: 'Manage claims, users, and reports' },
-  });
+  const superAdminRole = await findOrCreateRole('Super Admin', 'FreightClaims platform administrator', { allPermissions: true, allClaims: true });
+  const adminRole = await findOrCreateRole('Admin', 'Full access within the organization', { allPermissions: true, allClaims: true });
+  const managerRole = await findOrCreateRole('Manager', 'Manage claims, users, and reports');
 
   const managerPerms = [
     'claims.view', 'claims.create', 'claims.edit', 'claims.export',
@@ -112,11 +108,7 @@ async function main() {
     }
   }
 
-  const handlerRole = await prisma.role.upsert({
-    where: { name_corporateId: { name: 'Claims Handler', corporateId: null as any } },
-    update: {},
-    create: { name: 'Claims Handler', description: 'Process and manage claims' },
-  });
+  const handlerRole = await findOrCreateRole('Claims Handler', 'Process and manage claims');
 
   const handlerPerms = [
     'claims.view', 'claims.create', 'claims.edit',
@@ -137,11 +129,7 @@ async function main() {
     }
   }
 
-  const viewerRole = await prisma.role.upsert({
-    where: { name_corporateId: { name: 'Viewer', corporateId: null as any } },
-    update: {},
-    create: { name: 'Viewer', description: 'Read-only access' },
-  });
+  const viewerRole = await findOrCreateRole('Viewer', 'Read-only access');
 
   const viewerPerms = ['claims.view', 'documents.view', 'customers.view', 'shipments.view', 'reports.view'];
   for (const pName of viewerPerms) {
