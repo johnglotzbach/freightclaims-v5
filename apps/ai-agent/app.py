@@ -33,8 +33,8 @@ load_dotenv()
 
 try:
     import aiohttp
-    from browser_use import Agent, Browser, Tools
-    from browser_use.browser import BrowserSession
+    from browser_use import Agent, BrowserSession, Tools, ActionResult
+    from langchain_google_genai import ChatGoogleGenerativeAI
     from playwright.async_api import Browser as PwBrowser, Page, async_playwright
 except ImportError as exc:
     print(f"Missing dependencies: {exc}")
@@ -78,43 +78,17 @@ class RunRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Gemini LLM wrapper (compatible with browser-use ChatLLM interface)
+# Gemini LLM via langchain (compatible with browser-use Agent)
 # ---------------------------------------------------------------------------
-class ChatGemini:
-    """
-    Lightweight wrapper around the Google Gemini REST API that presents
-    the same interface browser-use expects from a ChatLLM.
-    """
-
-    def __init__(self, model: str = AI_MODEL, api_key: str = GEMINI_API_KEY):
-        self.model = model
-        self.api_key = api_key
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-
-    async def achat(self, messages: list[dict]) -> str:
-        """Async chat completion that converts message format for Gemini."""
-        contents = []
-        for msg in messages:
-            role = "user" if msg.get("role") in ("user", "system") else "model"
-            contents.append({"role": role, "parts": [{"text": msg["content"]}]})
-
-        url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
-        payload = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.4,
-                "maxOutputTokens": 8192,
-                "topP": 0.95,
-            },
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise RuntimeError(f"Gemini returned {resp.status}: {body}")
-                data = await resp.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"]
+def build_llm():
+    """Build a langchain-compatible Gemini LLM for the browser-use Agent."""
+    return ChatGoogleGenerativeAI(
+        model=AI_MODEL,
+        google_api_key=GEMINI_API_KEY,
+        temperature=0.4,
+        max_output_tokens=8192,
+        top_p=0.95,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +271,7 @@ async def run_agent(req: RunRequest, x_api_key: Optional[str] = Header(None)):
     }
 
     chrome_proc = None
-    llm = ChatGemini(model=AI_MODEL, api_key=GEMINI_API_KEY)
+    llm = build_llm()
 
     custom_tools = Tools()
     agent_tools.register(custom_tools)
