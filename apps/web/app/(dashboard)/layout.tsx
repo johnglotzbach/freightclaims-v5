@@ -23,16 +23,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => { loadUser(); }, [loadUser]);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.push('/login');
-  }, [isLoading, isAuthenticated, router]);
+    loadUser().finally(() => setInitialCheckDone(true));
+  }, [loadUser]);
+
+  useEffect(() => {
+    if (initialCheckDone && !isAuthenticated) router.push('/login');
+  }, [initialCheckDone, isAuthenticated, router]);
 
   useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
 
-  if (isLoading) {
+  if (!initialCheckDone || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
