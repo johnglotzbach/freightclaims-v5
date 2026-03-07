@@ -51,6 +51,10 @@ export async function generateContent(
     model?: string;
   } = {},
 ): Promise<{ text: string; tokenUsage: { prompt: number; completion: number; total: number } }> {
+  if (!env.GEMINI_API_KEY?.trim()) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
   const model = options.model || env.AI_MODEL;
   const url = `${BASE_URL}/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
 
@@ -134,6 +138,10 @@ export async function chat(
     model?: string;
   } = {},
 ): Promise<string> {
+  if (!env.GEMINI_API_KEY?.trim()) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
   const model = options.model || env.AI_MODEL;
   const url = `${BASE_URL}/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
 
@@ -150,6 +158,7 @@ export async function chat(
     body.systemInstruction = { parts: [{ text: options.systemInstruction }] };
   }
 
+  const start = Date.now();
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -159,11 +168,22 @@ export async function chat(
 
   if (!response.ok) {
     const errBody = await response.text();
+    logger.error({ status: response.status, errBody, model }, 'Gemini chat API error');
     throw new Error(`Gemini ${response.status}: ${errBody}`);
   }
 
   const data = await response.json() as GeminiResponse;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  logger.debug({ model, duration: Date.now() - start, hasText: !!text }, 'Gemini chat completed');
+
+  if (!text?.trim()) {
+    const reason = data.candidates?.[0]?.finishReason;
+    logger.warn({ reason, model }, 'Gemini returned empty response');
+    throw new Error(`Gemini returned empty response (reason: ${reason || 'unknown'})`);
+  }
+
+  return text;
 }
 
 /**

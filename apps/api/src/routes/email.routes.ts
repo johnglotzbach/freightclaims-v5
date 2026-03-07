@@ -8,7 +8,7 @@
  * Related: apps/api/src/controllers/email.controller.ts
  */
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 import { emailController } from '../controllers/email.controller';
 
 export const emailRouter: Router = Router();
@@ -16,7 +16,7 @@ export const emailRouter: Router = Router();
 emailRouter.use(authenticate);
 
 // --- Send email ---
-emailRouter.post('/send', emailController.send);
+emailRouter.post('/send', authorize(['admin', 'manager']), emailController.send);
 
 // --- Email history for a claim ---
 emailRouter.get('/claim/:claimId', emailController.getByClaimId);
@@ -32,4 +32,4 @@ emailRouter.get('/preferences', emailController.getPreferences);
 emailRouter.put('/preferences', emailController.updatePreferences);
 
 // --- SQS email notification processing (internal) ---
-emailRouter.post('/process-queue', emailController.processQueue);
+emailRouter.post('/process-queue', authorize(['admin']), emailController.processQueue);

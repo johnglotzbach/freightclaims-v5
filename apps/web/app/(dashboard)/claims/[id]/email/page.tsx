@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { get, getList, post } from '@/lib/api-client';
+import { getList, post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -35,19 +35,23 @@ interface EmailThread {
   attachments?: { name: string; size: number }[];
 }
 
+interface ClaimDocument {
+  id: string;
+  documentName: string;
+  fileSize?: number;
+}
+
 export default function ClaimEmailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [composing, setComposing] = useState(false);
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
-  const [sending, setSending] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
-  const [useAi, setUseAi] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +59,36 @@ export default function ClaimEmailPage() {
     queryKey: ['claim-emails', id],
     queryFn: () => getList<EmailThread>(`/email/claims/${id}`),
     enabled: !!id,
+  });
+
+  const { data: claimDocuments = [], isLoading: documentsLoading } = useQuery({
+    queryKey: ['documents', 'claim', id],
+    queryFn: () => getList<ClaimDocument>(`/documents?claimId=${id}&limit=50`),
+    enabled: !!id && showAttachmentMenu,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: (payload: { to: string[]; cc: string[]; subject: string; body: string; claimId: string }) =>
+      post<{ sent: boolean }>('/email/send', payload),
+    onSuccess: () => {
+      toast.success('Email sent successfully');
+      setComposing(false);
+      queryClient.invalidateQueries({ queryKey: ['claim-emails', id] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Failed to send email'),
+  });
+
+  const aiDraftMutation = useMutation({
+    mutationFn: () => post<any>('/ai/agents/communication', { claimId: id, actionType: 'draft_email' }),
+    onSuccess: (data) => {
+      const plan = data?.structuredOutput?.plan ?? data?.result ?? data;
+      const draft = plan?.draftEmail;
+      if (draft?.body) setBody(draft.body);
+      if (draft?.subject) setSubject(draft.subject);
+      if (draft?.to) setTo(draft.to);
+      toast.success('AI draft generated');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'AI draft failed'),
   });
 
   function handleNewEmail() {
@@ -79,21 +113,19 @@ export default function ClaimEmailPage() {
     setBody(`\n\n--- Forwarded Message ---\nFrom: ${thread.from}\nDate: ${new Date(thread.date).toLocaleDateString()}\n\n${thread.body}`);
   }
 
-  async function handleSend() {
+  function handleSend() {
     if (!to.trim()) { toast.error('Recipient is required'); return; }
-    setSending(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setSending(false);
-    setComposing(false);
-    toast.success('Email sent successfully');
+    sendMutation.mutate({
+      to: to.split(/[\s,;]+/).filter(Boolean),
+      cc: cc ? cc.split(/[\s,;]+/).filter(Boolean) : [],
+      subject,
+      body,
+      claimId: id!,
+    });
   }
 
-  async function handleAiDraft() {
-    setUseAi(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setBody('Dear Claims Department,\n\nI am writing to follow up on freight claim CLM-2026-0042 (PRO# 059-2140) filed on September 2, 2025.\n\nPer 49 CFR § 370.9, carriers are required to provide a written determination within 120 days of receipt. As it has been over 150 days since acknowledgment (September 15, 2025), I respectfully request an update on the status of this claim.\n\nThe claim amount of $3,600.00 was filed for documented cargo damage. All supporting documentation including the Bill of Lading, Product Invoice, and damage photographs were provided at the time of filing.\n\nPlease advise on the current status and expected timeline for resolution.\n\nBest regards');
-    setUseAi(false);
-    toast.success('AI draft generated');
+  function handleAiDraft() {
+    aiDraftMutation.mutate();
   }
 
   function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
@@ -105,10 +137,14 @@ export default function ClaimEmailPage() {
     setShowAttachmentMenu(false);
   }
 
-  function handleAttachFromDocuments() {
+  function handleAttachDocument(doc: ClaimDocument) {
+    if (attachments.some((a) => a.id === doc.id)) {
+      toast.info('Document already attached');
+      return;
+    }
     setAttachments([
       ...attachments,
-      { id: crypto.randomUUID(), name: 'BOL-059-2140.pdf', size: 245000, source: 'documents' },
+      { id: doc.id, name: doc.documentName, size: doc.fileSize ?? 0, source: 'documents' },
     ]);
     setShowAttachmentMenu(false);
     toast.success('Document attached from claim files');
@@ -177,8 +213,8 @@ export default function ClaimEmailPage() {
               <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><List className="w-4 h-4 text-slate-500" /></button>
               <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Link2 className="w-4 h-4 text-slate-500" /></button>
               <div className="flex-1" />
-              <button onClick={handleAiDraft} disabled={useAi} className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 font-medium px-2 py-1 rounded hover:bg-purple-50 dark:hover:bg-purple-500/10 disabled:opacity-50">
-                {useAi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} AI Draft
+              <button onClick={handleAiDraft} disabled={aiDraftMutation.isPending} className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 font-medium px-2 py-1 rounded hover:bg-purple-50 dark:hover:bg-purple-500/10 disabled:opacity-50">
+                {aiDraftMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} AI Draft
               </button>
             </div>
 
@@ -204,9 +240,29 @@ export default function ClaimEmailPage() {
                   <Paperclip className="w-4 h-4" /> Attach <ChevronDown className="w-3 h-3" />
                 </button>
                 {showAttachmentMenu && (
-                  <div className="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-10 py-1">
+                  <div className="absolute left-0 top-full mt-1 w-64 max-h-72 overflow-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-10 py-1">
                     <button onClick={() => fileInputRef.current?.click()} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"><FileUp className="w-4 h-4" /> From Computer</button>
-                    <button onClick={handleAttachFromDocuments} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"><FileText className="w-4 h-4" /> From Claim Documents</button>
+                    <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
+                    <div className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase">Claim Documents</div>
+                    {documentsLoading ? (
+                      <div className="px-3 py-2 text-sm text-slate-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>
+                    ) : claimDocuments.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-slate-400">No documents for this claim</div>
+                    ) : (
+                      claimDocuments.map((doc) => (
+                        <button
+                          key={doc.id}
+                          onClick={() => handleAttachDocument(doc)}
+                          disabled={attachments.some((a) => a.id === doc.id)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{doc.documentName}</span>
+                          {doc.fileSize != null && <span className="text-xs text-slate-400 flex-shrink-0">({(doc.fileSize / 1024).toFixed(0)}KB)</span>}
+                        </button>
+                      ))
+                    )}
+                    <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
                     <button onClick={() => { setShowAttachmentMenu(false); toast.info('Template attachments coming soon'); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"><Mail className="w-4 h-4" /> From Templates</button>
                   </div>
                 )}
@@ -214,8 +270,8 @@ export default function ClaimEmailPage() {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setComposing(false)} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 font-medium">Discard</button>
-                <button onClick={handleSend} disabled={sending} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send
+                <button onClick={handleSend} disabled={sendMutation.isPending} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">
+                  {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send
                 </button>
               </div>
             </div>

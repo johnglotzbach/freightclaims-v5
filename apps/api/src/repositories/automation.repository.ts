@@ -7,8 +7,8 @@ import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 
 export const automationRepository = {
-  async listRules() {
-    return prisma.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
+  async listRules(tenantFilter: Record<string, unknown> = {}) {
+    return prisma.automationRule.findMany({ where: tenantFilter as any, orderBy: { createdAt: 'desc' } });
   },
 
   async getRuleById(id: string) {
@@ -27,8 +27,12 @@ export const automationRepository = {
     return prisma.automationRule.delete({ where: { id } });
   },
 
-  async listTemplates() {
-    return prisma.automationTemplate.findMany({ orderBy: { name: 'asc' } });
+  async listTemplates(tenantFilter: Record<string, unknown> = {}) {
+    return prisma.automationTemplate.findMany({ where: tenantFilter as any, orderBy: { name: 'asc' } });
+  },
+
+  async getTemplateById(id: string) {
+    return prisma.automationTemplate.findUnique({ where: { id } });
   },
 
   async createTemplate(data: Record<string, unknown>) {
@@ -46,13 +50,14 @@ export const automationRepository = {
   /**
    * Finds claims that match the conditions defined in an automation rule.
    * Parses the rule's JSON conditions and builds a Prisma query.
+   * Applies tenant isolation via tenantFilter on the claim's corporateId.
    */
-  async findMatchingClaims(ruleId: string) {
+  async findMatchingClaims(ruleId: string, tenantFilter: Record<string, unknown> = {}) {
     const rule = await prisma.automationRule.findUnique({ where: { id: ruleId } });
     if (!rule) return [];
 
     const conditions = rule.conditions as Record<string, unknown>;
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = { deletedAt: null, ...tenantFilter };
 
     if (conditions.status) where.status = conditions.status;
     if (conditions.claimType) where.claimType = conditions.claimType;

@@ -11,6 +11,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { aiService } from '../services/ai.service';
 import type { JwtPayload } from '../middleware/auth.middleware';
+import { prisma } from '../config/database';
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -42,6 +43,54 @@ export const aiController = {
   getConversations: asyncHandler(async (req, res) => { res.json(await aiService.getConversations(getUser(req).userId)); }),
   getConversation: asyncHandler(async (req, res) => { res.json(await aiService.getConversation(req.params.id as string)); }),
   deleteConversation: asyncHandler(async (req, res) => { await aiService.deleteConversation(req.params.id as string); res.status(204).send(); }),
+
+  // AI-processed documents for the AI Entry page
+  getAIDocuments: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+
+    const tenantWhere: Record<string, unknown> = {};
+    if (!user.isSuperAdmin && user.corporateId) {
+      tenantWhere.claim = { corporateId: user.corporateId };
+    }
+
+    const aiDocs = await prisma.aiDocument.findMany({
+      where: tenantWhere as any,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        claim: { select: { id: true, claimNumber: true, corporateId: true } },
+      },
+    });
+
+    const docs = await Promise.all(
+      aiDocs.map(async (ad: any) => {
+        let doc = null;
+        if (ad.documentId) {
+          doc = await prisma.claimDocument.findUnique({
+            where: { id: ad.documentId },
+            select: { documentName: true, mimeType: true, s3Key: true },
+          });
+        }
+        const extracted = ad.extractedData as any;
+        return {
+          id: ad.id,
+          documentId: ad.documentId,
+          documentName: doc?.documentName || 'Unknown Document',
+          mimeType: doc?.mimeType || 'application/octet-stream',
+          category: extracted?.category || ad.agentType,
+          confidence: Number(ad.confidence) || 0,
+          status: ad.status,
+          extractedFields: extracted?.extractedFields || [],
+          summary: extracted?.summary || '',
+          claimId: ad.claimId,
+          claimNumber: ad.claim?.claimNumber,
+          createdAt: ad.createdAt,
+        };
+      }),
+    );
+
+    res.json(docs);
+  }),
 
   // Agent status
   getAgentStatus: asyncHandler(async (_req, res) => { res.json(await aiService.getAgentStatus()); }),

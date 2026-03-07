@@ -24,6 +24,15 @@ customersRouter.use(authenticate);
 
 // --- Customer CRUD ---
 customersRouter.get('/', validate(listCustomersQuerySchema, 'query'), customersController.list);
+
+// --- Aggregate lists (must be before /:id) ---
+customersRouter.get('/products', customersController.listProducts);
+customersRouter.get('/contacts', customersController.listContacts);
+customersRouter.get('/locations', customersController.listLocations);
+customersRouter.post('/products', customersController.createProduct);
+customersRouter.put('/products/:id', customersController.updateProduct);
+customersRouter.delete('/products/:id', customersController.deleteProduct);
+
 customersRouter.get('/:id', customersController.getById);
 customersRouter.post('/', authorize(['admin']), validate(createCustomerSchema), customersController.create);
 customersRouter.put('/:id', authorize(['admin', 'manager']), validate(updateCustomerSchema), customersController.update);

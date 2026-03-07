@@ -12,6 +12,7 @@ import {
   Layers, Package, TrendingUp, HelpCircle,
   ScrollText, Brain, ShieldAlert, Gavel, MessageSquare,
 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
 
 const navItems = [
@@ -47,20 +48,20 @@ const aiSubItems = [
 ];
 
 const settingsSubItems = [
-  { label: 'General', href: '/settings' },
-  { label: 'Users', href: '/settings/users' },
-  { label: 'Roles', href: '/settings/roles' },
-  { label: 'Templates', href: '/settings/templates' },
-  { label: 'API & Integrations', href: '/settings/api-setup' },
-  { label: 'Profile', href: '/settings/profile' },
+  { label: 'General', href: '/settings', adminOnly: false },
+  { label: 'Users', href: '/settings/users', adminOnly: true },
+  { label: 'Roles', href: '/settings/roles', adminOnly: true },
+  { label: 'Templates', href: '/settings/templates', adminOnly: false },
+  { label: 'API & Integrations', href: '/settings/api-setup', adminOnly: false },
+  { label: 'Profile', href: '/settings/profile', adminOnly: false },
 ];
 
 const bottomItems = [
-  { label: 'Mass Upload', href: '/mass-upload', icon: Upload },
-  { label: 'Automation', href: '/automation', icon: Workflow },
-  { label: 'Claim Config', href: '/claims/settings', icon: Layers },
-  { label: 'Help Center', href: '/help', icon: HelpCircle },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Mass Upload', href: '/mass-upload', icon: Upload, adminOnly: false },
+  { label: 'Automation', href: '/automation', icon: Workflow, adminOnly: true },
+  { label: 'Claim Config', href: '/claims/settings', icon: Layers, adminOnly: false },
+  { label: 'Help Center', href: '/help', icon: HelpCircle, adminOnly: false },
+  { label: 'Settings', href: '/settings', icon: Settings, adminOnly: false },
 ];
 
 interface SidebarProps {
@@ -70,6 +71,8 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const isAdmin = user?.isSuperAdmin || user?.permissions?.includes('settings.manage_users') || false;
   const [collapsed, setCollapsed] = useState(false);
   const [companiesExpanded, setCompaniesExpanded] = useState(false);
   const [aiExpanded, setAiExpanded] = useState(false);
@@ -211,7 +214,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         )}
         {!showFull && <div className="pt-2 border-t border-slate-200 dark:border-slate-700 my-1" />}
 
-        {bottomItems.map((item) => {
+        {bottomItems.filter(item => !item.adminOnly || isAdmin).map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;
           const isSettings = item.href === '/settings';
@@ -236,7 +239,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               {/* Settings Sub-Nav */}
               {isSettings && showFull && settingsExpanded && (
                 <div className="ml-8 mt-0.5 space-y-0.5">
-                  {settingsSubItems.map(sub => (
+                  {settingsSubItems.filter(sub => !sub.adminOnly || isAdmin).map(sub => (
                     <Link
                       key={sub.href}
                       href={sub.href}

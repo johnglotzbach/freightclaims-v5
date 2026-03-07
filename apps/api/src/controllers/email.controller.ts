@@ -20,11 +20,11 @@ function getUser(req: Request): JwtPayload {
 
 export const emailController = {
   send: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.send(req.body, user)); }),
-  getByClaimId: asyncHandler(async (req, res) => { res.json(await emailService.getByClaimId(req.params.claimId as string)); }),
-  getNotifications: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getNotifications(user.userId)); }),
-  getUnreadCount: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getUnreadCount(user.userId)); }),
-  markAsRead: asyncHandler(async (req, res) => { res.json(await emailService.markAsRead(req.params.id as string)); }),
-  markAllAsRead: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.markAllAsRead(user.userId)); }),
+  getByClaimId: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getByClaimId(req.params.claimId as string, user)); }),
+  getNotifications: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getNotifications(user)); }),
+  getUnreadCount: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getUnreadCount(user)); }),
+  markAsRead: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.markAsRead(req.params.id as string, user)); }),
+  markAllAsRead: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.markAllAsRead(user)); }),
   getPreferences: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.getPreferences(user.userId)); }),
   updatePreferences: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await emailService.updatePreferences(user.userId, req.body)); }),
   processQueue: asyncHandler(async (_req, res) => { res.json(await emailService.processQueue()); }),

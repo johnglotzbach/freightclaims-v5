@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
   FileSearch, Download, Calendar, Filter,
   FileText, Table, BarChart3, PieChart,
@@ -30,6 +32,26 @@ export default function ReportsExportPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+
+  async function handleExport(reportId: string, format: string) {
+    try {
+      const res = await apiClient.get(`/reports/export/${reportId}`, {
+        responseType: 'blob',
+        params: { format: format.toLowerCase(), dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+      });
+      const blob = res.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format.toLowerCase() === 'pdf' ? 'pdf' : format.toLowerCase() === 'csv' ? 'csv' : 'xlsx';
+      a.download = `${reportId}-${Date.now()}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${format} report downloaded`);
+    } catch {
+      toast.error(`Failed to export ${format} report`);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -92,7 +114,7 @@ export default function ReportsExportPage() {
               {report.formats.map(format => (
                 <button
                   key={format}
-                  onClick={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); handleExport(report.id, format); }}
                   className="flex items-center gap-1 text-xs font-medium text-primary-500 hover:text-primary-600 bg-primary-50 dark:bg-primary-500/10 px-2.5 py-1 rounded-lg transition-colors"
                 >
                   <Download className="w-3 h-3" /> {format}

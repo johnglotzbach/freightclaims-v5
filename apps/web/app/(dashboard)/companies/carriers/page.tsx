@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, put, del, apiClient } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import {
   Truck, Search, Plus, Download, Upload,
   Edit2, Trash2, ToggleLeft, ToggleRight,
   ChevronDown, Globe, Phone, Mail, MapPin,
-  Shield, Database, ExternalLink,
+  Shield, Database, ExternalLink, X,
 } from 'lucide-react';
 
 interface Carrier {
@@ -36,6 +38,9 @@ interface Carrier {
 }
 
 export default function CarriersPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
   const { data: carriers = [], isLoading } = useQuery({
     queryKey: ['carriers'],
     queryFn: () => getList<Carrier>('/shipments/carriers/all'),
@@ -44,6 +49,45 @@ export default function CarriersPage() {
   const [modeFilter, setModeFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: '', scacCode: '', dotNumber: '', mcNumber: '', email: '', phone: '', mode: 'LTL' });
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof form) => post<any>('/shipments/carriers', data),
+    onSuccess: () => { toast.success('Carrier created'); setShowAdd(false); setForm({ name: '', scacCode: '', dotNumber: '', mcNumber: '', email: '', phone: '', mode: 'LTL' }); queryClient.invalidateQueries({ queryKey: ['carriers'] }); },
+    onError: () => toast.error('Failed to create carrier'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => del(`/shipments/carriers/${id}`),
+    onSuccess: () => { toast.success('Carrier deleted'); queryClient.invalidateQueries({ queryKey: ['carriers'] }); },
+    onError: () => toast.error('Failed to delete carrier'),
+  });
+
+  function handleExport() {
+    const csv = ['Name,SCAC,DOT,MC,Mode,Email,Phone', ...carriers.map(c => `"${c.name}","${c.scacCode}","${c.dotNumber}","${c.mcNumber}","${c.mode}","${c.email}","${c.phone}"`)].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'carriers.csv'; a.click(); URL.revokeObjectURL(url);
+    toast.success('Carriers exported');
+  }
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split('\n').slice(1).filter(l => l.trim());
+      for (const line of lines) {
+        const [name, scacCode, dotNumber, mcNumber, mode, email, phone] = line.split(',').map(s => s.replace(/"/g, '').trim());
+        if (name) await post('/shipments/carriers', { name, scacCode, dotNumber, mcNumber, mode, email, phone }).catch(() => {});
+      }
+      queryClient.invalidateQueries({ queryKey: ['carriers'] });
+      toast.success(`Imported ${lines.length} carriers`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /><TableSkeleton /></div>;
   if (carriers.length === 0) return <EmptyState icon={Truck} title="No carriers yet" description="Add your first carrier to start managing your carrier database." />;
@@ -62,11 +106,35 @@ export default function CarriersPage() {
           <p className="text-sm text-slate-500 mt-0.5">Manage carrier database — SCAC codes, contacts, integrations, claim history</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><Upload className="w-4 h-4" /> Import</button>
-          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><Download className="w-4 h-4" /> Export</button>
+          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><Upload className="w-4 h-4" /> Import</button>
+          <button onClick={handleExport} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><Download className="w-4 h-4" /> Export</button>
           <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold"><Plus className="w-4 h-4" /> Add Carrier</button>
         </div>
       </div>
+
+      {showAdd && (
+        <div className="card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900 dark:text-white">Add Carrier</h3>
+            <button onClick={() => setShowAdd(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <input placeholder="Carrier Name *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input placeholder="SCAC Code" value={form.scacCode} onChange={e => setForm(f => ({ ...f, scacCode: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input placeholder="DOT Number" value={form.dotNumber} onChange={e => setForm(f => ({ ...f, dotNumber: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input placeholder="MC Number" value={form.mcNumber} onChange={e => setForm(f => ({ ...f, mcNumber: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input placeholder="Phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <select value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+              <option>LTL</option><option>FTL</option><option>Parcel</option>
+            </select>
+            <button onClick={() => { if (!form.name) { toast.error('Carrier name is required'); return; } createMutation.mutate(form); }} disabled={createMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+              {createMutation.isPending ? 'Creating...' : 'Create Carrier'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -157,9 +225,10 @@ export default function CarriersPage() {
                 </div>
                 <div className="flex gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
                   <Link href={`/companies/${carrier.id}`} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><ExternalLink className="w-3 h-3" /> Full Profile</Link>
-                  <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Edit2 className="w-3 h-3" /> Edit</button>
-                  <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Database className="w-3 h-3" /> View Claims</button>
-                  <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Shield className="w-3 h-3" /> Integration</button>
+                  <Link href={`/companies/${carrier.id}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Edit2 className="w-3 h-3" /> Edit</Link>
+                  <Link href={`/claims/list?carrier=${carrier.scacCode}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Database className="w-3 h-3" /> View Claims</Link>
+                  <Link href="/settings/api-setup" className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Shield className="w-3 h-3" /> Integration</Link>
+                  <button onClick={() => { if (window.confirm(`Delete carrier ${carrier.name}?`)) deleteMutation.mutate(carrier.id); }} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium"><Trash2 className="w-3 h-3" /> Delete</button>
                 </div>
               </div>
             )}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
@@ -56,6 +57,7 @@ export default function FraudDetectionPage() {
     onSuccess: (data) => {
       setResult(data.structuredOutput);
     },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Fraud check failed. Make sure you have a valid claim ID.'),
   });
 
   const handleCheck = () => {
@@ -102,6 +104,14 @@ export default function FraudDetectionPage() {
           </button>
         </div>
       </div>
+
+      {fraudMutation.isError && (
+        <div className="card p-4 border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {(fraudMutation.error as any)?.response?.data?.error || (fraudMutation.error as Error)?.message || 'Fraud check failed. Make sure you have a valid claim ID.'}
+          </p>
+        </div>
+      )}
 
       {analysis && riskStyle && (
         <div className="space-y-4">

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
@@ -42,6 +43,7 @@ export default function CarrierCommunicationPage() {
     onSuccess: (data) => {
       setResult(data.structuredOutput?.plan || data.result);
     },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Communication plan generation failed. Make sure you have a valid claim ID.'),
   });
 
   const handleGenerate = () => {
@@ -111,6 +113,14 @@ export default function CarrierCommunicationPage() {
           )}
         </button>
       </div>
+
+      {commMutation.isError && (
+        <div className="card p-4 border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {(commMutation.error as any)?.response?.data?.error || (commMutation.error as Error)?.message || 'Communication plan generation failed. Make sure you have a valid claim ID.'}
+          </p>
+        </div>
+      )}
 
       {result && (
         <div className="space-y-4">

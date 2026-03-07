@@ -6,12 +6,15 @@
 import { prisma } from '../config/database';
 
 export const documentsRepository = {
-  async findMany(query: Record<string, unknown>) {
+  async findMany(query: Record<string, unknown>, user?: { corporateId: string | null; isSuperAdmin: boolean }) {
     const page = Number(query.page) || 1;
     const limit = Math.min(Number(query.limit) || 25, 100);
     const where: Record<string, unknown> = {};
     if (query.claimId) where.claimId = query.claimId;
     if (query.categoryId) where.categoryId = query.categoryId;
+    if (user && !user.isSuperAdmin && user.corporateId) {
+      where.claim = { corporateId: user.corporateId };
+    }
 
     const [data, total] = await Promise.all([
       prisma.claimDocument.findMany({ where: where as any, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),

@@ -87,105 +87,141 @@ export const claimsController = {
     res.json(claim);
   }),
 
-  // --- Parties ---
+  // --- Parties (verify claim ownership first) ---
   getParties: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const parties = await claimsService.getParties(req.params.id as string);
     res.json(parties);
   }),
 
   addParty: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const party = await claimsService.addParty(req.params.id as string, req.body);
     res.status(201).json(party);
   }),
 
   updateParty: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const party = await claimsService.updateParty(req.params.id as string, req.params.partyId as string, req.body);
     res.json(party);
   }),
 
   removeParty: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     await claimsService.removeParty(req.params.id as string, req.params.partyId as string);
     res.status(204).send();
   }),
 
-  // --- Products ---
+  // --- Products (verify claim ownership first) ---
   getProducts: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const products = await claimsService.getProducts(req.params.id as string);
     res.json(products);
   }),
 
   addProduct: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const product = await claimsService.addProduct(req.params.id as string, req.body);
     res.status(201).json(product);
   }),
 
   updateProduct: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const product = await claimsService.updateProduct(req.params.id as string, req.params.productId as string, req.body);
     res.json(product);
   }),
 
   removeProduct: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     await claimsService.removeProduct(req.params.id as string, req.params.productId as string);
     res.status(204).send();
   }),
 
-  // --- Comments ---
+  // --- Comments (verify claim ownership first) ---
   getComments: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const comments = await claimsService.getComments(req.params.id as string);
     res.json(comments);
   }),
 
   addComment: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const comment = await claimsService.addComment(req.params.id as string, req.body, user);
     res.status(201).json(comment);
   }),
 
-  // --- Tasks ---
+  // --- Tasks (verify claim ownership first) ---
   getTasks: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const tasks = await claimsService.getTasks(req.params.id as string);
     res.json(tasks);
   }),
 
   addTask: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const task = await claimsService.addTask(req.params.id as string, req.body, user);
     res.status(201).json(task);
   }),
 
   updateTask: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const task = await claimsService.updateTask(req.params.id as string, req.params.taskId as string, req.body);
     res.json(task);
   }),
 
   deleteTask: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     await claimsService.deleteTask(req.params.id as string, req.params.taskId as string);
     res.status(204).send();
   }),
 
-  // --- Payments ---
+  // --- Payments (verify claim ownership first) ---
   getPayments: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const payments = await claimsService.getPayments(req.params.id as string);
     res.json(payments);
   }),
 
   addPayment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const payment = await claimsService.addPayment(req.params.id as string, req.body);
     res.status(201).json(payment);
   }),
 
   updatePayment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const payment = await claimsService.updatePayment(req.params.id as string, req.params.paymentId as string, req.body);
     res.json(payment);
   }),
 
-  // --- Identifiers ---
+  // --- Identifiers (verify claim ownership first) ---
   getIdentifiers: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const identifiers = await claimsService.getIdentifiers(req.params.id as string);
     res.json(identifiers);
   }),
 
   addIdentifier: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const identifier = await claimsService.addIdentifier(req.params.id as string, req.body);
     res.status(201).json(identifier);
   }),
@@ -212,24 +248,29 @@ export const claimsController = {
   }),
 
   // --- Settings ---
-  getSettings: asyncHandler(async (_req: Request, res: Response) => {
-    const settings = await claimsService.getSettings();
+  getSettings: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const settings = await claimsService.getSettings(user);
     res.json(settings);
   }),
 
   updateSettings: asyncHandler(async (req: Request, res: Response) => {
-    const settings = await claimsService.updateSettings(req.body);
+    const user = getUser(req);
+    const settings = await claimsService.updateSettings(req.body, user);
     res.json(settings);
   }),
 
-  // --- Acknowledgement ---
+  // --- Acknowledgement (verify claim ownership first) ---
   getAcknowledgement: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const ack = await claimsService.getAcknowledgement(req.params.id as string);
     res.json(ack);
   }),
 
   createAcknowledgement: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
     const ack = await claimsService.createAcknowledgement(req.params.id as string, req.body, user);
     res.status(201).json(ack);
   }),

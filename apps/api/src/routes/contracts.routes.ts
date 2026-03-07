@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../config/database';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 export const contractsRouter: Router = Router();
 contractsRouter.use(authenticate);
@@ -152,7 +152,7 @@ contractsRouter.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-contractsRouter.put('/:id', async (req, res, next) => {
+contractsRouter.put('/:id', authorize(['admin', 'manager']), async (req, res, next) => {
   try {
     const { name, customerId, carrierId, type, startDate, endDate, contractNumber, terms, maxLiability, releaseValue, isActive } = req.body;
     const data: Record<string, unknown> = {};
@@ -168,14 +168,14 @@ contractsRouter.put('/:id', async (req, res, next) => {
     if (releaseValue !== undefined) data.releaseValue = releaseValue;
     if (isActive !== undefined) data.isActive = isActive;
 
-    const contract = await prisma.contract.update({ where: { id: req.params.id }, data });
+    const contract = await prisma.contract.update({ where: { id: String(req.params.id) }, data });
     res.json({ success: true, data: contract });
   } catch (err) { next(err); }
 });
 
-contractsRouter.delete('/:id', async (req, res, next) => {
+contractsRouter.delete('/:id', authorize(['admin', 'manager']), async (req, res, next) => {
   try {
-    await prisma.contract.delete({ where: { id: req.params.id } });
+    await prisma.contract.delete({ where: { id: String(req.params.id) } });
     res.status(204).send();
   } catch (err) { next(err); }
 });

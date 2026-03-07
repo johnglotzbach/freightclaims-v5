@@ -1,17 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { get, put, post } from '@/lib/api-client';
+import { get, put, post, del, getList, apiClient } from '@/lib/api-client';
 import { cn, getStatusBadgeClass } from '@/lib/utils';
 import { formatCurrency, formatDate, formatDateTime, CLAIM_STATUSES, CARMACK_TIMELINES, daysBetween } from 'shared';
 import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
 import {
   Edit2, Mail, MoreHorizontal, ChevronRight,
   Plus, AlertTriangle, CheckCircle, Clock, Send,
+  FileDown, Trash2,
 } from 'lucide-react';
 
 type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'emails-automation' | 'transactions' | 'additional' | 'comments';
@@ -34,6 +35,8 @@ export default function ClaimDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('status');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: claim, isLoading, error } = useQuery({
     queryKey: ['claim', id],
@@ -49,6 +52,40 @@ export default function ClaimDetailPage() {
     },
     onError: () => toast.error('Failed to update status'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => del(`/claims/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claims'] });
+      toast.success('Claim deleted');
+      router.push('/claims/list');
+    },
+    onError: () => toast.error('Failed to delete claim'),
+  });
+
+  async function handleExportPdf() {
+    setMenuOpen(false);
+    try {
+      const res = await apiClient.get('/reports/export/pdf', { responseType: 'blob', params: { claimId: id } });
+      const blob = res.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `claim-${claim?.claimNumber || id}-${Date.now()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Claim exported as PDF');
+    } catch {
+      toast.error('Export failed');
+    }
+  }
+
+  function handleDeleteClaim() {
+    setMenuOpen(false);
+    if (typeof window !== 'undefined' && window.confirm('Are you sure you want to delete this claim? This action cannot be undone.')) {
+      deleteMutation.mutate();
+    }
+  }
 
   if (isLoading) {
     return (
@@ -105,30 +142,45 @@ export default function ClaimDetailPage() {
               </span>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-              <span>Assigned to: <span className="font-medium text-slate-700 dark:text-slate-300">Swing Tec</span></span>
+              <span>Assigned to: <span className="font-medium text-slate-700 dark:text-slate-300">{(claim as any).assignedTo || 'Unassigned'}</span></span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-center">
               <p className="text-xs text-slate-500">Claim Age</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">{filingAge || 203} <span className="text-xs font-normal text-slate-400">days</span></p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{filingAge} <span className="text-xs font-normal text-slate-400">days</span></p>
             </div>
             <div className="text-center">
               <p className="text-xs text-slate-500">Filed Amount</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(claim.claimAmount || 3600)}</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(claim.claimAmount ?? 0)}</p>
             </div>
             <div className="text-center">
               <p className="text-xs text-slate-500">Remaining Amount</p>
               <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency((claim.claimAmount ?? 0) - (claim.settledAmount ?? 0))}</p>
             </div>
             <div className="flex items-center gap-1">
-              <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+              <button onClick={() => setIsEditMode(!isEditMode)} className={cn('p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400', isEditMode && 'bg-primary-50 dark:bg-primary-950 text-primary-500')} title={isEditMode ? 'Exit edit mode' : 'Edit claim'}>
                 <Edit2 className="w-4 h-4" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
+              <div className="relative">
+                <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400" title="More actions">
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+                    <div className="absolute right-0 top-full mt-1 z-20 w-48 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
+                      <button onClick={handleExportPdf} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+                        <FileDown className="w-4 h-4" /> Export as PDF
+                      </button>
+                      <button onClick={handleDeleteClaim} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30">
+                        <Trash2 className="w-4 h-4" /> Delete Claim
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -174,7 +226,7 @@ export default function ClaimDetailPage() {
 
       {/* Tab content */}
       <div className="animate-fade-in">
-        {activeTab === 'status' && <StatusTab claim={claim} />}
+        {activeTab === 'status' && <StatusTab claim={claim} claimId={id} />}
         {activeTab === 'transportation' && <TransportationTab claim={claim} />}
         {activeTab === 'form-data' && <FormDataTab claim={claim} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
@@ -188,7 +240,38 @@ export default function ClaimDetailPage() {
   );
 }
 
-function StatusTab({ claim }: { claim: Claim }) {
+function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
+  const queryClient = useQueryClient();
+  const [ackDate, setAckDate] = useState(claim.acknowledgmentDate ? claim.acknowledgmentDate.slice(0, 10) : '');
+  const refFromIdentifiers = claim.identifiers?.find((i: any) => i.type === 'ref')?.value;
+  const [refNo, setRefNo] = useState(refFromIdentifiers || (claim as any).referenceNumber || '');
+  useEffect(() => {
+    setAckDate(claim.acknowledgmentDate ? claim.acknowledgmentDate.slice(0, 10) : '');
+    const refVal = claim.identifiers?.find((i: any) => i.type === 'ref')?.value || (claim as any).referenceNumber || '';
+    setRefNo(refVal);
+  }, [claim.id, claim.acknowledgmentDate, claim.identifiers]);
+  const [saving, setSaving] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { acknowledgmentDate?: string; referenceNumber?: string }) => put(`/claims/${claimId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      toast.success('Claim updated');
+      setSaving(false);
+    },
+    onError: () => {
+      toast.error('Failed to update');
+      setSaving(false);
+    },
+  });
+
+  function handleSaveAck() {
+    setSaving(true);
+    updateMutation.mutate({
+      acknowledgmentDate: ackDate ? `${ackDate}T00:00:00.000Z` : undefined,
+    });
+  }
+
   const carrierParties: CarrierParty[] = (claim.parties || [])
     .filter((p: any) => p.type === 'carrier')
     .map((p: any) => ({
@@ -204,12 +287,12 @@ function StatusTab({ claim }: { claim: Claim }) {
   if (carrierParties.length === 0) {
     carrierParties.push({
       id: 'default',
-      name: 'CENTRAL TRANSPORT LLC',
+      name: 'N/A',
       status: 'Pending',
-      filingDate: '2025-09-02',
-      lastEmailActivity: '189 days ago',
+      filingDate: claim.filingDate,
+      lastEmailActivity: claim.updatedAt,
       amountPaid: 0,
-      scacCode: 'CTII',
+      scacCode: undefined,
     });
   }
 
@@ -262,13 +345,29 @@ function StatusTab({ claim }: { claim: Claim }) {
       <div className="grid md:grid-cols-2 gap-4">
         <div className="card p-4">
           <label className="block text-xs font-medium text-slate-500 mb-1.5">Acknowledgment/Declined Date</label>
-          <input type="date" className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+          <input
+            type="date"
+            value={ackDate}
+            onChange={(e) => setAckDate(e.target.value)}
+            onBlur={handleSaveAck}
+            className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600"
+          />
         </div>
         <div className="card p-4">
           <label className="block text-xs font-medium text-slate-500 mb-1.5">Claim Reference No</label>
-          <input type="text" placeholder="Enter reference number..." className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+          <input
+            type="text"
+            value={refNo}
+            onChange={(e) => setRefNo(e.target.value)}
+            onBlur={handleSaveAck}
+            placeholder="Enter reference number..."
+            className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600"
+          />
         </div>
       </div>
+      {(saving || updateMutation.isPending) && (
+        <p className="text-xs text-slate-500">Saving...</p>
+      )}
     </div>
   );
 }
@@ -290,8 +389,8 @@ function TransportationTab({ claim }: { claim: Claim }) {
       <div className="card p-6 space-y-4">
         <h3 className="font-semibold text-slate-900 dark:text-white">Carrier Information</h3>
         <dl className="space-y-3 text-sm">
-          <DetailRow label="Carrier" value={(claim.parties || []).find((p: any) => p.type === 'carrier')?.name || 'CENTRAL TRANSPORT LLC'} />
-          <DetailRow label="SCAC Code" value={(claim.parties || []).find((p: any) => p.type === 'carrier')?.scacCode || 'CTII'} mono />
+          <DetailRow label="Carrier" value={(claim.parties || []).find((p: any) => p.type === 'carrier')?.name || 'N/A'} />
+          <DetailRow label="SCAC Code" value={(claim.parties || []).find((p: any) => p.type === 'carrier')?.scacCode || 'N/A'} mono />
           <DetailRow label="Total Weight" value={(claim as any).totalWeight ? `${(claim as any).totalWeight} lbs` : 'N/A'} />
           <DetailRow label="Total Pieces" value={(claim as any).totalPieces?.toString() || 'N/A'} />
           <DetailRow label="Freight Terms" value={(claim as any).freightTerms || 'Prepaid'} />
@@ -397,6 +496,42 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
 }
 
 function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
+  const queryClient = useQueryClient();
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskPriority, setTaskPriority] = useState('medium');
+  const [taskDueDate, setTaskDueDate] = useState('');
+
+  const addTaskMutation = useMutation({
+    mutationFn: (data: { title: string; description?: string; priority?: string; dueDate?: string }) =>
+      post(`/claims/${claimId}/tasks`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      setShowTaskForm(false);
+      setTaskTitle('');
+      setTaskDescription('');
+      setTaskPriority('medium');
+      setTaskDueDate('');
+      toast.success('Task added');
+    },
+    onError: () => toast.error('Failed to add task'),
+  });
+
+  function handleSubmitTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!taskTitle.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    addTaskMutation.mutate({
+      title: taskTitle.trim(),
+      description: taskDescription.trim() || undefined,
+      priority: taskPriority,
+      dueDate: taskDueDate || undefined,
+    });
+  }
+
   const priorityColors: Record<string, string> = {
     urgent: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
     high: 'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400',
@@ -404,10 +539,50 @@ function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
     low: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   };
 
-  if (tasks.length === 0) return <EmptyState message="No tasks assigned to this claim yet." action="Add Task" />;
+  if (tasks.length === 0 && !showTaskForm) {
+    return (
+      <EmptyState
+        message="No tasks assigned to this claim yet."
+        action="Add Task"
+        onActionClick={() => setShowTaskForm(true)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-3">
+      {showTaskForm && (
+        <form onSubmit={handleSubmitTask} className="card p-4 space-y-3">
+          <h4 className="text-sm font-medium text-slate-900 dark:text-white">Add Task</h4>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Title</label>
+            <input type="text" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Task title" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Description (optional)</label>
+            <textarea value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Task description" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
+              <select value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Due Date (optional)</label>
+              <input type="date" value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={addTaskMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addTaskMutation.isPending ? 'Adding...' : 'Add Task'}</button>
+            <button type="button" onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+          </div>
+        </form>
+      )}
       {tasks.map((task) => (
         <div key={task.id} className="card p-4 flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -428,26 +603,42 @@ function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
 }
 
 function EmailsAutomationTab({ claimId }: { claimId: string }) {
-  const mockEmails = [
-    { id: '1', subject: 'Freight Claim Filed - PRO# 059-2140', from: 'claims@freightclaims.com', date: '2025-09-02', isInbound: false },
-    { id: '2', subject: 'RE: Freight Claim Filed - PRO# 059-2140', from: 'claims@centraltransport.com', date: '2025-09-15', isInbound: true },
-  ];
-  const mockAutomations = [
-    { id: '1', name: 'Follow-Up at 30 Days', status: 'completed', executedAt: '2025-10-02', type: 'email' },
-    { id: '2', name: 'Follow-Up at 90 Days', status: 'pending', scheduledFor: '2025-12-01', type: 'email' },
-    { id: '3', name: 'Stagnant Claim Alert', status: 'active', scheduledFor: '2026-03-02', type: 'task' },
-  ];
+  const { data: emails = [] } = useQuery({
+    queryKey: ['claim-emails', claimId],
+    queryFn: () => getList<{ id: string; subject?: string; from?: string; date?: string; createdAt?: string; isInbound?: boolean }>('/email/claim/' + claimId),
+  });
+  const { data: automations = [] } = useQuery({
+    queryKey: ['claim-automations', claimId],
+    queryFn: () => getList<{ id: string; name?: string; status?: string; executedAt?: string; scheduledFor?: string; type?: string }>('/automation/rules'),
+  });
+
+  const emailList = emails.map((e) => ({
+    id: e.id,
+    subject: e.subject || '(No subject)',
+    from: e.from || '',
+    date: e.date || e.createdAt?.slice(0, 10) || '',
+    isInbound: e.isInbound ?? false,
+  }));
+  const autoList = automations.map((a) => ({
+    id: a.id,
+    name: a.name || 'Rule',
+    status: a.status || 'pending',
+    executedAt: a.executedAt,
+    scheduledFor: a.scheduledFor,
+    type: a.type || 'email',
+  }));
+
   return (
     <div className="space-y-6">
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900 dark:text-white">Email Thread ({mockEmails.length})</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white">Email Thread ({emailList.length})</h3>
           <Link href={`/claims/${claimId}/email`} className="flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-600 font-medium">
             <Send className="w-4 h-4" /> Open Email
           </Link>
         </div>
         <div className="space-y-2">
-          {mockEmails.map(email => (
+          {emailList.map(email => (
             <Link key={email.id} href={`/claims/${claimId}/email`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
               <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold', email.isInbound ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600')}>
                 {email.isInbound ? 'IN' : 'OUT'}
@@ -467,7 +658,7 @@ function EmailsAutomationTab({ claimId }: { claimId: string }) {
           <Link href="/automation" className="text-xs text-primary-500 font-medium">Configure</Link>
         </div>
         <div className="space-y-2">
-          {mockAutomations.map(auto => (
+          {autoList.map(auto => (
             <div key={auto.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className={cn('w-2 h-2 rounded-full', auto.status === 'completed' ? 'bg-emerald-500' : auto.status === 'active' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300')} />
@@ -486,13 +677,47 @@ function EmailsAutomationTab({ claimId }: { claimId: string }) {
 }
 
 function TransactionsTab({ claim }: { claim: Claim }) {
-  const mockPayments = [
-    { id: '1', type: 'Inbound', method: 'Check', amount: 1200, reference: 'CHK-44219', from: 'Central Transport LLC', date: '2026-01-15', status: 'received' },
-    { id: '2', type: 'Inbound', method: 'ACH', amount: 800, reference: 'ACH-99102', from: 'Central Transport LLC', date: '2026-02-01', status: 'received' },
-  ];
-  const totalReceived = mockPayments.reduce((s, p) => s + p.amount, 0);
-  const claimAmount = claim.claimAmount || 3600;
+  const queryClient = useQueryClient();
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+
+  const payments = claim.payments || [];
+  const totalReceived = payments.reduce((s: number, p: ClaimPayment) => s + (p.amount || 0), 0);
+  const claimAmount = claim.claimAmount ?? 0;
   const remaining = claimAmount - totalReceived;
+
+  const addPaymentMutation = useMutation({
+    mutationFn: (data: { amount: number; type: string; method?: string; reference?: string; receivedAt?: string }) =>
+      post(`/claims/${claim.id}/payments`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claim.id] });
+      setShowPaymentForm(false);
+      setPaymentAmount('');
+      setPaymentReference('');
+      setPaymentMethod('');
+      toast.success('Payment logged');
+    },
+    onError: () => toast.error('Failed to log payment'),
+  });
+
+  function handleSubmitPayment(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    addPaymentMutation.mutate({
+      amount,
+      type: 'settlement',
+      method: paymentMethod || undefined,
+      reference: paymentReference || undefined,
+      receivedAt: paymentDate || undefined,
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -500,13 +725,46 @@ function TransactionsTab({ claim }: { claim: Claim }) {
         <div className="card p-4 text-center"><p className="text-xs text-slate-500">Filed Amount</p><p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(claimAmount)}</p></div>
         <div className="card p-4 text-center"><p className="text-xs text-slate-500">Total Received</p><p className="text-lg font-bold text-emerald-600">{formatCurrency(totalReceived)}</p></div>
         <div className="card p-4 text-center"><p className="text-xs text-slate-500">Remaining</p><p className="text-lg font-bold text-amber-600">{formatCurrency(remaining)}</p></div>
-        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Collection %</p><p className="text-lg font-bold text-primary-600">{((totalReceived / claimAmount) * 100).toFixed(1)}%</p></div>
+        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Collection %</p><p className="text-lg font-bold text-primary-600">{claimAmount > 0 ? ((totalReceived / claimAmount) * 100).toFixed(1) : '0'}%</p></div>
       </div>
 
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-slate-900 dark:text-white">Payment History</h3>
-        <button className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Log Payment</button>
+        <button onClick={() => setShowPaymentForm(!showPaymentForm)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Log Payment</button>
       </div>
+
+      {showPaymentForm && (
+        <form onSubmit={handleSubmitPayment} className="card p-4 space-y-3">
+          <h4 className="text-sm font-medium text-slate-900 dark:text-white">Log Payment</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Amount</label>
+              <input type="number" step="0.01" min="0" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+              <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Reference</label>
+              <input type="text" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Check #, ACH ref..." />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Method</label>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="">Select</option>
+                <option value="check">Check</option>
+                <option value="ach">ACH</option>
+                <option value="wire">Wire</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={addPaymentMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addPaymentMutation.isPending ? 'Saving...' : 'Save Payment'}</button>
+            <button type="button" onClick={() => setShowPaymentForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+          </div>
+        </form>
+      )}
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
@@ -521,21 +779,21 @@ function TransactionsTab({ claim }: { claim: Claim }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-            {mockPayments.map(p => (
+            {payments.map((p: ClaimPayment) => (
               <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                <td className="px-4 py-3 font-medium">{p.type}</td>
-                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500">{p.method}</td>
-                <td className="px-4 py-3 hidden md:table-cell text-xs font-mono text-slate-500">{p.reference}</td>
-                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{p.from}</td>
+                <td className="px-4 py-3 font-medium capitalize">{p.type}</td>
+                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500 capitalize">{p.method || '-'}</td>
+                <td className="px-4 py-3 hidden md:table-cell text-xs font-mono text-slate-500">{p.reference || '-'}</td>
+                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">—</td>
                 <td className="px-4 py-3 font-medium text-emerald-600">{formatCurrency(p.amount)}</td>
-                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500">{p.date}</td>
+                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500">{p.receivedAt ? formatDate(p.receivedAt) : formatDate(p.createdAt)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {mockPayments.length === 0 && (
+      {payments.length === 0 && !showPaymentForm && (
         <div className="card p-12 text-center">
           <p className="text-sm text-slate-400">No payments recorded for this claim</p>
         </div>
@@ -711,12 +969,12 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-function EmptyState({ message, action }: { message: string; action?: string }) {
+function EmptyState({ message, action, onActionClick }: { message: string; action?: string; onActionClick?: () => void }) {
   return (
     <div className="card p-12 text-center">
       <p className="text-slate-400 text-sm">{message}</p>
       {action && (
-        <button className="mt-3 text-sm text-primary-500 hover:text-primary-600 font-medium flex items-center gap-1 mx-auto">
+        <button onClick={onActionClick} className="mt-3 text-sm text-primary-500 hover:text-primary-600 font-medium flex items-center gap-1 mx-auto">
           <Plus className="w-4 h-4" /> {action}
         </button>
       )}

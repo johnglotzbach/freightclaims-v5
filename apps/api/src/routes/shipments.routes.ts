@@ -20,45 +20,43 @@ export const shipmentsRouter: Router = Router();
 
 shipmentsRouter.use(authenticate);
 
-// --- Shipment CRUD ---
-shipmentsRouter.get('/', shipmentsController.list);
-shipmentsRouter.get('/:id', shipmentsController.getById);
-shipmentsRouter.post('/', validate(createShipmentSchema), shipmentsController.create);
-shipmentsRouter.put('/:id', validate(updateShipmentSchema), shipmentsController.update);
-shipmentsRouter.delete('/:id', shipmentsController.delete);
+// --- Named/static routes (must be before /:id) ---
 
-// --- Shipment contacts ---
-shipmentsRouter.get('/:id/contacts', shipmentsController.getContacts);
-shipmentsRouter.post('/:id/contacts', shipmentsController.addContact);
+shipmentsRouter.get('/', shipmentsController.list);
+shipmentsRouter.post('/', validate(createShipmentSchema), shipmentsController.create);
 
 // --- Carriers ---
 shipmentsRouter.get('/carriers/all', shipmentsController.listCarriers);
-shipmentsRouter.get('/carriers/:id', shipmentsController.getCarrier);
-shipmentsRouter.post('/carriers', authorize(['admin']), shipmentsController.createCarrier);
-shipmentsRouter.put('/carriers/:id', authorize(['admin']), shipmentsController.updateCarrier);
-
-// --- Carrier contacts ---
-shipmentsRouter.get('/carriers/:id/contacts', shipmentsController.getCarrierContacts);
-shipmentsRouter.post('/carriers/:id/contacts', shipmentsController.addCarrierContact);
-
-// --- Carrier data (SCAC codes, integration keys) ---
 shipmentsRouter.get('/carriers/data/scac', shipmentsController.getCarrierData);
 shipmentsRouter.get('/carriers/integrated/all', shipmentsController.getIntegratedCarriers);
-shipmentsRouter.get('/carriers/integrated/:id/keys', shipmentsController.getIntegratedCarrierKeys);
-
-// --- International carriers ---
 shipmentsRouter.get('/carriers/international/all', shipmentsController.getInternationalCarriers);
+shipmentsRouter.post('/carriers', authorize(['admin']), shipmentsController.createCarrier);
+shipmentsRouter.get('/carriers/:id', shipmentsController.getCarrier);
+shipmentsRouter.put('/carriers/:id', authorize(['admin']), shipmentsController.updateCarrier);
+shipmentsRouter.get('/carriers/:id/contacts', shipmentsController.getCarrierContacts);
+shipmentsRouter.post('/carriers/:id/contacts', shipmentsController.addCarrierContact);
+shipmentsRouter.get('/carriers/integrated/:id/keys', shipmentsController.getIntegratedCarrierKeys);
 
 // --- Insurance ---
 shipmentsRouter.get('/insurance/all', shipmentsController.listInsurances);
-shipmentsRouter.get('/insurance/:id', shipmentsController.getInsurance);
 shipmentsRouter.post('/insurance', shipmentsController.createInsurance);
+shipmentsRouter.get('/insurance/:id', shipmentsController.getInsurance);
 shipmentsRouter.get('/insurance/:id/contacts', shipmentsController.getInsuranceContacts);
 
 // --- Suppliers ---
 shipmentsRouter.get('/suppliers/all', shipmentsController.listSuppliers);
 shipmentsRouter.post('/suppliers', shipmentsController.createSupplier);
+shipmentsRouter.put('/suppliers/:id', shipmentsController.updateSupplier);
+shipmentsRouter.delete('/suppliers/:id', shipmentsController.deleteSupplier);
 shipmentsRouter.get('/suppliers/:id/addresses', shipmentsController.getSupplierAddresses);
 
 // --- Mass upload ---
-shipmentsRouter.post('/mass-upload', shipmentsController.massUpload);
+shipmentsRouter.post('/mass-upload', authorize(['admin', 'manager']), shipmentsController.massUpload);
+
+// --- Parameterized /:id routes ---
+
+shipmentsRouter.get('/:id', shipmentsController.getById);
+shipmentsRouter.put('/:id', validate(updateShipmentSchema), shipmentsController.update);
+shipmentsRouter.delete('/:id', authorize(['admin', 'manager']), shipmentsController.delete);
+shipmentsRouter.get('/:id/contacts', shipmentsController.getContacts);
+shipmentsRouter.post('/:id/contacts', shipmentsController.addContact);

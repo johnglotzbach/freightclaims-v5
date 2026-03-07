@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Shield, Plus, Edit2, Trash2, Users, ChevronRight,
-  Check, X, Search, Copy,
+  Check, X, Search, Copy, ShieldAlert,
 } from 'lucide-react';
 
 interface Role {
@@ -101,13 +101,61 @@ const PERMISSION_CATEGORIES = [
 ];
 
 export default function RolesPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.isSuperAdmin || currentUser?.permissions?.includes('settings.manage_roles') || false;
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: roles = [], isLoading } = useQuery({
     queryKey: ['roles'],
     queryFn: () => getList<Role>('/users/roles/all'),
   });
+
+  const saveRoleMutation = useMutation({
+    mutationFn: (roleData: { id?: string; name: string; description: string; permissions: string[]; isNew?: boolean }) =>
+      roleData.id ? put(`/users/roles/${roleData.id}`, { name: roleData.name, description: roleData.description, permissions: roleData.permissions }) : post('/users/roles', { name: roleData.name, description: roleData.description, permissions: roleData.permissions }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      toast.success(variables.isNew ? 'Role created' : 'Role updated');
+      setEditingRole(null);
+      setIsCreating(false);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to save role'),
+  });
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: (id: string) => del(`/users/roles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      toast.success('Role deleted');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete role'),
+  });
+
+  function handleSaveRole(role: Role) {
+    const roleData = { id: role.id || undefined, name: role.name, description: role.description, permissions: role.permissions, isNew: isCreating };
+    saveRoleMutation.mutate(roleData);
+  }
+
+  function handleDeleteRole(role: Role) {
+    if (role.userCount > 0) {
+      toast.error('Cannot delete role with active users');
+      return;
+    }
+    if (!confirm(`Delete role "${role.name}"?`)) return;
+    deleteRoleMutation.mutate(role.id);
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <ShieldAlert className="w-12 h-12 text-red-400 mb-4" />
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h1>
+        <p className="text-sm text-slate-500">You don&apos;t have permission to manage roles. Contact your administrator.</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -152,7 +200,7 @@ export default function RolesPage() {
         </button>
       </div>
 
-      {editingRole && <RoleEditor role={editingRole} isNew={isCreating} onClose={() => { setEditingRole(null); setIsCreating(false); }} onSave={(role) => { toast.success(isCreating ? 'Role created' : 'Role updated'); setEditingRole(null); setIsCreating(false); }} />}
+      {editingRole && <RoleEditor role={editingRole} isNew={isCreating} onClose={() => { setEditingRole(null); setIsCreating(false); }} onSave={handleSaveRole} />}
 
       <div className="grid gap-4">
         {roles.map(role => (
@@ -171,7 +219,7 @@ export default function RolesPage() {
             <div className="flex items-center gap-1">
               <button onClick={() => { setEditingRole(role); setIsCreating(false); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-4 h-4" /></button>
               <button onClick={() => { setEditingRole({ ...role, id: '', name: `${role.name} (Copy)` }); setIsCreating(true); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Copy className="w-4 h-4" /></button>
-              {!role.isSystem && <button onClick={() => toast.error('Cannot delete role with active users')} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>}
+              {!role.isSystem && <button onClick={() => handleDeleteRole(role)} disabled={deleteRoleMutation.isPending} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>}
             </div>
           </div>
         ))}

@@ -22,7 +22,7 @@ documentsRouter.use(authenticate);
 documentsRouter.get('/', documentsController.list);
 documentsRouter.get('/:id', documentsController.getById);
 documentsRouter.post('/upload', upload.array('files', 20), documentsController.upload);
-documentsRouter.delete('/:id', documentsController.delete);
+documentsRouter.delete('/:id', authorize(['admin', 'manager']), documentsController.delete);
 
 // --- Document download / signed URL ---
 documentsRouter.get('/:id/download', documentsController.download);

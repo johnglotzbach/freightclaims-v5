@@ -35,6 +35,13 @@ export const customersService = {
   async getNotes(customerId: string) { return customersRepository.getNotes(customerId); },
   async addNote(customerId: string, data: Record<string, unknown>) { return customersRepository.addNote(customerId, data); },
 
+  async listAllContacts(corporateId?: string | null, isSuperAdmin = false) { return customersRepository.listAllContacts(corporateId, isSuperAdmin); },
+  async listAllAddresses(corporateId?: string | null, isSuperAdmin = false) { return customersRepository.listAllAddresses(corporateId, isSuperAdmin); },
+  async listAllProducts(corporateId?: string | null, isSuperAdmin = false) { return customersRepository.listAllProducts(corporateId, isSuperAdmin); },
+  async addProduct(customerId: string, data: Record<string, unknown>) { return customersRepository.addProduct(customerId, data); },
+  async updateProduct(customerId: string, productId: string, data: Record<string, unknown>) { return customersRepository.updateProduct(customerId, productId, data); },
+  async removeProduct(customerId: string, productId: string) { return customersRepository.removeProduct(customerId, productId); },
+
   async getReports(customerId: string) { return customersRepository.getReports(customerId); },
   async getCountries() { return customersRepository.getCountries(); },
   async addressAutocomplete(query: string) { return customersRepository.addressAutocomplete(query); },

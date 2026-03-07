@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -20,26 +20,41 @@ interface ClaimSidebarSection {
   categories: { key: ClaimCategory; label: string; count: number }[];
 }
 
-const SIDEBAR_SECTIONS: ClaimSidebarSection[] = [
-  {
-    label: 'My Claims',
-    categories: [
-      { key: 'not_filed', label: 'Not Filed', count: 4 },
-      { key: 'filed', label: 'Filed', count: 6 },
-      { key: 'closed', label: 'Closed', count: 13 },
-      { key: 'all', label: 'All Claims', count: 23 },
-    ],
-  },
-  {
-    label: 'ABC Logistics',
-    categories: [
-      { key: 'not_filed', label: 'Not Filed', count: 58 },
-      { key: 'filed', label: 'Filed', count: 82 },
-      { key: 'closed', label: 'Closed', count: 74 },
-      { key: 'all', label: 'All Claims', count: 214 },
-    ],
-  },
-];
+interface DashboardStats {
+  total: number;
+  pending: number;
+  inReview: number;
+  settled: number;
+  deleted?: number;
+}
+
+function buildSidebarSections(stats: DashboardStats | undefined): ClaimSidebarSection[] {
+  const s = stats ?? { total: 0, pending: 0, inReview: 0, settled: 0, deleted: 0 };
+  const notFiled = s.pending;
+  const filed = s.inReview;
+  const closed = s.settled;
+  const all = s.total;
+  return [
+    {
+      label: 'My Claims',
+      categories: [
+        { key: 'not_filed', label: 'Not Filed', count: notFiled },
+        { key: 'filed', label: 'Filed', count: filed },
+        { key: 'closed', label: 'Closed', count: closed },
+        { key: 'all', label: 'All Claims', count: all },
+      ],
+    },
+    {
+      label: 'ABC Logistics',
+      categories: [
+        { key: 'not_filed', label: 'Not Filed', count: notFiled },
+        { key: 'filed', label: 'Filed', count: filed },
+        { key: 'closed', label: 'Closed', count: closed },
+        { key: 'all', label: 'All Claims', count: all },
+      ],
+    },
+  ];
+}
 
 export default function ClaimsListPage() {
   const router = useRouter();
@@ -57,22 +72,43 @@ export default function ClaimsListPage() {
   const [filedDate, setFiledDate] = useState('');
   const limit = 25;
 
+  const { data: stats } = useQuery({
+    queryKey: ['claims', 'dashboard-stats'],
+    queryFn: () => get<DashboardStats>('/claims/dashboard/stats'),
+  });
+
+  const SIDEBAR_SECTIONS = useMemo(() => buildSidebarSections(stats), [stats]);
+  const deletedCount = stats?.deleted ?? 0;
+
+  const categoryStatusMap: Record<ClaimCategory, string> = {
+    not_filed: 'pending',
+    filed: 'in_review',
+    closed: 'settled',
+    all: '',
+  };
+  const effectiveStatus = statusFilter || categoryStatusMap[activeCategory];
+
   const queryParams = new URLSearchParams({
     page: String(page),
     limit: String(limit),
     ...(search && { search }),
-    ...(statusFilter && { status: statusFilter }),
+    ...(effectiveStatus && { status: effectiveStatus }),
     ...(typeFilter && { claimType: typeFilter }),
+    ...(hasTasks && { hasTasks: 'true' }),
+    ...(hasOverdueTasks && { hasOverdueTasks: 'true' }),
+    ...(unreadEmails && { unreadEmails: 'true' }),
+    ...(createdDate && { dateFrom: createdDate }),
+    ...(filedDate && { filedDateFrom: filedDate }),
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['claims', 'list', page, search, statusFilter, typeFilter],
+    queryKey: ['claims', 'list', page, search, effectiveStatus, typeFilter, hasTasks, hasOverdueTasks, unreadEmails, createdDate, filedDate],
     queryFn: () => get<PaginatedResponse<Claim>>(`/claims?${queryParams.toString()}`),
   });
 
   const totalPages = data?.pagination?.totalPages || 1;
   const section = SIDEBAR_SECTIONS[activeSection];
-  const categoryData = section.categories.find(c => c.key === activeCategory);
+  const categoryData = section?.categories.find(c => c.key === activeCategory);
 
   function resetFilters() {
     setSearch('');
@@ -93,7 +129,7 @@ export default function ClaimsListPage() {
       {/* Claims Sidebar */}
       <div className="hidden lg:block w-48 flex-shrink-0">
         <div className="sticky top-6 space-y-4">
-          {SIDEBAR_SECTIONS.map((s, sIdx) => (
+          {(SIDEBAR_SECTIONS || []).map((s, sIdx) => (
             <div key={s.label}>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 px-1">{s.label}</p>
               <div className="space-y-0.5">
@@ -114,14 +150,14 @@ export default function ClaimsListPage() {
                 ))}
               </div>
               {sIdx === 0 && (
-                <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-2 px-1">
+                <button onClick={() => router.push('/claims/settings')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-2 px-1">
                   <Settings className="w-3 h-3" /> Claim Settings
                 </button>
               )}
             </div>
           ))}
-          <button className="w-full flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-1">
-            Deleted <span className="ml-auto text-xs">176</span>
+          <button onClick={() => router.push('/claims/list?deleted=true')} className="w-full flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-1">
+            Deleted <span className="ml-auto text-xs">{deletedCount}</span>
           </button>
         </div>
       </div>
@@ -279,7 +315,7 @@ export default function ClaimsListPage() {
           <p className="text-sm text-slate-500">
             {activeCategory === 'filed' ? 'My Claims (Filed)' : section.label} &middot; {categoryData?.count || 0} claims
           </p>
-          <button className="text-xs text-primary-500 hover:text-primary-600 font-medium">Dashboard View</button>
+          <button onClick={() => router.push('/claims')} className="text-xs text-primary-500 hover:text-primary-600 font-medium">Dashboard View</button>
         </div>
 
         {/* Claims table */}
@@ -336,10 +372,10 @@ export default function ClaimsListPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-sm text-slate-700 dark:text-slate-300">
-                        {(claim as any).customerName || 'Armstrong Transport Group'}
+                        {(claim as any).customerName || 'N/A'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                        {(claim as any).carrierName || 'CENTRAL TRANSPORT LLC'}
+                        {(claim as any).carrierName || 'N/A'}
                       </td>
                     </tr>
                   ))

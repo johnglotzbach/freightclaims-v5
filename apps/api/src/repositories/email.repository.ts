@@ -14,7 +14,11 @@ export const emailRepository = {
   /** Sends an email via SMTP and logs it to the database */
   async send(data: Record<string, unknown>) {
     const from = (data.from as string) || 'claims@freightclaims.com';
-    const to = data.to as string;
+    const toRaw = data.to;
+    const toArr = Array.isArray(toRaw) ? (toRaw as string[]).filter(Boolean) : [String(toRaw ?? '')].filter(Boolean);
+    const to = toArr.join(', ');
+    const ccRaw = data.cc;
+    const ccArr = Array.isArray(ccRaw) ? (ccRaw as string[]).filter(Boolean) : ccRaw ? [String(ccRaw)].filter(Boolean) : [];
     const subject = data.subject as string;
     const body = data.body as string;
 
@@ -23,11 +27,12 @@ export const emailRepository = {
 
     try {
       const result = await smtpService.sendEmail({
-        to,
+        to: to || toArr,
         subject,
         html: body,
         text: body.replace(/<[^>]*>/g, ''),
         from,
+        ...(ccArr.length > 0 && { cc: ccArr.join(', ') }),
       });
       messageId = result.messageId;
       status = 'sent';

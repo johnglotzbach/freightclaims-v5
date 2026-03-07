@@ -6,7 +6,16 @@
 import { prisma } from '../config/database';
 
 export const shipmentsRepository = {
-  async findMany(query: Record<string, unknown>) { const page = Number(query.page) || 1; const limit = 25; return { data: await prisma.shipment.findMany({ skip: (page - 1) * limit, take: limit }), pagination: { page, limit } }; },
+  async findMany(query: Record<string, unknown>, tenantFilter: Record<string, unknown> = {}) {
+    const page = Number(query.page) || 1;
+    const limit = 25;
+    const where = { ...tenantFilter, deletedAt: null };
+    const [data, total] = await Promise.all([
+      prisma.shipment.findMany({ where: where as any, skip: (page - 1) * limit, take: limit }),
+      prisma.shipment.count({ where: where as any }),
+    ]);
+    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  },
   async findById(id: string) { return prisma.shipment.findUnique({ where: { id }, include: { contacts: true } }); },
   async create(data: Record<string, unknown>) { return prisma.shipment.create({ data: data as any }); },
   async update(id: string, data: Record<string, unknown>) { return prisma.shipment.update({ where: { id }, data: data as any }); },
@@ -28,16 +37,27 @@ export const shipmentsRepository = {
   async createInsurance(data: Record<string, unknown>) { return prisma.insurance.create({ data: data as any }); },
   async getInsuranceContacts(id: string) { return prisma.insuranceContact.findMany({ where: { insuranceId: id } }); },
   async listSuppliers() { return prisma.supplier.findMany(); },
-  async createSupplier(data: Record<string, unknown>) { return prisma.supplier.create({ data: data as any }); },
+  async createSupplier(data: Record<string, unknown>) {
+    const payload = { name: String(data.name ?? ''), email: data.email as string | undefined, phone: data.phone as string | undefined };
+    return prisma.supplier.create({ data: payload });
+  },
+  async updateSupplier(id: string, data: Record<string, unknown>) {
+    const payload: Record<string, unknown> = {};
+    if (data.name != null) payload.name = data.name;
+    if (data.email != null) payload.email = data.email;
+    if (data.phone != null) payload.phone = data.phone;
+    return prisma.supplier.update({ where: { id }, data: payload as any });
+  },
+  async deleteSupplier(id: string) { return prisma.supplier.delete({ where: { id } }); },
   async getSupplierAddresses(id: string) { return prisma.supplierAddress.findMany({ where: { supplierId: id } }); },
   /** Bulk-creates shipments from parsed CSV/Excel data */
-  async massUpload(data: Record<string, unknown>) {
+  async massUpload(data: Record<string, unknown>, corporateId: string | null) {
     const rows = (data.rows as Record<string, unknown>[]) || [];
     const results = { created: 0, errors: [] as string[] };
 
     for (let i = 0; i < rows.length; i++) {
       try {
-        await prisma.shipment.create({ data: rows[i] as any });
+        await prisma.shipment.create({ data: { ...rows[i], corporateId } as any });
         results.created++;
       } catch (err) {
         results.errors.push(`Row ${i + 1}: ${String(err)}`);

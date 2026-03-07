@@ -1,13 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/hooks/use-auth';
+import { get, put, post, del } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import {
   Settings, User, Bell, Mail, Globe, Shield, Palette,
   Plus, Trash2, Edit2, Check, X as XIcon, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const THEME_KEY = 'theme';
+const DENSITY_KEY = 'density';
 
 type SettingsTab = 'profile' | 'notifications' | 'email-submission' | 'security' | 'appearance';
 
@@ -80,6 +86,32 @@ export default function SettingsPage() {
 }
 
 function ProfileSection({ user }: { user: any }) {
+  const { loadUser } = useAuth();
+  const [firstName, setFirstName] = useState(user?.firstName ?? '');
+  const [lastName, setLastName] = useState(user?.lastName ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [phone, setPhone] = useState('');
+
+  useEffect(() => {
+    setFirstName(user?.firstName ?? '');
+    setLastName(user?.lastName ?? '');
+    setEmail(user?.email ?? '');
+  }, [user]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: { firstName: string; lastName: string; email: string; phone?: string }) =>
+      put('/users/profile', data),
+    onSuccess: () => {
+      loadUser();
+      toast.success('Profile updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update profile'),
+  });
+
+  function handleSave() {
+    saveMutation.mutate({ firstName, lastName, email, phone: phone || undefined });
+  }
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
@@ -88,22 +120,22 @@ function ProfileSection({ user }: { user: any }) {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">First Name</label>
-              <input type="text" defaultValue={user?.firstName} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+              <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Last Name</label>
-              <input type="text" defaultValue={user?.lastName} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+              <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
-            <input type="email" defaultValue={user?.email} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Phone</label>
-            <input type="tel" placeholder="(555) 000-0000" className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
           </div>
-          <button className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <button onClick={handleSave} disabled={saveMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
             Save Changes
           </button>
         </div>
@@ -112,25 +144,54 @@ function ProfileSection({ user }: { user: any }) {
   );
 }
 
+const NOTIFICATION_KEYS = [
+  { label: 'Email notifications for new claims', key: 'newClaims', defaultChecked: true },
+  { label: 'Email notifications for status changes', key: 'statusChanges', defaultChecked: true },
+  { label: 'Email notifications for task assignments', key: 'taskAssignments', defaultChecked: true },
+  { label: 'Email notifications for overdue tasks', key: 'overdueTasks', defaultChecked: true },
+  { label: 'Push notifications', key: 'push', defaultChecked: true },
+  { label: 'Daily digest email', key: 'dailyDigest', defaultChecked: false },
+  { label: 'Weekly summary report', key: 'weeklyReport', defaultChecked: true },
+  { label: 'AI agent completion alerts', key: 'aiAlerts', defaultChecked: true },
+] as const;
+
 function NotificationsSection() {
+  const queryClient = useQueryClient();
+  const { data: prefs, isLoading } = useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: () => get<Record<string, boolean>>('/users/me/preferences'),
+  });
+
+  const preferences = NOTIFICATION_KEYS.reduce((acc, item) => {
+    acc[item.key] = prefs?.[item.key] ?? item.defaultChecked;
+    return acc;
+  }, {} as Record<string, boolean>);
+
+  const updatePrefsMutation = useMutation({
+    mutationFn: (preferences: Record<string, boolean>) => put('/users/me/preferences', preferences),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+      toast.success('Preferences updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update preferences'),
+  });
+
+  function handlePrefChange(key: string, checked: boolean) {
+    const next = { ...preferences, [key]: checked };
+    updatePrefsMutation.mutate(next);
+  }
+
+  if (isLoading) return <div className="card p-6"><p className="text-sm text-slate-500">Loading preferences...</p></div>;
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Notification Preferences</h2>
         <div className="space-y-4">
-          {[
-            { label: 'Email notifications for new claims', key: 'newClaims', defaultChecked: true },
-            { label: 'Email notifications for status changes', key: 'statusChanges', defaultChecked: true },
-            { label: 'Email notifications for task assignments', key: 'taskAssignments', defaultChecked: true },
-            { label: 'Email notifications for overdue tasks', key: 'overdueTasks', defaultChecked: true },
-            { label: 'Push notifications', key: 'push', defaultChecked: true },
-            { label: 'Daily digest email', key: 'dailyDigest', defaultChecked: false },
-            { label: 'Weekly summary report', key: 'weeklyReport', defaultChecked: true },
-            { label: 'AI agent completion alerts', key: 'aiAlerts', defaultChecked: true },
-          ].map(item => (
+          {NOTIFICATION_KEYS.map(item => (
             <label key={item.key} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
               <span className="text-sm text-slate-700 dark:text-slate-300">{item.label}</span>
-              <input type="checkbox" defaultChecked={item.defaultChecked} className="rounded border-slate-300 text-primary-500 focus:ring-primary-500" />
+              <input type="checkbox" checked={preferences[item.key] ?? item.defaultChecked} onChange={(e) => handlePrefChange(item.key, e.target.checked)} className="rounded border-slate-300 text-primary-500 focus:ring-primary-500" />
             </label>
           ))}
         </div>
@@ -139,54 +200,92 @@ function NotificationsSection() {
   );
 }
 
+interface EmailSubmissionConfig {
+  domains: ApprovedDomain[];
+  senders: ApprovedSender[];
+  submissionPrefix?: string;
+  companyDomain?: string;
+}
+
+const DEFAULT_DOMAINS: ApprovedDomain[] = [];
+const DEFAULT_SENDERS: ApprovedSender[] = [];
+
 function EmailSubmissionSection() {
-  const [domains, setDomains] = useState<ApprovedDomain[]>([
-    { id: '1', domain: '@staples.com', isActive: true },
-  ]);
-  const [senders, setSenders] = useState<ApprovedSender[]>([
-    { id: '1', email: 'mike@staples.com', isActive: true },
-    { id: '2', email: 'warehouse@staples.com', isActive: true },
-    { id: '3', email: 'warehouse2@staples.com', isActive: true },
-    { id: '4', email: 'eperson@staples.com', isActive: false },
-  ]);
+  const queryClient = useQueryClient();
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['email-submission-config'],
+    queryFn: () => get<EmailSubmissionConfig>('/email-submission/config'),
+    retry: false,
+  });
+
+  const [domains, setDomains] = useState<ApprovedDomain[]>(DEFAULT_DOMAINS);
+  const [senders, setSenders] = useState<ApprovedSender[]>(DEFAULT_SENDERS);
   const [newDomain, setNewDomain] = useState('');
   const [newSender, setNewSender] = useState('');
-  const [editingDomain, setEditingDomain] = useState<string | null>(null);
   const [submissionPrefix, setSubmissionPrefix] = useState('claimsubmission');
-  const [companyDomain, setCompanyDomain] = useState('staples.freightclaims.com');
+  const [companyDomain, setCompanyDomain] = useState('');
+
+  useEffect(() => {
+    if (config) {
+      if (config.domains?.length) setDomains(config.domains);
+      if (config.senders?.length) setSenders(config.senders);
+      if (config.submissionPrefix) setSubmissionPrefix(config.submissionPrefix);
+      if (config.companyDomain) setCompanyDomain(config.companyDomain);
+    }
+  }, [config]);
+
+  const saveConfigMutation = useMutation({
+    mutationFn: (data: { domains: ApprovedDomain[]; senders: ApprovedSender[]; submissionPrefix?: string; companyDomain?: string }) =>
+      put('/email-submission/config', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-submission-config'] });
+      toast.success('Email submission config updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update config'),
+  });
 
   function addDomain() {
     if (!newDomain.trim()) return;
     const domain = newDomain.startsWith('@') ? newDomain : `@${newDomain}`;
-    setDomains([...domains, { id: Date.now().toString(), domain, isActive: true }]);
+    const next = [...domains, { id: Date.now().toString(), domain, isActive: true }];
+    setDomains(next);
     setNewDomain('');
-    toast.success('Domain added');
+    saveConfigMutation.mutate({ domains: next, senders });
   }
 
   function addSender() {
     if (!newSender.trim()) return;
-    setSenders([...senders, { id: Date.now().toString(), email: newSender, isActive: true }]);
+    const next = [...senders, { id: Date.now().toString(), email: newSender, isActive: true }];
+    setSenders(next);
     setNewSender('');
-    toast.success('Sender added');
+    saveConfigMutation.mutate({ domains, senders: next });
   }
 
   function toggleDomain(id: string) {
-    setDomains(domains.map(d => d.id === id ? { ...d, isActive: !d.isActive } : d));
+    const next = domains.map(d => d.id === id ? { ...d, isActive: !d.isActive } : d);
+    setDomains(next);
+    saveConfigMutation.mutate({ domains: next, senders });
   }
 
   function toggleSender(id: string) {
-    setSenders(senders.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s));
+    const next = senders.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s);
+    setSenders(next);
+    saveConfigMutation.mutate({ domains, senders: next });
   }
 
   function removeDomain(id: string) {
-    setDomains(domains.filter(d => d.id !== id));
-    toast.success('Domain removed');
+    const next = domains.filter(d => d.id !== id);
+    setDomains(next);
+    saveConfigMutation.mutate({ domains: next, senders });
   }
 
   function removeSender(id: string) {
-    setSenders(senders.filter(s => s.id !== id));
-    toast.success('Sender removed');
+    const next = senders.filter(s => s.id !== id);
+    setSenders(next);
+    saveConfigMutation.mutate({ domains, senders: next });
   }
+
+  if (isLoading) return <div className="card p-6"><p className="text-sm text-slate-500">Loading email submission config...</p></div>;
 
   return (
     <div className="space-y-6">
@@ -311,6 +410,34 @@ function EmailSubmissionSection() {
 }
 
 function SecuritySection() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const passwordMutation = useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      put('/users/password', data),
+    onSuccess: () => {
+      toast.success('Password updated');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update password'),
+  });
+
+  function handleUpdatePassword() {
+    if (!currentPassword || !newPassword) {
+      toast.error('Please fill in current and new password');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New password and confirmation do not match');
+      return;
+    }
+    passwordMutation.mutate({ currentPassword, newPassword });
+  }
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
@@ -318,17 +445,17 @@ function SecuritySection() {
         <div className="space-y-4 max-w-md">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Current Password</label>
-            <input type="password" className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label>
-            <input type="password" className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm New Password</label>
-            <input type="password" className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm" />
           </div>
-          <button className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <button onClick={handleUpdatePassword} disabled={passwordMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
             Update Password
           </button>
         </div>
@@ -337,7 +464,7 @@ function SecuritySection() {
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Two-Factor Authentication</h2>
         <p className="text-sm text-slate-500 mb-4">Add an extra layer of security to your account.</p>
-        <button className="border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <button onClick={() => toast.info('Two-factor authentication coming soon')} className="border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
           Enable 2FA
         </button>
       </div>
@@ -345,44 +472,97 @@ function SecuritySection() {
   );
 }
 
+type ThemeValue = 'light' | 'dark' | 'system';
+type DensityValue = 'comfortable' | 'compact' | 'dense';
+
 function AppearanceSection() {
+  const { theme, setTheme } = useTheme();
+  const [currentTheme, setCurrentTheme] = useState<ThemeValue>((theme as ThemeValue) ?? 'system');
+
+  const [density, setDensityState] = useState<DensityValue>(() => {
+    if (typeof window === 'undefined') return 'comfortable';
+    return (localStorage.getItem(DENSITY_KEY) as DensityValue) || 'comfortable';
+  });
+
+  useEffect(() => {
+    const t = (theme ?? 'system') as ThemeValue;
+    setCurrentTheme(t);
+  }, [theme]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(DENSITY_KEY) as DensityValue | null;
+    if (stored && ['comfortable', 'compact', 'dense'].includes(stored)) {
+      setDensityState(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.setAttribute('data-density', density);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DENSITY_KEY, density);
+    }
+  }, [density]);
+
+  function handleThemeChange(value: ThemeValue) {
+    setTheme(value);
+    if (typeof window !== 'undefined') localStorage.setItem(THEME_KEY, value);
+    const isDark = value === 'dark' || (value === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', isDark);
+  }
+
+  function handleDensityChange(value: DensityValue) {
+    setDensityState(value);
+  }
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Theme</h2>
         <div className="grid grid-cols-3 gap-3">
-          {['Light', 'Dark', 'System'].map(theme => (
-            <button
-              key={theme}
-              className={cn(
-                'p-4 rounded-xl border text-center text-sm font-medium transition-all',
-                theme === 'System'
-                  ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-950 dark:text-primary-300'
-                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-200'
-              )}
-            >
-              {theme}
-            </button>
-          ))}
+          {(['Light', 'Dark', 'System'] as const).map(label => {
+            const value = label.toLowerCase() as ThemeValue;
+            const isActive = currentTheme === value;
+            return (
+              <button
+                key={value}
+                onClick={() => handleThemeChange(value)}
+                className={cn(
+                  'p-4 rounded-xl border text-center text-sm font-medium transition-all',
+                  isActive
+                    ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-950 dark:text-primary-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-200'
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Density</h2>
         <div className="grid grid-cols-3 gap-3">
-          {['Comfortable', 'Compact', 'Dense'].map(density => (
-            <button
-              key={density}
-              className={cn(
-                'p-4 rounded-xl border text-center text-sm font-medium transition-all',
-                density === 'Comfortable'
-                  ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-950 dark:text-primary-300'
-                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-200'
-              )}
-            >
-              {density}
-            </button>
-          ))}
+          {(['Comfortable', 'Compact', 'Dense'] as const).map(label => {
+            const value = label.toLowerCase() as DensityValue;
+            const isActive = density === value;
+            return (
+              <button
+                key={value}
+                onClick={() => handleDensityChange(value)}
+                className={cn(
+                  'p-4 rounded-xl border text-center text-sm font-medium transition-all',
+                  isActive
+                    ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-950 dark:text-primary-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-200'
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

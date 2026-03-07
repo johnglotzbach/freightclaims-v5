@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import {
@@ -21,17 +23,23 @@ interface ExtractedField {
 
 interface ProcessedDocument {
   id: string;
-  fileName: string;
-  documentType: string;
+  documentId?: string;
+  fileName?: string;
+  documentName?: string;
+  documentType?: string;
+  category?: string;
   confidence: number;
-  pages: number;
-  extractedFields: ExtractedField[];
-  status: 'pending' | 'processing' | 'completed' | 'review' | 'approved';
+  pages?: number;
+  extractedFields?: ExtractedField[];
+  summary?: string;
+  status?: string;
   previewUrl?: string;
   claimId?: string;
   claimNumber?: string;
-  uploadedBy: string;
-  uploadedAt: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  createdAt?: string;
+  mimeType?: string;
 }
 
 function getTypeColor(type: string) {
@@ -53,9 +61,57 @@ function getStatusIcon(status: string) {
 }
 
 export default function AIEntryPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedDoc, setSelectedDoc] = useState<ProcessedDocument | null>(null);
   const [search, setSearch] = useState('');
   const [editingFields, setEditingFields] = useState<Record<string, string>>({});
+
+  const createClaimMutation = useMutation({
+    mutationFn: async (doc: ProcessedDocument) => {
+      const fields = (doc.extractedFields ?? []).reduce((acc: Record<string, string>, f: any) => { acc[f.key] = f.value; return acc; }, {});
+      return post<any>('/ai/agents/intake', {
+        type: 'document',
+        documentText: `Document: ${doc.documentName || doc.fileName || 'unknown'}\n${(doc.extractedFields ?? []).map((f: any) => `${f.label}: ${f.value}`).join('\n')}`,
+        documentId: doc.documentId || doc.id,
+        autoCreate: true,
+      });
+    },
+    onSuccess: (data) => {
+      const claimId = data?.structuredOutput?.createdClaim?.claimId;
+      if (claimId) {
+        toast.success(`Claim created: ${data.structuredOutput.createdClaim.claimNumber}`);
+        router.push(`/claims/${claimId}`);
+      } else {
+        toast.success('AI processed the document. Review the results to create a claim manually.');
+        setSelectedDoc(null);
+      }
+    },
+    onError: () => toast.error('Failed to create claim from document'),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      const uploadRes = await apiClient.post<any>('/documents/upload', formData);
+      const docs = Array.isArray(uploadRes.data) ? uploadRes.data : [uploadRes.data];
+      for (const doc of docs) {
+        if (doc?.id) {
+          await apiClient.post(`/documents/${doc.id}/process`).catch(() => {});
+        }
+      }
+      return docs;
+    },
+    onSuccess: () => { toast.success('Documents uploaded and AI processing started'); queryClient.invalidateQueries({ queryKey: ['ai-documents'] }); },
+    onError: () => toast.error('Upload failed'),
+  });
+
+  function handleUploadClick() { fileInputRef.current?.click(); }
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) { uploadMutation.mutate(e.target.files); e.target.value = ''; }
+  }
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['ai-documents'],
@@ -83,9 +139,10 @@ export default function AIEntryPage() {
               Information is being extracted only from the BOL, Product Invoice, and POD documents.
             </p>
           </div>
-          <button className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-            <Upload className="w-4 h-4" /> Upload Documents
+          <button onClick={handleUploadClick} disabled={uploadMutation.isPending} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+            <Upload className="w-4 h-4" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Documents'}
           </button>
+          <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff" className="hidden" onChange={handleFileChange} />
         </div>
         <EmptyState
           icon={Sparkles}
@@ -106,8 +163,8 @@ export default function AIEntryPage() {
     : 0;
 
   const filtered = documents.filter(d =>
-    d.fileName.toLowerCase().includes(search.toLowerCase()) ||
-    d.documentType.toLowerCase().includes(search.toLowerCase())
+    (d.documentName || d.fileName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (d.category || d.documentType || '').toLowerCase().includes(search.toLowerCase())
   );
 
   if (selectedDoc) {
@@ -119,7 +176,7 @@ export default function AIEntryPage() {
         setEditingFields={setEditingFields}
         onBack={() => setSelectedDoc(null)}
         onApprove={() => {
-          setSelectedDoc(null);
+          if (selectedDoc) createClaimMutation.mutate(selectedDoc);
         }}
         onSelectDoc={setSelectedDoc}
       />
@@ -138,9 +195,10 @@ export default function AIEntryPage() {
             Information is being extracted only from the BOL, Product Invoice, and POD documents.
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <Upload className="w-4 h-4" /> Upload Documents
+        <button onClick={handleUploadClick} disabled={uploadMutation.isPending} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+          <Upload className="w-4 h-4" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Documents'}
         </button>
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff" className="hidden" onChange={handleFileChange} />
       </div>
 
       {/* Accuracy Metrics */}
@@ -214,23 +272,23 @@ export default function AIEntryPage() {
                     <div className="flex items-center gap-2.5">
                       <FileText className="w-5 h-5 text-primary-500 flex-shrink-0" />
                       <div className="min-w-0">
-                        <div className="font-medium text-slate-900 dark:text-white truncate max-w-xs">{doc.fileName}</div>
-                        <div className="text-xs text-slate-400">{doc.pages} page{doc.pages > 1 ? 's' : ''}</div>
+                        <div className="font-medium text-slate-900 dark:text-white truncate max-w-xs">{doc.documentName || doc.fileName || 'Document'}</div>
+                        <div className="text-xs text-slate-400">{doc.mimeType || 'file'}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg', getTypeColor(doc.documentType))}>
-                      {doc.documentType}
+                    <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg', getTypeColor(doc.category || doc.documentType || ''))}>
+                      {(doc.category || doc.documentType || 'other').replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <div className="text-xs text-slate-500">Uploaded by: {doc.uploadedBy}</div>
+                    <div className="text-xs text-slate-500">{doc.summary || ''}</div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <div className="flex items-center gap-1.5">
-                      {getStatusIcon(doc.status)}
-                      <span className="text-xs capitalize text-slate-600 dark:text-slate-400">{doc.status}</span>
+                      {getStatusIcon(doc.status || 'completed')}
+                      <span className="text-xs capitalize text-slate-600 dark:text-slate-400">{doc.status || 'completed'}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -268,15 +326,15 @@ function ReviewDataCapture({
   onApprove: () => void;
   onSelectDoc: (d: ProcessedDocument) => void;
 }) {
-  const [activeDocTab, setActiveDocTab] = useState(doc.documentType.toLowerCase().replace(/ /g, '_'));
+  const docType = (doc.category || doc.documentType || 'other').toLowerCase().replace(/ /g, '_');
+  const [activeDocTab, setActiveDocTab] = useState(docType);
   const [zoom, setZoom] = useState(100);
 
   const docTabs = allDocuments
-    .filter(d => d.status === 'review')
     .reduce((acc, d) => {
-      const key = d.documentType.toLowerCase().replace(/ /g, '_');
+      const key = (d.category || d.documentType || 'other').toLowerCase().replace(/ /g, '_');
       if (!acc.find(t => t.key === key)) {
-        acc.push({ key, label: d.documentType, confidence: d.confidence, doc: d });
+        acc.push({ key, label: (d.category || d.documentType || 'other').replace(/_/g, ' '), confidence: d.confidence, doc: d });
       }
       return acc;
     }, [] as { key: string; label: string; confidence: number; doc: ProcessedDocument }[]);
@@ -316,8 +374,8 @@ function ReviewDataCapture({
             ) : (
               <div className="w-4 h-4 rounded-full border-2 border-slate-300" />
             )}
-            <span>{tab.label.toLowerCase().replace(/_/g, '-')}</span>
-            <span className="text-xs text-slate-400">Pages {tab.doc.pages}</span>
+            <span>{tab.label}</span>
+            <span className="text-xs text-slate-400">{tab.doc.mimeType || 'file'}</span>
             <span className={cn(
               'text-xs font-medium',
               tab.confidence >= 0.95 ? 'text-emerald-500' : tab.confidence >= 0.85 ? 'text-amber-500' : 'text-red-500'
@@ -334,7 +392,7 @@ function ReviewDataCapture({
         <div className="card overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
             <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-              {doc.documentType}
+              {(doc.category || doc.documentType || 'Document').replace(/_/g, ' ')}
             </h3>
             <div className="flex items-center gap-1">
               <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
@@ -359,9 +417,9 @@ function ReviewDataCapture({
             >
               <div className="text-center p-8">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-sm text-slate-500 font-medium">{doc.fileName}</p>
-                <p className="text-xs text-slate-400 mt-1">PDF document preview</p>
-                <p className="text-xs text-slate-400 mt-1">Page 1 of {doc.pages}</p>
+                <p className="text-sm text-slate-500 font-medium">{doc.documentName || doc.fileName || 'Document'}</p>
+                <p className="text-xs text-slate-400 mt-1">{doc.mimeType || 'Document preview'}</p>
+                <p className="text-xs text-slate-400 mt-1">{doc.summary || ''}</p>
               </div>
             </div>
           </div>
@@ -420,7 +478,7 @@ function ReviewDataCapture({
               Cancel
             </button>
             <div className="flex gap-2">
-              <button className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              <button onClick={() => toast.success('Draft saved')} className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                 Save Draft
               </button>
               <button

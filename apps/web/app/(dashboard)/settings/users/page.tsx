@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useState, Fragment } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, put, post } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Users, Plus, Edit2, Trash2, Mail, Shield,
   CheckCircle, XCircle, Search, UserPlus,
-  MoreHorizontal, Key, ToggleLeft, ToggleRight,
+  MoreHorizontal, Key, ToggleLeft, ToggleRight, ShieldAlert,
 } from 'lucide-react';
 
 interface User {
@@ -24,29 +25,89 @@ interface User {
 }
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.isSuperAdmin || currentUser?.permissions?.includes('settings.manage_users') || false;
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Claims Processor');
   const [inviteFirst, setInviteFirst] = useState('');
   const [inviteLast, setInviteLast] = useState('');
 
+  const queryClient = useQueryClient();
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: () => getList<User>('/users'),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) => post(`/users/${userId}/reset-password`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Password reset email sent');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to reset password'),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+      put(`/users/${userId}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User status updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update user'),
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: Partial<User> }) =>
+      put(`/users/${userId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User updated');
+      setEditingUserId(null);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update user'),
   });
 
   const filtered = users.filter(u =>
     `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(search.toLowerCase())
   );
 
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string; role: string; firstName: string; lastName: string }) =>
+      post('/users', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setShowInvite(false);
+      setInviteEmail('');
+      setInviteFirst('');
+      setInviteLast('');
+      setInviteRole('Claims Processor');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to send invitation'),
+  });
+
   function handleInvite() {
     if (!inviteEmail.trim()) { toast.error('Email is required'); return; }
-    toast.success(`Invitation sent to ${inviteEmail}`);
-    setShowInvite(false);
-    setInviteEmail('');
-    setInviteFirst('');
-    setInviteLast('');
+    inviteMutation.mutate({
+      email: inviteEmail.trim(),
+      role: inviteRole,
+      firstName: inviteFirst.trim(),
+      lastName: inviteLast.trim(),
+    });
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <ShieldAlert className="w-12 h-12 text-red-400 mb-4" />
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h1>
+        <p className="text-sm text-slate-500">You don&apos;t have permission to manage users. Contact your administrator.</p>
+      </div>
+    );
   }
 
   if (isLoading) {
@@ -109,7 +170,7 @@ export default function UsersPage() {
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowInvite(false)} className="px-4 py-2 text-sm text-slate-500">Cancel</button>
-            <button onClick={handleInvite} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold"><Mail className="w-4 h-4 inline mr-1" /> Send Invitation</button>
+            <button onClick={handleInvite} disabled={inviteMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"><Mail className="w-4 h-4 inline mr-1" /> Send Invitation</button>
           </div>
         </div>
       )}
@@ -134,38 +195,79 @@ export default function UsersPage() {
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
             {filtered.map(user => (
-              <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-xs font-bold text-primary-600">{user.firstName[0]}{user.lastName[0]}</div>
-                    <div>
-                      <p className="font-medium text-slate-900 dark:text-white">{user.firstName} {user.lastName}</p>
-                      <p className="text-xs text-slate-400">{user.email}</p>
+              <Fragment key={user.id}>
+                <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-xs font-bold text-primary-600">{user.firstName[0]}{user.lastName[0]}</div>
+                      <div>
+                        <p className="font-medium text-slate-900 dark:text-white">{user.firstName} {user.lastName}</p>
+                        <p className="text-xs text-slate-400">{user.email}</p>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 hidden sm:table-cell"><span className="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{user.role}</span></td>
-                <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
-                <td className="px-4 py-3">
-                  {user.isActive ? (
-                    <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="w-3.5 h-3.5" /> Active</span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400" title="Reset Password"><Key className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => toast.success(user.isActive ? 'User deactivated' : 'User activated')} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400" title={user.isActive ? 'Deactivate' : 'Activate'}>
-                      {user.isActive ? <ToggleRight className="w-3.5 h-3.5 text-emerald-500" /> : <ToggleLeft className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell"><span className="text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{user.role}</span></td>
+                  <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
+                  <td className="px-4 py-3">
+                    {user.isActive ? (
+                      <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="w-3.5 h-3.5" /> Active</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => setEditingUserId(editingUserId === user.id ? null : user.id)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => resetPasswordMutation.mutate(user.id)} disabled={resetPasswordMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 disabled:opacity-50" title="Reset Password"><Key className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => toggleActiveMutation.mutate({ userId: user.id, isActive: !user.isActive })} disabled={toggleActiveMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 disabled:opacity-50" title={user.isActive ? 'Deactivate' : 'Activate'}>
+                        {user.isActive ? <ToggleRight className="w-3.5 h-3.5 text-emerald-500" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {editingUserId === user.id && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
+                      <UserEditForm user={user} onSave={(data) => updateUserMutation.mutate({ userId: user.id, data })} onCancel={() => setEditingUserId(null)} isSaving={updateUserMutation.isPending} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function UserEditForm({ user, onSave, onCancel, isSaving }: { user: User; onSave: (data: Partial<User>) => void; onCancel: () => void; isSaving: boolean }) {
+  const [firstName, setFirstName] = useState(user.firstName);
+  const [lastName, setLastName] = useState(user.lastName);
+  const [role, setRole] = useState(user.role);
+
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">First Name</label>
+        <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 w-36" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Last Name</label>
+        <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 w-36" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Role</label>
+        <select value={role} onChange={(e) => setRole(e.target.value)} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+          <option>Administrator</option>
+          <option>Claims Manager</option>
+          <option>Claims Processor</option>
+          <option>Viewer</option>
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => onSave({ firstName, lastName, role })} disabled={isSaving} className="bg-primary-500 hover:bg-primary-600 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50">Save</button>
+        <button onClick={onCancel} className="px-3 py-2 text-sm text-slate-500">Cancel</button>
       </div>
     </div>
   );

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
+import { post, apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -65,15 +67,48 @@ export default function NewReportPage() {
     setNewRecipient('');
   }
 
+  const saveMutation = useMutation({
+    mutationFn: (config: Record<string, unknown>) => post('/reports/insights', config),
+    onSuccess: () => {
+      toast.success('Report saved successfully');
+      router.push('/reports/export');
+    },
+    onError: () => toast.error('Failed to save report'),
+  });
+
   function handleSave() {
     if (!reportName.trim()) { toast.error('Report name is required'); return; }
-    toast.success('Report saved successfully');
-    router.push('/reports/export');
+    const config = {
+      name: reportName,
+      type: reportType,
+      format,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      columns: columns.filter(c => c.selected).map(c => c.key),
+      schedule: scheduleEnabled ? { frequency: scheduleFrequency, recipients } : undefined,
+    };
+    saveMutation.mutate(config);
   }
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (!reportName.trim()) { toast.error('Report name is required'); return; }
-    toast.success(`Generating ${format.toUpperCase()} report...`);
+    try {
+      const res = await apiClient.get(`/reports/export/${format}`, {
+        responseType: 'blob',
+        params: { reportName, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+      });
+      const blob = res.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'pdf' ? 'pdf' : format === 'csv' ? 'csv' : 'xlsx';
+      a.download = `${reportName.replace(/\s+/g, '-')}-${Date.now()}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} report downloaded`);
+    } catch {
+      toast.error('Failed to generate report');
+    }
   }
 
   return (

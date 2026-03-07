@@ -32,6 +32,15 @@
   body {
     @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
     font-feature-settings: "rlig" 1, "calt" 1;
+    --density-scale: 1;
+  }
+
+  body[data-density="compact"] {
+    --density-scale: 0.85;
+  }
+
+  body[data-density="dense"] {
+    --density-scale: 0.7;
   }
 }
 

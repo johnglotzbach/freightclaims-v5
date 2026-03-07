@@ -37,6 +37,9 @@ aiRouter.get('/copilot/conversations', aiController.getConversations);
 aiRouter.get('/copilot/conversations/:id', aiController.getConversation);
 aiRouter.delete('/copilot/conversations/:id', aiController.deleteConversation);
 
+// --- AI-processed documents ---
+aiRouter.get('/documents', aiController.getAIDocuments);
+
 // --- Agent status and monitoring ---
 aiRouter.get('/status', aiController.getAgentStatus);
 aiRouter.get('/history', aiController.getAgentHistory);

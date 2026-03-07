@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useState, useCallback, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -45,15 +45,46 @@ const COLUMN_INFO: Record<UploadType, string[]> = {
 };
 
 export default function MassUploadPage() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<UploadType>('claims');
   const [dragOver, setDragOver] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  const queryClient = useQueryClient();
   const { data: history = [], isLoading: historyLoading } = useQuery({
     queryKey: ['mass-upload-history'],
     queryFn: () => getList<UploadHistory>('/claims/mass-upload/history'),
   });
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, type }: { file: File; type: UploadType }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+      return apiClient.post('/claims/mass-upload', formData);
+    },
+    onSuccess: () => {
+      toast.success('Upload completed. Processing...');
+      queryClient.invalidateQueries({ queryKey: ['mass-upload-history'] });
+    },
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { message?: string } }; message?: string };
+      const msg = axiosErr?.response?.data?.message ?? axiosErr?.message ?? 'Upload failed. Please try again.';
+      toast.error(String(msg));
+    },
+  });
+
+  const handleDownloadTemplate = useCallback(() => {
+    const columns = COLUMN_INFO[activeTab];
+    const csvContent = columns.join(',') + '\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = UPLOAD_TABS.find(t => t.key === activeTab)?.template ?? `${activeTab}-template.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [activeTab]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -69,15 +100,14 @@ export default function MassUploadPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setSelectedFile(file);
+    e.target.value = '';
   };
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (!selectedFile) return;
-    setUploading(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setUploading(false);
-    setSelectedFile(null);
-    toast.success(`${selectedFile.name} uploaded successfully. Processing ${activeTab}...`);
+    uploadMutation.mutate({ file: selectedFile, type: activeTab }, {
+      onSuccess: () => setSelectedFile(null),
+    });
   };
 
   const tab = UPLOAD_TABS.find(t => t.key === activeTab)!;
@@ -134,10 +164,10 @@ export default function MassUploadPage() {
                   </button>
                   <button
                     onClick={handleUpload}
-                    disabled={uploading}
+                    disabled={uploadMutation.isPending}
                     className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                   >
-                    {uploading ? 'Uploading...' : `Upload ${tab.label}`}
+                    {uploadMutation.isPending ? 'Uploading...' : `Upload ${tab.label}`}
                   </button>
                 </div>
               </div>
@@ -150,7 +180,7 @@ export default function MassUploadPage() {
                 <p className="text-xs text-slate-400">or</p>
                 <label className="inline-block cursor-pointer bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors">
                   Browse Files
-                  <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
+                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
                 </label>
                 <p className="text-xs text-slate-400">Supported formats: CSV, XLSX, XLS (max 10MB)</p>
               </div>
@@ -166,7 +196,7 @@ export default function MassUploadPage() {
                 <p className="text-xs text-slate-500">Use our template to ensure your data is formatted correctly</p>
               </div>
             </div>
-            <button className="flex items-center gap-1.5 text-sm font-medium text-primary-500 hover:text-primary-600">
+            <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 text-sm font-medium text-primary-500 hover:text-primary-600">
               <Download className="w-4 h-4" /> {tab.template}
             </button>
           </div>
@@ -229,7 +259,7 @@ export default function MassUploadPage() {
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{new Date(h.uploadedAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
-                      <button className="text-xs text-primary-500 hover:text-primary-600 font-medium"><Download className="w-4 h-4 inline" /></button>
+                      <button onClick={() => toast.info('Download not available for this upload')} className="text-xs text-primary-500 hover:text-primary-600 font-medium"><Download className="w-4 h-4 inline" /></button>
                     </td>
                   </tr>
                 ))}

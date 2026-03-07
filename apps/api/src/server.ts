@@ -147,6 +147,12 @@ initCache().catch((err) => logger.warn({ err }, 'Cache init failed — memory-on
 
 const server = app.listen(env.PORT, () => {
   logger.info(`FreightClaims API v5.0.0 running on port ${env.PORT} [${env.NODE_ENV}]`);
+  logger.info({
+    geminiKey: env.GEMINI_API_KEY ? `${env.GEMINI_API_KEY.slice(0, 4)}...${env.GEMINI_API_KEY.slice(-4)} (${env.GEMINI_API_KEY.length} chars)` : 'NOT SET',
+    aiModel: env.AI_MODEL,
+    smtp: env.SMTP_HOST ? `${env.SMTP_HOST}:${env.SMTP_PORT}` : 'NOT SET',
+    storage: env.STORAGE_MODE || 'local',
+  }, 'Service configuration');
 });
 
 /** Graceful shutdown -- drain connections before exiting */

@@ -19,6 +19,7 @@ interface EmailPayload {
   text?: string;
   from?: string;
   replyTo?: string;
+  cc?: string | string[];
   attachments?: Array<{
     filename: string;
     content: Buffer | string;
@@ -70,6 +71,7 @@ export const smtpService = {
     const info = await transporter.sendMail({
       from,
       to: Array.isArray(payload.to) ? payload.to.join(', ') : payload.to,
+      cc: payload.cc ? (Array.isArray(payload.cc) ? payload.cc.join(', ') : payload.cc) : undefined,
       subject: payload.subject,
       html: payload.html,
       text: payload.text,

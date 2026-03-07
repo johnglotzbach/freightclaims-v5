@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { get, put } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -44,22 +46,42 @@ export default function ProfileSettingsPage() {
 }
 
 function GeneralTab() {
-  const [firstName, setFirstName] = useState('Jordan');
-  const [lastName, setLastName] = useState('Glotzer');
-  const [email, setEmail] = useState('jordan@freightclaims.com');
-  const [phone, setPhone] = useState('(555) 123-4567');
+  const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
+
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
+      setEmail(user.email || '');
+      setPhone(user.phone || '');
+      setTimezone(user.timezone || 'America/New_York');
+    }
+  }, [user]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: { firstName: string; lastName: string; email: string; phone: string; timezone: string }) =>
+      put('/users/me', data),
+    onSuccess: () => toast.success('Profile updated'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to save profile'),
+  });
+
+  const initials = `${(firstName || '?')[0]}${(lastName || '?')[0]}`.toUpperCase();
 
   return (
     <div className="card p-6 space-y-5 max-w-2xl">
       <div className="flex items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
         <div className="relative">
-          <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-2xl font-bold text-primary-600">JG</div>
+          <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-2xl font-bold text-primary-600">{initials}</div>
           <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-primary-500 rounded-full flex items-center justify-center text-white shadow-lg"><Camera className="w-3.5 h-3.5" /></button>
         </div>
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-white">Jordan Glotzer</h3>
-          <p className="text-xs text-slate-500">Administrator</p>
+          <h3 className="font-semibold text-slate-900 dark:text-white">{firstName} {lastName}</h3>
+          <p className="text-xs text-slate-500">{user?.role || 'User'}</p>
         </div>
       </div>
 
@@ -80,38 +102,65 @@ function GeneralTab() {
           <option value="America/Los_Angeles">Pacific Time (PT)</option>
         </select>
       </div>
-      <button onClick={() => toast.success('Profile updated')} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1"><Save className="w-4 h-4" /> Save Changes</button>
+      <button onClick={() => saveMutation.mutate({ firstName, lastName, email, phone, timezone })} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 disabled:opacity-50" disabled={saveMutation.isPending}><Save className="w-4 h-4" /> Save Changes</button>
     </div>
   );
 }
 
 function NotificationsTab() {
-  const categories = [
+  const initialPrefs: Record<string, { email: boolean; push: boolean; inApp: boolean }> = {
+    claim_created: { email: true, push: true, inApp: true },
+    claim_filed: { email: true, push: true, inApp: true },
+    claim_settled: { email: true, push: false, inApp: true },
+    claim_status_changed: { email: false, push: true, inApp: true },
+    claim_assigned: { email: true, push: true, inApp: true },
+    task_assigned: { email: true, push: true, inApp: true },
+    task_due: { email: true, push: true, inApp: true },
+    task_overdue: { email: true, push: true, inApp: true },
+    task_completed: { email: false, push: false, inApp: true },
+    email_received: { email: true, push: true, inApp: true },
+    document_uploaded: { email: false, push: false, inApp: true },
+    document_processed: { email: false, push: true, inApp: true },
+    comment_added: { email: false, push: true, inApp: true },
+    comment_mention: { email: true, push: true, inApp: true },
+    automation_triggered: { email: false, push: false, inApp: true },
+    stagnant_claim: { email: true, push: true, inApp: true },
+  };
+  const [preferences, setPreferences] = useState(initialPrefs);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: Record<string, { email: boolean; push: boolean; inApp: boolean }>) =>
+      put('/users/preferences', data),
+    onSuccess: () => toast.success('Notification preferences saved'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to save preferences'),
+  });
+
+  const categories: { label: string; items: { key: string; label: string }[] }[] = [
     { label: 'Claim Updates', items: [
-      { key: 'claim_created', label: 'New claim created', email: true, push: true, inApp: true },
-      { key: 'claim_filed', label: 'Claim filed', email: true, push: true, inApp: true },
-      { key: 'claim_settled', label: 'Claim settled', email: true, push: false, inApp: true },
-      { key: 'claim_status_changed', label: 'Status changed', email: false, push: true, inApp: true },
-      { key: 'claim_assigned', label: 'Claim assigned to me', email: true, push: true, inApp: true },
+      { key: 'claim_created', label: 'New claim created' },
+      { key: 'claim_filed', label: 'Claim filed' },
+      { key: 'claim_settled', label: 'Claim settled' },
+      { key: 'claim_status_changed', label: 'Status changed' },
+      { key: 'claim_assigned', label: 'Claim assigned to me' },
     ]},
     { label: 'Tasks', items: [
-      { key: 'task_assigned', label: 'Task assigned to me', email: true, push: true, inApp: true },
-      { key: 'task_due', label: 'Task due reminder', email: true, push: true, inApp: true },
-      { key: 'task_overdue', label: 'Task overdue', email: true, push: true, inApp: true },
-      { key: 'task_completed', label: 'Task completed', email: false, push: false, inApp: true },
+      { key: 'task_assigned', label: 'Task assigned to me' },
+      { key: 'task_due', label: 'Task due reminder' },
+      { key: 'task_overdue', label: 'Task overdue' },
+      { key: 'task_completed', label: 'Task completed' },
     ]},
     { label: 'Emails & Documents', items: [
-      { key: 'email_received', label: 'New email received', email: true, push: true, inApp: true },
-      { key: 'document_uploaded', label: 'Document uploaded', email: false, push: false, inApp: true },
-      { key: 'document_processed', label: 'AI document processed', email: false, push: true, inApp: true },
+      { key: 'email_received', label: 'New email received' },
+      { key: 'document_uploaded', label: 'Document uploaded' },
+      { key: 'document_processed', label: 'AI document processed' },
     ]},
     { label: 'Comments', items: [
-      { key: 'comment_added', label: 'Comment added', email: false, push: true, inApp: true },
-      { key: 'comment_mention', label: 'Mentioned in comment', email: true, push: true, inApp: true },
+      { key: 'comment_added', label: 'Comment added' },
+      { key: 'comment_mention', label: 'Mentioned in comment' },
     ]},
     { label: 'Automation', items: [
-      { key: 'automation_triggered', label: 'Automation triggered', email: false, push: false, inApp: true },
-      { key: 'stagnant_claim', label: 'Stagnant claim alert', email: true, push: true, inApp: true },
+      { key: 'automation_triggered', label: 'Automation triggered' },
+      { key: 'stagnant_claim', label: 'Stagnant claim alert' },
     ]},
   ];
 
@@ -127,26 +176,38 @@ function NotificationsTab() {
               <span className="w-16 text-center text-[10px] font-semibold text-slate-400 uppercase">Push</span>
               <span className="w-16 text-center text-[10px] font-semibold text-slate-400 uppercase">In-App</span>
             </div>
-            {cat.items.map(item => (
-              <div key={item.key} className="flex items-center gap-4 py-2">
-                <span className="flex-1 text-sm text-slate-700 dark:text-slate-300">{item.label}</span>
-                {['email', 'push', 'inApp'].map(channel => (
-                  <div key={channel} className="w-16 flex justify-center">
-                    <input type="checkbox" defaultChecked={(item as any)[channel]} className="rounded border-slate-300 text-primary-500 w-4 h-4" />
-                  </div>
-                ))}
-              </div>
-            ))}
+            {cat.items.map(item => {
+              const prefs = preferences[item.key] ?? { email: true, push: true, inApp: true };
+              return (
+                <div key={item.key} className="flex items-center gap-4 py-2">
+                  <span className="flex-1 text-sm text-slate-700 dark:text-slate-300">{item.label}</span>
+                  {(['email', 'push', 'inApp'] as const).map(channel => (
+                    <div key={channel} className="w-16 flex justify-center">
+                      <input type="checkbox" checked={prefs[channel]} onChange={() => setPreferences(prev => ({ ...prev, [item.key]: { ...prev[item.key], [channel]: !prefs[channel] } }))} className="rounded border-slate-300 text-primary-500 w-4 h-4" />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}
-      <button onClick={() => toast.success('Notification preferences saved')} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold"><Save className="w-4 h-4 inline mr-1" /> Save Preferences</button>
+      <button onClick={() => saveMutation.mutate(preferences)} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" disabled={saveMutation.isPending}><Save className="w-4 h-4 inline mr-1" /> Save Preferences</button>
     </div>
   );
 }
 
 function SignatureTab() {
-  const [signature, setSignature] = useState('<p>Best regards,</p><p><strong>Jordan Glotzer</strong><br/>Lead Developer<br/>FreightClaims<br/>jordan@freightclaims.com</p>');
+  const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
+  const defaultSig = user ? `<p>Best regards,</p><p><strong>${user.firstName || ''} ${user.lastName || ''}</strong><br/>${user.role || ''}<br/>FreightClaims<br/>${user.email || ''}</p>` : '';
+  const [signature, setSignature] = useState(defaultSig);
+  useEffect(() => { if (defaultSig && !signature) setSignature(defaultSig); }, [defaultSig]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: { signature: string }) => put('/users/signature', data),
+    onSuccess: () => toast.success('Signature saved'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to save signature'),
+  });
 
   return (
     <div className="card p-6 space-y-4 max-w-2xl">
@@ -157,7 +218,7 @@ function SignatureTab() {
         <p className="text-xs text-slate-500 mb-2">Preview</p>
         <div className="text-sm" dangerouslySetInnerHTML={{ __html: signature }} />
       </div>
-      <button onClick={() => toast.success('Signature saved')} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold"><Save className="w-4 h-4 inline mr-1" /> Save Signature</button>
+      <button onClick={() => saveMutation.mutate({ signature })} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" disabled={saveMutation.isPending}><Save className="w-4 h-4 inline mr-1" /> Save Signature</button>
     </div>
   );
 }
@@ -166,6 +227,16 @@ function DashboardTab() {
   const [defaultView, setDefaultView] = useState('claims');
   const [claimsPerPage, setClaimsPerPage] = useState(25);
   const [defaultDateRange, setDefaultDateRange] = useState('30');
+  const [columns, setColumns] = useState<Record<string, boolean>>(
+    Object.fromEntries(['Claim Number', 'PRO Number', 'Status', 'Customer', 'Carrier', 'Amount', 'Filed Date', 'Ship Date', 'Delivery Date', 'Type', 'Assigned To', 'Days Open'].map(c => [c, true]))
+  );
+
+  const saveMutation = useMutation({
+    mutationFn: (data: { defaultView: string; claimsPerPage: number; defaultDateRange: string; columns: Record<string, boolean> }) =>
+      put('/users/dashboard-settings', data),
+    onSuccess: () => toast.success('Dashboard settings saved'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to save settings'),
+  });
 
   return (
     <div className="card p-6 space-y-5 max-w-2xl">
@@ -205,11 +276,11 @@ function DashboardTab() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         {['Claim Number', 'PRO Number', 'Status', 'Customer', 'Carrier', 'Amount', 'Filed Date', 'Ship Date', 'Delivery Date', 'Type', 'Assigned To', 'Days Open'].map(col => (
           <label key={col} className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" defaultChecked className="rounded border-slate-300 text-primary-500 w-3.5 h-3.5" /> {col}
+            <input type="checkbox" checked={columns[col] ?? true} onChange={() => setColumns(prev => ({ ...prev, [col]: !(prev[col] ?? true) }))} className="rounded border-slate-300 text-primary-500 w-3.5 h-3.5" /> {col}
           </label>
         ))}
       </div>
-      <button onClick={() => toast.success('Dashboard settings saved')} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold"><Save className="w-4 h-4 inline mr-1" /> Save Settings</button>
+      <button onClick={() => saveMutation.mutate({ defaultView, claimsPerPage, defaultDateRange, columns })} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" disabled={saveMutation.isPending}><Save className="w-4 h-4 inline mr-1" /> Save Settings</button>
     </div>
   );
 }

@@ -4,24 +4,75 @@
  * Location: apps/api/src/services/automation.service.ts
  */
 import { automationRepository } from '../repositories/automation.repository';
+import { NotFoundError } from '../utils/errors';
+import type { JwtPayload } from '../middleware/auth.middleware';
+import { forCorporate } from '../middleware/tenant.middleware';
+
+async function verifyRuleAccess(id: string, user: JwtPayload) {
+  const rule = await automationRepository.getRuleById(id);
+  if (!rule) throw new NotFoundError(`Automation rule ${id} not found`);
+  if (!user.isSuperAdmin && rule.corporateId && rule.corporateId !== user.corporateId) {
+    throw new NotFoundError(`Automation rule ${id} not found`);
+  }
+  return rule;
+}
+
+async function verifyTemplateAccess(id: string, user: JwtPayload) {
+  const tpl = await automationRepository.getTemplateById(id);
+  if (!tpl) throw new NotFoundError(`Automation template ${id} not found`);
+  if (!user.isSuperAdmin && tpl.corporateId && tpl.corporateId !== user.corporateId) {
+    throw new NotFoundError(`Automation template ${id} not found`);
+  }
+  return tpl;
+}
 
 export const automationService = {
-  async listRules() { return automationRepository.listRules(); },
-  async getRuleById(id: string) { return automationRepository.getRuleById(id); },
-  async createRule(data: Record<string, unknown>) { return automationRepository.createRule(data); },
-  async updateRule(id: string, data: Record<string, unknown>) { return automationRepository.updateRule(id, data); },
-  async deleteRule(id: string) { return automationRepository.deleteRule(id); },
-  async listTemplates() { return automationRepository.listTemplates(); },
-  async createTemplate(data: Record<string, unknown>) { return automationRepository.createTemplate(data); },
-  async updateTemplate(id: string, data: Record<string, unknown>) { return automationRepository.updateTemplate(id, data); },
-  async deleteTemplate(id: string) { return automationRepository.deleteTemplate(id); },
-  /** Evaluates and executes an automation rule against matching claims */
-  async triggerRule(ruleId: string) {
-    const rule = await automationRepository.getRuleById(ruleId);
-    if (!rule) throw new Error(`Automation rule ${ruleId} not found`);
+  async listRules(user: JwtPayload) {
+    return automationRepository.listRules(forCorporate(user.corporateId, user.isSuperAdmin));
+  },
+
+  async getRuleById(id: string, user: JwtPayload) {
+    return verifyRuleAccess(id, user);
+  },
+
+  async createRule(data: Record<string, unknown>, user: JwtPayload) {
+    return automationRepository.createRule({ ...data, corporateId: user.corporateId });
+  },
+
+  async updateRule(id: string, data: Record<string, unknown>, user: JwtPayload) {
+    await verifyRuleAccess(id, user);
+    return automationRepository.updateRule(id, data);
+  },
+
+  async deleteRule(id: string, user: JwtPayload) {
+    await verifyRuleAccess(id, user);
+    return automationRepository.deleteRule(id);
+  },
+
+  async listTemplates(user: JwtPayload) {
+    return automationRepository.listTemplates(forCorporate(user.corporateId, user.isSuperAdmin));
+  },
+
+  async createTemplate(data: Record<string, unknown>, user: JwtPayload) {
+    return automationRepository.createTemplate({ ...data, corporateId: user.corporateId });
+  },
+
+  async updateTemplate(id: string, data: Record<string, unknown>, user: JwtPayload) {
+    await verifyTemplateAccess(id, user);
+    return automationRepository.updateTemplate(id, data);
+  },
+
+  async deleteTemplate(id: string, user: JwtPayload) {
+    await verifyTemplateAccess(id, user);
+    return automationRepository.deleteTemplate(id);
+  },
+
+  async triggerRule(ruleId: string, user: JwtPayload) {
+    const rule = await verifyRuleAccess(ruleId, user);
     if (!rule.isActive) return { ruleId, triggered: false, reason: 'Rule is inactive' };
 
-    const matched = await automationRepository.findMatchingClaims(ruleId);
+    const tenantFilter = forCorporate(user.corporateId, user.isSuperAdmin);
+    const matched = await automationRepository.findMatchingClaims(ruleId, tenantFilter);
     let actioned = 0;
 
     for (const claim of matched) {

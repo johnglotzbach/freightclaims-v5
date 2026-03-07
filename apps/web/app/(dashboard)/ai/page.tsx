@@ -37,6 +37,7 @@ export default function AiCopilotPage() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   async function handleSend() {
     if (!input.trim() || isLoading) return;
@@ -51,6 +52,7 @@ export default function AiCopilotPage() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setChatError(null);
 
     try {
       const response = await post<{ response: string; conversationId: string }>('/ai/copilot/chat', {
@@ -65,8 +67,10 @@ export default function AiCopilotPage() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch {
-      toast.error('Failed to get AI response');
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.error || err?.message || 'Failed to get AI response. Please try again.';
+      setChatError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -125,6 +129,11 @@ export default function AiCopilotPage() {
         </div>
 
         <div className="flex-1 card overflow-y-auto p-5 space-y-3">
+          {chatError && (
+            <div className="p-4 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+              <p className="text-sm text-red-600 dark:text-red-400">{chatError}</p>
+            </div>
+          )}
           {messages.map((msg) => (
             <div
               key={msg.id}

@@ -8,6 +8,7 @@
     "migrate": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts",
+    "reset": "node prisma/reset-and-seed.mjs",
     "studio": "prisma studio",
     "push": "prisma db push",
     "format": "prisma format"

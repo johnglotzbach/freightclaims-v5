@@ -142,7 +142,7 @@ export default function CompanyEditorPage() {
               <div><p className="text-xl font-bold text-slate-900 dark:text-white">{company.openClaims ?? 0}</p><p className="text-[10px] text-slate-500 uppercase">Open</p></div>
               <div><p className="text-xl font-bold text-emerald-500">{company.settledClaims ?? 0}</p><p className="text-[10px] text-slate-500 uppercase">Settled</p></div>
             </div>
-            <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Edit2 className="w-4 h-4 text-slate-400" /></button>
+            <button onClick={() => toast.info('Edit company from the Companies list page')} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><Edit2 className="w-4 h-4 text-slate-400" /></button>
           </div>
         </div>
       </div>
@@ -165,9 +165,9 @@ export default function CompanyEditorPage() {
       {/* Tab Content */}
       <div className="animate-fade-in">
         {activeTab === 'overview' && <OverviewTab company={company} />}
-        {activeTab === 'locations' && (locationsLoading ? <TableSkeleton /> : <LocationsTab locations={locations} />)}
-        {activeTab === 'contacts' && (contactsLoading ? <TableSkeleton /> : <ContactsTab contacts={contacts} />)}
-        {activeTab === 'products' && (productsLoading ? <TableSkeleton /> : <ProductsTab products={products} />)}
+        {activeTab === 'locations' && (locationsLoading ? <TableSkeleton /> : <LocationsTab locations={locations} companyId={id} />)}
+        {activeTab === 'contacts' && (contactsLoading ? <TableSkeleton /> : <ContactsTab contacts={contacts} companyId={id} />)}
+        {activeTab === 'products' && (productsLoading ? <TableSkeleton /> : <ProductsTab products={products} companyId={id} />)}
         {activeTab === 'claims' && <ClaimsTab companyId={id} />}
       </div>
     </div>
@@ -209,10 +209,12 @@ function OverviewTab({ company }: { company: CompanyDetail }) {
   );
 }
 
-function LocationsTab({ locations }: { locations: Location[] }) {
+function LocationsTab({ locations, companyId }: { locations: Location[]; companyId: string }) {
+  const queryClient = useQueryClient();
+  const deleteMut = useMutation({ mutationFn: (locId: string) => del(`/customers/${companyId}/addresses/${locId}`), onSuccess: () => { toast.success('Location deleted'); queryClient.invalidateQueries({ queryKey: ['customer-locations'] }); }, onError: () => toast.error('Failed to delete location') });
   return (
     <div className="space-y-4">
-      <div className="flex justify-end"><button className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Add Location</button></div>
+      <div className="flex justify-end"><button onClick={() => toast.info('Use the Locations tab under Companies to add new locations')} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Add Location</button></div>
       {locations.length === 0 ? (
         <EmptyState icon={MapPin} title="No locations" description="Add a location to this company." />
       ) : (
@@ -229,8 +231,8 @@ function LocationsTab({ locations }: { locations: Location[] }) {
               <p className="text-sm text-slate-600 dark:text-slate-400">{loc.address1}</p>
               <p className="text-sm text-slate-500">{loc.city}, {loc.state} {loc.zipCode}</p>
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <button className="text-xs text-primary-500 hover:text-primary-600 font-medium">Edit</button>
-                <button className="text-xs text-red-500 hover:text-red-600 font-medium">Delete</button>
+                <button onClick={() => toast.info('Edit via Companies > Locations')} className="text-xs text-primary-500 hover:text-primary-600 font-medium">Edit</button>
+                <button onClick={() => { if (confirm('Delete this location?')) deleteMut.mutate(loc.id); }} className="text-xs text-red-500 hover:text-red-600 font-medium">Delete</button>
               </div>
             </div>
           ))}
@@ -240,10 +242,12 @@ function LocationsTab({ locations }: { locations: Location[] }) {
   );
 }
 
-function ContactsTab({ contacts }: { contacts: Contact[] }) {
+function ContactsTab({ contacts, companyId }: { contacts: Contact[]; companyId: string }) {
+  const queryClient = useQueryClient();
+  const deleteMut = useMutation({ mutationFn: (cId: string) => del(`/customers/${companyId}/contacts/${cId}`), onSuccess: () => { toast.success('Contact deleted'); queryClient.invalidateQueries({ queryKey: ['customer-contacts'] }); }, onError: () => toast.error('Failed to delete contact') });
   return (
     <div className="space-y-4">
-      <div className="flex justify-end"><button className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Add Contact</button></div>
+      <div className="flex justify-end"><button onClick={() => toast.info('Use the Contacts tab under Companies to add new contacts')} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Add Contact</button></div>
       {contacts.length === 0 ? (
         <EmptyState icon={Users} title="No contacts" description="Add a contact to this company." />
       ) : (
@@ -274,8 +278,9 @@ function ContactsTab({ contacts }: { contacts: Contact[] }) {
                   <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{c.phone || '—'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{c.title || '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => c.email && window.open(`mailto:${c.email}`)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Mail className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => toast.info('Edit via Companies > Contacts')} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => { if (confirm('Delete this contact?')) deleteMut.mutate(c.id); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </td>
                 </tr>
               ))}
@@ -287,16 +292,18 @@ function ContactsTab({ contacts }: { contacts: Contact[] }) {
   );
 }
 
-function ProductsTab({ products }: { products: Product[] }) {
+function ProductsTab({ products, companyId }: { products: Product[]; companyId: string }) {
+  const queryClient = useQueryClient();
+  const deleteMut = useMutation({ mutationFn: (pId: string) => del(`/customers/products/${pId}?customerId=${companyId}`), onSuccess: () => { toast.success('Product deleted'); queryClient.invalidateQueries({ queryKey: ['customer-products'] }); }, onError: () => toast.error('Failed to delete product') });
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{products.length} products in catalog</p>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+          <button onClick={() => toast.info('Use the Products tab under Companies to upload catalogs')} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
             <Upload className="w-4 h-4" /> Upload Catalog
           </button>
-          <button className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          <button onClick={() => toast.info('Use the Products tab under Companies to add products')} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
             <Plus className="w-4 h-4" /> Add Product
           </button>
         </div>
@@ -326,8 +333,8 @@ function ProductsTab({ products }: { products: Product[] }) {
                   <td className="px-4 py-3 hidden md:table-cell text-xs">{p.value ? `$${p.value.toLocaleString()}` : '—'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{p.weight ? `${p.weight} lbs` : '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => toast.info('Edit via Companies > Products')} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => { if (confirm('Delete this product?')) deleteMut.mutate(p.id); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </td>
                 </tr>
               ))}
@@ -340,11 +347,42 @@ function ProductsTab({ products }: { products: Product[] }) {
 }
 
 function ClaimsTab({ companyId }: { companyId: string }) {
-  return (
+  const { data: claims = [], isLoading } = useQuery({
+    queryKey: ['company-claims', companyId],
+    queryFn: () => getList<any>(`/claims?customerId=${companyId}`),
+  });
+
+  if (isLoading) return <TableSkeleton />;
+  if (claims.length === 0) return (
     <div className="card p-6 text-center py-12">
       <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-      <p className="text-sm text-slate-500 mb-3">Claims for this company will be loaded from the API</p>
-      <Link href="/claims/list" className="text-sm text-primary-500 hover:text-primary-600 font-medium">View All Claims</Link>
+      <p className="text-sm text-slate-500 mb-3">No claims found for this company</p>
+      <Link href={`/claims/new?customerId=${companyId}`} className="text-sm text-primary-500 hover:text-primary-600 font-medium">File a Claim</Link>
+    </div>
+  );
+
+  return (
+    <div className="card overflow-hidden">
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Claim #</th>
+          <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Status</th>
+          <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Amount</th>
+          <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Filed</th>
+          <th className="text-right px-4 py-3"></th>
+        </tr></thead>
+        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+          {claims.map((c: any) => (
+            <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <td className="px-4 py-3 font-mono font-medium text-slate-900 dark:text-white">{c.claimNumber}</td>
+              <td className="px-4 py-3"><span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-500/10 dark:text-primary-400 capitalize">{c.status?.replace(/_/g, ' ')}</span></td>
+              <td className="px-4 py-3 font-medium">${Number(c.claimAmount || 0).toLocaleString()}</td>
+              <td className="px-4 py-3 text-xs text-slate-500">{c.filingDate ? new Date(c.filingDate).toLocaleDateString() : '—'}</td>
+              <td className="px-4 py-3 text-right"><Link href={`/claims/${c.id}`} className="text-xs text-primary-500 hover:text-primary-600 font-medium">View</Link></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

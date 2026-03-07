@@ -24,15 +24,27 @@ export const claimsRouter: Router = Router();
 // All claim routes require authentication
 claimsRouter.use(authenticate);
 
-// --- Core claim CRUD ---
+// --- Named/static routes (must be before /:id) ---
+
 claimsRouter.get('/', validate(listClaimsQuerySchema, 'query'), claimsController.list);
-claimsRouter.get('/:id', claimsController.getById);
 claimsRouter.post('/', validate(createClaimSchema), claimsController.create);
+
+claimsRouter.get('/dashboard/stats', claimsController.getDashboardStats);
+
+claimsRouter.post('/mass-upload', authorize(['admin', 'manager']), claimsController.massUpload);
+claimsRouter.get('/mass-upload/history', claimsController.getMassUploadHistory);
+
+claimsRouter.get('/settings/all', authorize(['admin']), claimsController.getSettings);
+claimsRouter.put('/settings', authorize(['admin']), claimsController.updateSettings);
+
+// --- Parameterized /:id routes ---
+
+claimsRouter.get('/:id', claimsController.getById);
 claimsRouter.put('/:id', validate(updateClaimSchema), claimsController.update);
 claimsRouter.delete('/:id', authorize(['admin', 'manager']), claimsController.delete);
 
 // --- Claim status workflow ---
-claimsRouter.put('/:id/status', claimsController.updateStatus);
+claimsRouter.put('/:id/status', authorize(['admin', 'manager']), claimsController.updateStatus);
 
 // --- Claim parties (claimant, carrier, payee) ---
 claimsRouter.get('/:id/parties', claimsController.getParties);
@@ -58,23 +70,12 @@ claimsRouter.delete('/:id/tasks/:taskId', claimsController.deleteTask);
 
 // --- Claim payments ---
 claimsRouter.get('/:id/payments', claimsController.getPayments);
-claimsRouter.post('/:id/payments', claimsController.addPayment);
-claimsRouter.put('/:id/payments/:paymentId', claimsController.updatePayment);
+claimsRouter.post('/:id/payments', authorize(['admin', 'manager']), claimsController.addPayment);
+claimsRouter.put('/:id/payments/:paymentId', authorize(['admin', 'manager']), claimsController.updatePayment);
 
 // --- Claim custom identifiers ---
 claimsRouter.get('/:id/identifiers', claimsController.getIdentifiers);
 claimsRouter.post('/:id/identifiers', claimsController.addIdentifier);
-
-// --- Dashboard / stats ---
-claimsRouter.get('/dashboard/stats', claimsController.getDashboardStats);
-
-// --- Mass upload ---
-claimsRouter.post('/mass-upload', claimsController.massUpload);
-claimsRouter.get('/mass-upload/history', claimsController.getMassUploadHistory);
-
-// --- Claim settings ---
-claimsRouter.get('/settings/all', authorize(['admin']), claimsController.getSettings);
-claimsRouter.put('/settings', authorize(['admin']), claimsController.updateSettings);
 
 // --- Acknowledgement ---
 claimsRouter.get('/:id/acknowledgement', claimsController.getAcknowledgement);

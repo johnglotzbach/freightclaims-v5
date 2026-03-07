@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import React, { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, del } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import {
   Truck, Plus, Search, Filter, Download, Upload,
   MapPin, Calendar, Package, ArrowRight, MoreVertical,
@@ -44,6 +46,9 @@ const STATUS_CONFIG: Record<ShipmentStatus, { label: string; color: string }> = 
 };
 
 export default function ShipmentsPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
   const { data: shipments = [], isLoading } = useQuery({
     queryKey: ['shipments'],
     queryFn: () => getList<Shipment>('/shipments'),
@@ -52,6 +57,31 @@ export default function ShipmentsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | ShipmentStatus>('all');
   const [modeFilter, setModeFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => del(`/shipments/${id}`),
+    onSuccess: () => { toast.success('Shipment deleted'); queryClient.invalidateQueries({ queryKey: ['shipments'] }); },
+    onError: () => toast.error('Failed to delete shipment'),
+  });
+
+  function handleExport() {
+    const csv = ['PRO Number,BOL Number,Carrier,SCAC,Origin,Destination,Ship Date,Status,Mode', ...shipments.map(s => `"${s.proNumber}","${s.bolNumber}","${s.carrierName}","${s.carrierScac}","${s.originCity} ${s.originState}","${s.destinationCity} ${s.destinationState}","${s.shipDate}","${s.status}","${s.mode}"`)].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'shipments.csv'; a.click(); URL.revokeObjectURL(url);
+    toast.success('Shipments exported');
+  }
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    post<any>('/shipments/mass-upload', formData)
+      .then(() => { toast.success('Shipments imported'); queryClient.invalidateQueries({ queryKey: ['shipments'] }); })
+      .catch(() => toast.error('Import failed'));
+    e.target.value = '';
+  }
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /><TableSkeleton /></div>;
   if (shipments.length === 0) return <EmptyState icon={Truck} title="No shipments yet" description="Create your first shipment to start tracking freight." />;
@@ -78,8 +108,9 @@ export default function ShipmentsPage() {
           <p className="text-sm text-slate-500 mt-0.5">Track and manage all freight shipments</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"><Upload className="w-4 h-4" /> Import</button>
-          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"><Download className="w-4 h-4" /> Export</button>
+          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"><Upload className="w-4 h-4" /> Import</button>
+          <button onClick={handleExport} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"><Download className="w-4 h-4" /> Export</button>
           <Link href="/shipments/new" className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold"><Plus className="w-4 h-4" /> New Shipment</Link>
         </div>
       </div>
@@ -164,9 +195,10 @@ export default function ShipmentsPage() {
                         {s.actualDelivery && <div><span className="text-slate-500">Actual Delivery:</span> <span className="font-medium ml-1">{s.actualDelivery}</span></div>}
                       </div>
                       <div className="flex gap-2 mt-3">
-                        <button className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><Eye className="w-3 h-3" /> View Details</button>
-                        <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Edit2 className="w-3 h-3" /> Edit</button>
-                        {!s.claimId && <button className="flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600 font-medium"><Package className="w-3 h-3" /> File Claim</button>}
+                        <Link href={`/shipments/${s.id}`} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><Eye className="w-3 h-3" /> View Details</Link>
+                        <Link href={`/shipments/${s.id}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Edit2 className="w-3 h-3" /> Edit</Link>
+                        {!s.claimId && <Link href={`/claims/new?shipmentId=${s.id}`} className="flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600 font-medium"><Package className="w-3 h-3" /> File Claim</Link>}
+                        <button onClick={() => { if (window.confirm('Delete this shipment?')) deleteMutation.mutate(s.id); }} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium"><Trash2 className="w-3 h-3" /> Delete</button>
                       </div>
                     </td>
                   </tr>

@@ -147,6 +147,7 @@ model Customer {
   contacts       CustomerContact[]
   addresses      CustomerAddress[]
   notes          CustomerNote[]
+  productCatalog ProductCatalog[]
   claims         Claim[]
   shipments      Shipment[]
 
@@ -202,6 +203,22 @@ model CustomerNote {
 
   @@index([customerId])
   @@map("customer_notes")
+}
+
+model ProductCatalog {
+  id          String   @id @default(uuid())
+  customerId   String   @map("customer_id")
+  name        String
+  sku         String?
+  description String?
+  value       Decimal? @db.Decimal(12, 2)
+  weight      Decimal? @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@map("product_catalog")
 }
 
 model Country {

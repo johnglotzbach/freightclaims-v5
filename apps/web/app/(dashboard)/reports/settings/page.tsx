@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { put } from '@/lib/api-client';
 import { toast } from 'sonner';
 import {
   BarChart3, Settings, Save, RotateCcw,
@@ -63,11 +65,20 @@ export default function InsightsSettingsPage() {
     setHasChanges(true);
   }
 
+  const saveMutation = useMutation({
+    mutationFn: (preferences: Record<string, boolean>) =>
+      put('/reports/settings', { preferences }),
+    onSuccess: () => {
+      toast.success('Insights settings saved');
+      setHasChanges(false);
+    },
+    onError: () => toast.error('Failed to save settings'),
+  });
+
   function save() {
-    const settings: Record<string, boolean> = {};
-    categories.forEach(cat => cat.toggles.forEach(t => { settings[t.key] = t.enabled; }));
-    toast.success('Insights settings saved');
-    setHasChanges(false);
+    const preferences: Record<string, boolean> = {};
+    categories.forEach(cat => cat.toggles.forEach(t => { preferences[t.key] = t.enabled; }));
+    saveMutation.mutate(preferences);
   }
 
   function reset() {

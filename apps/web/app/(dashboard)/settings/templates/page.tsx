@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -39,12 +39,73 @@ export default function TemplatesPage() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Template | null>(null);
   const [creating, setCreating] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: templates = [], isLoading } = useQuery({
-    queryKey: ['templates'],
+  const { data: emailTemplates = [], isLoading: loadingEmail } = useQuery({
+    queryKey: ['templates', 'email'],
     queryFn: () => getList<Template>('/users/templates/email'),
   });
+  const { data: letterTemplates = [], isLoading: loadingLetter } = useQuery({
+    queryKey: ['templates', 'letter'],
+    queryFn: () => getList<Template>('/users/templates/letter'),
+  });
 
+  const templates = useMemo(() => {
+    const email = emailTemplates.map(t => ({ ...t, type: 'email' as const }));
+    const letter = letterTemplates.map(t => ({ ...t, type: 'letter' as const }));
+    return [...email, ...letter];
+  }, [emailTemplates, letterTemplates]);
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (data: { template: Template; isNew: boolean }) => {
+      const { template, isNew } = data;
+      if (template.type === 'automation') throw new Error('Automation templates not supported');
+      const payload = { name: template.name, subject: template.subject, body: template.body, category: template.category, isDefault: template.isDefault };
+      if (template.type === 'email') {
+        return isNew ? post('/users/templates/email', payload) : put(`/users/templates/email/${template.id}`, payload);
+      }
+      return isNew ? post('/users/templates/letter', payload) : put(`/users/templates/letter/${template.id}`, payload);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['templates', 'email'] });
+      queryClient.invalidateQueries({ queryKey: ['templates', 'letter'] });
+      toast.success(variables.isNew ? 'Template created' : 'Template updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to save template'),
+  });
+
+  const copyTemplateMutation = useMutation({
+    mutationFn: (template: Template) => {
+      const payload = { name: `${template.name} (Copy)`, subject: template.subject, body: template.body, category: template.category, isDefault: false };
+      if (template.type === 'email') return post('/users/templates/email', payload);
+      if (template.type === 'letter') return post('/users/templates/letter', payload);
+      throw new Error('Automation templates not supported');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates', 'email'] });
+      queryClient.invalidateQueries({ queryKey: ['templates', 'letter'] });
+      toast.success('Template duplicated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to duplicate template'),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (template: Template) => {
+      if (template.type === 'email') return del(`/users/templates/email/${template.id}`);
+      if (template.type === 'letter') return del(`/users/templates/letter/${template.id}`);
+      throw new Error('Automation templates not supported');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates', 'email'] });
+      queryClient.invalidateQueries({ queryKey: ['templates', 'letter'] });
+      toast.success('Template deleted');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete template'),
+  });
+
+  const isLoading = loadingEmail || loadingLetter;
   const filtered = templates.filter(t => t.type === activeType && (search === '' || t.name.toLowerCase().includes(search.toLowerCase())));
 
   const typeConfig: Record<TemplateType, { label: string; icon: typeof Mail; color: string }> = {
@@ -123,7 +184,8 @@ export default function TemplatesPage() {
           isNew={creating}
           variables={VARIABLES}
           onClose={() => { setEditing(null); setCreating(false); }}
-          onSave={() => { toast.success(creating ? 'Template created' : 'Template updated'); setEditing(null); setCreating(false); }}
+          onSave={(data) => saveTemplateMutation.mutate({ template: data, isNew: creating })}
+          isSaving={saveTemplateMutation.isPending}
         />
       )}
 
@@ -146,8 +208,8 @@ export default function TemplatesPage() {
               <span className="text-[10px] text-slate-400">Updated {template.updatedAt}</span>
               <div className="flex items-center gap-1">
                 <button onClick={() => { setEditing(template); setCreating(false); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Copy className="w-3.5 h-3.5" /></button>
-                {!template.isDefault && <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
+                <button onClick={() => copyTemplateMutation.mutate(template)} disabled={copyTemplateMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 disabled:opacity-50"><Copy className="w-3.5 h-3.5" /></button>
+                {!template.isDefault && <button onClick={() => { if (confirm('Delete this template?')) deleteTemplateMutation.mutate(template); }} disabled={deleteTemplateMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>}
               </div>
             </div>
           </div>
@@ -157,9 +219,9 @@ export default function TemplatesPage() {
   );
 }
 
-function TemplateEditor({ template, isNew, variables, onClose, onSave }: {
+function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving }: {
   template: Template; isNew: boolean; variables: string[];
-  onClose: () => void; onSave: () => void;
+  onClose: () => void; onSave: (data: Template) => void; isSaving?: boolean;
 }) {
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject || '');
@@ -169,6 +231,10 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave }: {
   function insertVariable(v: string) {
     setBody(body + v);
     setShowVars(false);
+  }
+
+  function handleSave() {
+    onSave({ ...template, name, subject: template.type === 'email' ? subject : undefined, body });
   }
 
   return (
@@ -209,7 +275,7 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave }: {
 
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 font-medium">Cancel</button>
-        <button onClick={onSave} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1"><Save className="w-4 h-4" /> {isNew ? 'Create' : 'Save'}</button>
+        <button onClick={handleSave} disabled={isSaving} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 disabled:opacity-50"><Save className="w-4 h-4" /> {isNew ? 'Create' : 'Save'}</button>
       </div>
     </div>
   );

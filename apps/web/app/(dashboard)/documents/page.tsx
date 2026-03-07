@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, getList } from '@/lib/api-client';
+import { get, getList, del, post } from '@/lib/api-client';
 import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -11,7 +11,7 @@ import { PdfViewer } from '@/components/pdf-viewer';
 import {
   FileText, Search, Upload, Download, Eye, Trash2,
   FolderOpen, Image, Brain, List, Grid,
-  CheckCircle, TrendingUp,
+  CheckCircle, TrendingUp, Loader2,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -73,6 +73,51 @@ export default function DocumentsPage() {
     },
     onError: () => toast.error('Upload failed. Please try again.'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => del(`/documents/${id}`),
+    onSuccess: (_data, id) => {
+      toast.success('Document deleted');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      setSelected((prev) => prev.filter((s) => s !== id));
+    },
+    onError: () => toast.error('Failed to delete document'),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => del(`/documents/${id}`)));
+    },
+    onSuccess: (_data, ids) => {
+      toast.success(`${ids.length} document(s) deleted`);
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      setSelected([]);
+    },
+    onError: () => toast.error('Failed to delete some documents'),
+  });
+
+  const [processingDocId, setProcessingDocId] = useState<string | null>(null);
+  const processMutation = useMutation({
+    mutationFn: (id: string) => post(`/documents/${id}/process`),
+    onMutate: (id) => setProcessingDocId(id),
+    onSuccess: () => {
+      toast.success('AI extraction started');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+    onError: () => toast.error('Failed to start AI extraction'),
+    onSettled: () => setProcessingDocId(null),
+  });
+
+  function handleDelete(id: string) {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    deleteMutation.mutate(id);
+  }
+
+  function handleBulkDelete() {
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} document(s)?`)) return;
+    bulkDeleteMutation.mutate([...selected]);
+  }
 
   function handleUploadClick() {
     fileInputRef.current?.click();
@@ -241,7 +286,7 @@ export default function DocumentsPage() {
         </div>
         <div className="flex items-center gap-2">
           {selected.length > 0 && (
-            <button className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 font-medium px-3 py-2">
+            <button onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 font-medium px-3 py-2 disabled:opacity-50">
               <Trash2 className="w-4 h-4" /> Delete ({selected.length})
             </button>
           )}
@@ -306,8 +351,8 @@ export default function DocumentsPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => handleView(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
                         <button onClick={() => handleDownload(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
-                        <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500" title="AI Extract"><Brain className="w-4 h-4" /></button>
-                        <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => processMutation.mutate(doc.id)} disabled={processingDocId !== null} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500 disabled:opacity-50" title="AI Extract">{processingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}</button>
+                        <button onClick={() => handleDelete(doc.id)} disabled={deleteMutation.isPending} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -343,7 +388,8 @@ export default function DocumentsPage() {
               <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={() => handleView(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Eye className="w-3.5 h-3.5" /></button>
                 <button onClick={() => handleDownload(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Download className="w-3.5 h-3.5" /></button>
-                <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={() => processMutation.mutate(doc.id)} disabled={processingDocId !== null} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500 disabled:opacity-50" title="AI Extract">{processingDocId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}</button>
+                <button onClick={() => handleDelete(doc.id)} disabled={deleteMutation.isPending} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           ))}

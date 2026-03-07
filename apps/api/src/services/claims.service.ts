@@ -45,6 +45,11 @@ export const claimsService = {
       search: query.search as string | undefined,
       dateFrom: query.dateFrom as string | undefined,
       dateTo: query.dateTo as string | undefined,
+      filedDateFrom: query.filedDateFrom as string | undefined,
+      filedDateTo: query.filedDateTo as string | undefined,
+      hasTasks: query.hasTasks === true,
+      hasOverdueTasks: query.hasOverdueTasks === true,
+      unreadEmails: query.unreadEmails === true,
     };
 
     const [claims, total] = await claimsRepository.findMany(filters, { limit, offset });
@@ -193,8 +198,8 @@ export const claimsService = {
   async getMassUploadHistory(user: JwtPayload) { return claimsRepository.getMassUploadHistory(user.customerId ?? undefined); },
 
   // --- Settings ---
-  async getSettings() { return claimsRepository.getSettings(); },
-  async updateSettings(data: Record<string, unknown>) { return claimsRepository.updateSettings(data); },
+  async getSettings(_user: JwtPayload) { return claimsRepository.getSettings(); },
+  async updateSettings(data: Record<string, unknown>, _user: JwtPayload) { return claimsRepository.updateSettings(data); },
 
   // --- Acknowledgement ---
   async getAcknowledgement(claimId: string) { return claimsRepository.getAcknowledgement(claimId); },

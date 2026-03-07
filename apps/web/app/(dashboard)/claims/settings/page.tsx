@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { get, put, post, del } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { CardSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -53,6 +53,17 @@ export default function ClaimsSettingsPage() {
   const [expandedSections, setExpandedSections] = useState<Set<SettingSection>>(new Set(['statuses']));
   const [stagnantDays, setStagnantDays] = useState(30);
   const [stagnantEnabled, setStagnantEnabled] = useState(true);
+  const queryClient = useQueryClient();
+
+  const saveStagnantMutation = useMutation({
+    mutationFn: (data: { stagnantEnabled: boolean; stagnantDays: number }) =>
+      put('/claims/settings', { stagnant: { enabled: data.stagnantEnabled, days: data.stagnantDays } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-settings'] });
+      toast.success('Stagnant rules saved');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to save rules'),
+  });
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['claim-settings'],
@@ -123,11 +134,11 @@ export default function ClaimsSettingsPage() {
 
             {expandedSections.has(section.key) && (
               <div className="border-t border-slate-100 dark:border-slate-700 px-5 py-4">
-                {section.key === 'statuses' && <SettingsList items={statuses} showColor />}
-                {section.key === 'types' && <SettingsList items={types} />}
-                {section.key === 'conditions' && <SettingsList items={conditions} />}
-                {section.key === 'modes' && <SettingsList items={modes} />}
-                {section.key === 'identifiers' && <IdentifiersList items={identifiers} />}
+                {section.key === 'statuses' && <SettingsList section="statuses" items={statuses} showColor onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
+                {section.key === 'types' && <SettingsList section="types" items={types} onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
+                {section.key === 'conditions' && <SettingsList section="conditions" items={conditions} onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
+                {section.key === 'modes' && <SettingsList section="modes" items={modes} onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
+                {section.key === 'identifiers' && <IdentifiersList items={identifiers} onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
                 {section.key === 'stagnant' && (
                   <div className="space-y-4">
                     <label className="flex items-center justify-between cursor-pointer">
@@ -146,10 +157,10 @@ export default function ClaimsSettingsPage() {
                         <p className="text-xs text-slate-400 mt-1">Claims with no activity for {stagnantDays} days will trigger a notification</p>
                       </div>
                     )}
-                    <button onClick={() => toast.success('Stagnant rules saved')} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Save Rules</button>
+                    <button onClick={() => saveStagnantMutation.mutate({ stagnantEnabled, stagnantDays })} disabled={saveStagnantMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">Save Rules</button>
                   </div>
                 )}
-                {section.key === 'divisions' && <SettingsList items={divisions} />}
+                {section.key === 'divisions' && <SettingsList section="divisions" items={divisions} onItemsChange={() => queryClient.invalidateQueries({ queryKey: ['claim-settings'] })} />}
               </div>
             )}
           </div>
@@ -159,9 +170,40 @@ export default function ClaimsSettingsPage() {
   );
 }
 
-function SettingsList({ items, showColor = false }: { items: ClaimSetting[]; showColor?: boolean }) {
+function SettingsList({ section, items, showColor = false, onItemsChange }: { section: string; items: ClaimSetting[]; showColor?: boolean; onItemsChange?: () => void }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const addItemMutation = useMutation({
+    mutationFn: (data: { section: string; name: string }) => post('/claims/settings/items', data),
+    onSuccess: () => {
+      onItemsChange?.();
+      toast.success('Item added');
+      setAdding(false);
+      setNewName('');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to add item'),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => put(`/claims/settings`, { section, itemId: id, isActive }),
+    onSuccess: () => { onItemsChange?.(); },
+    onError: () => toast.error('Failed to update'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => del(`/claims/settings/items/${id}`).catch(() => put('/claims/settings', { section, itemId: id, deleted: true })),
+    onSuccess: () => { onItemsChange?.(); toast.success('Item removed'); },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => put('/claims/settings', { section, itemId: id, name }),
+    onSuccess: () => { onItemsChange?.(); setEditingId(null); toast.success('Updated'); },
+    onError: () => toast.error('Failed to update'),
+  });
 
   return (
     <div className="space-y-2">
@@ -170,21 +212,29 @@ function SettingsList({ items, showColor = false }: { items: ClaimSetting[]; sho
           <div className="flex items-center gap-3">
             <GripVertical className="w-3.5 h-3.5 text-slate-300 cursor-move" />
             {showColor && item.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />}
-            <span className="text-sm font-medium text-slate-900 dark:text-white">{item.name}</span>
+            {editingId === item.id ? (
+              <div className="flex items-center gap-1">
+                <input value={editName} onChange={e => setEditName(e.target.value)} className="px-2 py-0.5 border rounded text-sm dark:bg-slate-700 dark:border-slate-600" autoFocus />
+                <button onClick={() => updateMutation.mutate({ id: item.id, name: editName })} className="text-emerald-500"><Check className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setEditingId(null)} className="text-slate-400"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (
+              <span className="text-sm font-medium text-slate-900 dark:text-white">{item.name}</span>
+            )}
           </div>
           <div className="flex items-center gap-1">
-            <button className={cn('transition-colors', item.isActive ? 'text-emerald-500' : 'text-slate-300')}>
+            <button onClick={() => toggleMutation.mutate({ id: item.id, isActive: !item.isActive })} className={cn('transition-colors', item.isActive ? 'text-emerald-500' : 'text-slate-300')}>
               {item.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
             </button>
-            <button className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3 h-3" /></button>
-            <button className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+            <button onClick={() => { setEditingId(item.id); setEditName(item.name); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3 h-3" /></button>
+            <button onClick={() => { if (window.confirm(`Delete "${item.name}"?`)) deleteMutation.mutate(item.id); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
           </div>
         </div>
       ))}
       {adding ? (
         <div className="flex items-center gap-2 py-2">
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New item..." autoFocus className="flex-1 px-3 py-1.5 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-          <button onClick={() => { toast.success('Item added'); setAdding(false); setNewName(''); }} className="p-1 text-emerald-500"><Check className="w-4 h-4" /></button>
+          <button onClick={() => { if (!newName.trim()) { toast.error('Name is required'); return; } addItemMutation.mutate({ section, name: newName.trim() }); }} disabled={addItemMutation.isPending} className="p-1 text-emerald-500 disabled:opacity-50"><Check className="w-4 h-4" /></button>
           <button onClick={() => setAdding(false)} className="p-1 text-slate-400"><X className="w-4 h-4" /></button>
         </div>
       ) : (
@@ -194,7 +244,23 @@ function SettingsList({ items, showColor = false }: { items: ClaimSetting[]; sho
   );
 }
 
-function IdentifiersList({ items }: { items: ClaimIdentifier[] }) {
+function IdentifiersList({ items, onItemsChange }: { items: ClaimIdentifier[]; onItemsChange?: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newKey, setNewKey] = useState('');
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => put('/claims/settings', { section: 'identifiers', itemId: id, isActive }),
+    onSuccess: () => onItemsChange?.(),
+    onError: () => toast.error('Failed to update'),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (data: { name: string; key: string }) => post('/claims/settings/items', { section: 'identifiers', ...data }),
+    onSuccess: () => { onItemsChange?.(); toast.success('Identifier added'); setAdding(false); setNewName(''); setNewKey(''); },
+    onError: () => toast.error('Failed to add'),
+  });
+
   return (
     <div className="space-y-2">
       {items.map(item => (
@@ -204,14 +270,22 @@ function IdentifiersList({ items }: { items: ClaimIdentifier[] }) {
             <span className="text-xs text-slate-400 font-mono ml-2">{item.key}</span>
           </div>
           <div className="flex items-center gap-1">
-            <button className={cn('transition-colors', item.isActive ? 'text-emerald-500' : 'text-slate-300')}>
+            <button onClick={() => toggleMutation.mutate({ id: item.id, isActive: !item.isActive })} className={cn('transition-colors', item.isActive ? 'text-emerald-500' : 'text-slate-300')}>
               {item.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
             </button>
-            <button className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3 h-3" /></button>
           </div>
         </div>
       ))}
-      <button className="flex items-center gap-1.5 text-xs text-primary-500 hover:text-primary-600 font-medium py-2"><Plus className="w-3.5 h-3.5" /> Add Identifier</button>
+      {adding ? (
+        <div className="flex items-center gap-2 py-2">
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Name" className="flex-1 px-3 py-1.5 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+          <input value={newKey} onChange={e => setNewKey(e.target.value)} placeholder="Key" className="w-32 px-3 py-1.5 border rounded-lg text-sm font-mono dark:bg-slate-700 dark:border-slate-600" />
+          <button onClick={() => { if (!newName.trim()) return; addMutation.mutate({ name: newName.trim(), key: newKey.trim() || newName.trim().toLowerCase().replace(/\s+/g, '_') }); }} className="text-emerald-500"><Check className="w-4 h-4" /></button>
+          <button onClick={() => setAdding(false)} className="text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-xs text-primary-500 hover:text-primary-600 font-medium py-2"><Plus className="w-3.5 h-3.5" /> Add Identifier</button>
+      )}
     </div>
   );
 }

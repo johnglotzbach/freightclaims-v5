@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import {
   Key, Plus, Trash2, Copy, Eye, EyeOff,
   Shield, CheckCircle, AlertCircle, ExternalLink,
@@ -30,8 +31,14 @@ interface ApiKey {
   isActive: boolean;
 }
 
+const WEBHOOK_EVENTS = ['claim.created', 'claim.filed', 'claim.settled', 'claim.closed', 'document.uploaded'] as const;
+
 export default function ApiSetupPage() {
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [webhookEvents, setWebhookEvents] = useState<Set<string>>(new Set(WEBHOOK_EVENTS));
+  const queryClient = useQueryClient();
 
   const { data: apiKeys = [], isLoading: loadingKeys } = useQuery({
     queryKey: ['api-keys'],
@@ -42,6 +49,58 @@ export default function ApiSetupPage() {
     queryKey: ['carriers'],
     queryFn: () => getList<IntegratedCarrier>('/shipments/carriers/all'),
   });
+
+  const generateKeyMutation = useMutation({
+    mutationFn: () => post<ApiKey>('/users/api-keys'),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+      toast.success('New API key generated');
+      if (data?.key) setShowKey(prev => ({ ...prev, [data.id]: true }));
+    },
+    onError: (err: Error) => {
+      console.warn('[API Setup] Generate key failed:', err);
+      toast.info('API key management coming soon');
+    },
+  });
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: (id: string) => del(`/users/api-keys/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+      toast.success('API key revoked');
+    },
+    onError: (err: Error) => {
+      console.warn('[API Setup] Revoke key failed:', err);
+      toast.info('API key management coming soon');
+    },
+  });
+
+  const saveWebhookMutation = useMutation({
+    mutationFn: (config: { url: string; secret: string; events: string[] }) =>
+      put('/users/webhook-config', config),
+    onSuccess: () => toast.success('Webhook saved'),
+    onError: (err: Error) => {
+      console.warn('[API Setup] Save webhook failed:', err);
+      toast.error(err.message || 'Failed to save webhook');
+    },
+  });
+
+  function toggleWebhookEvent(event: string) {
+    setWebhookEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(event)) next.delete(event);
+      else next.add(event);
+      return next;
+    });
+  }
+
+  function handleSaveWebhook() {
+    saveWebhookMutation.mutate({
+      url: webhookUrl,
+      secret: webhookSecret,
+      events: Array.from(webhookEvents),
+    });
+  }
 
   const isLoading = loadingKeys || loadingCarriers;
 
@@ -69,7 +128,7 @@ export default function ApiSetupPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">API Keys</h2>
-          <button onClick={() => toast.success('New API key generated')} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          <button onClick={() => generateKeyMutation.mutate()} disabled={generateKeyMutation.isPending} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
             <Plus className="w-4 h-4" /> Generate Key
           </button>
         </div>
@@ -93,7 +152,7 @@ export default function ApiSetupPage() {
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">Created {key.createdAt} &middot; Last used {key.lastUsed || 'Never'}</p>
                 </div>
-                <button onClick={() => toast.error('Cannot revoke active key')} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => { if (confirm('Revoke this API key? It will stop working immediately.')) revokeKeyMutation.mutate(key.id); }} disabled={revokeKeyMutation.isPending} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -104,9 +163,9 @@ export default function ApiSetupPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Integrated Carriers</h2>
-          <button onClick={() => toast.info('Carrier integration wizard coming soon')} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+          <Link href="/companies/carriers" className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
             <Truck className="w-4 h-4" /> Add Carrier
-          </button>
+          </Link>
         </div>
         {carriers.length === 0 ? (
           <EmptyState icon={Truck} title="No carriers integrated" description="Add a carrier integration to sync claim data automatically." />
@@ -154,21 +213,21 @@ export default function ApiSetupPage() {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Webhook URL</label>
-            <input type="url" placeholder="https://your-server.com/webhook" className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input type="url" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://your-server.com/webhook" className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Secret Key</label>
-            <input type="text" placeholder="whsec_..." className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="whsec_..." className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-sm text-slate-600 dark:text-slate-400">Events:</label>
-            {['claim.created', 'claim.filed', 'claim.settled', 'claim.closed', 'document.uploaded'].map(event => (
+            {WEBHOOK_EVENTS.map(event => (
               <label key={event} className="flex items-center gap-1 text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded cursor-pointer">
-                <input type="checkbox" defaultChecked className="rounded border-slate-300 text-primary-500 w-3 h-3" /> {event}
+                <input type="checkbox" checked={webhookEvents.has(event)} onChange={() => toggleWebhookEvent(event)} className="rounded border-slate-300 text-primary-500 w-3 h-3" /> {event}
               </label>
             ))}
           </div>
-          <button className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Save Webhook</button>
+          <button onClick={handleSaveWebhook} disabled={saveWebhookMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">Save Webhook</button>
         </div>
       </section>
     </div>

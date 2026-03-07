@@ -58,6 +58,10 @@ export default function RegisterPage() {
         password: form.password,
         firstName: form.firstName,
         lastName: form.lastName,
+        companyName: form.companyName || undefined,
+        jobTitle: form.jobTitle || undefined,
+        companySize: form.companySize || undefined,
+        phone: form.phone || undefined,
       });
       setStep(3);
       toast.success('Account created successfully!');

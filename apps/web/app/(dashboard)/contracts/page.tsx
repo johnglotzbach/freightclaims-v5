@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, post, del } from '@/lib/api-client';
+import { get, post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import {
-  FileText, Plus, Search, Filter, ChevronRight, Shield,
-  Calendar, DollarSign, Building2, Truck, X, Upload,
+  FileText, Plus, Search, ChevronRight, Shield, Truck, X,
 } from 'lucide-react';
 
 interface Contract {
@@ -39,10 +39,32 @@ interface InsuranceCertificate {
 
 type Tab = 'contracts' | 'insurance' | 'tariffs';
 
+const createFormDefaults = {
+  name: '',
+  type: 'contract' as 'contract' | 'certificate' | 'tariff',
+  carrier: '',
+  effectiveDate: '',
+  expirationDate: '',
+};
+
 export default function ContractsPage() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('contracts');
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(createFormDefaults);
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof createFormDefaults) => post('/contracts', data),
+    onSuccess: () => {
+      toast.success('Created successfully');
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      queryClient.invalidateQueries({ queryKey: ['insurance-certificates'] });
+      setShowCreate(false);
+      setCreateForm(createFormDefaults);
+    },
+    onError: () => toast.error('Failed to create'),
+  });
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery({
     queryKey: ['contracts'],
@@ -70,7 +92,13 @@ export default function ContractsPage() {
           <p className="text-sm text-slate-500 mt-0.5">Manage shipping contracts, insurance certificates, and carrier tariffs</p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => {
+            setCreateForm({
+              ...createFormDefaults,
+              type: activeTab === 'contracts' ? 'contract' : activeTab === 'insurance' ? 'certificate' : 'tariff',
+            });
+            setShowCreate(true);
+          }}
           className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -110,6 +138,82 @@ export default function ContractsPage() {
         />
       </div>
 
+      {/* Create form modal */}
+      {showCreate && (
+        <div className="card p-6 border-2 border-primary-200 dark:border-primary-500/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {createForm.type === 'contract' ? 'New Contract' : createForm.type === 'certificate' ? 'New Certificate' : 'New Tariff'}
+            </h3>
+            <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Name *</label>
+              <input
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                placeholder="Name..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+              <select
+                value={createForm.type}
+                onChange={(e) => setCreateForm({ ...createForm, type: e.target.value as typeof createForm.type })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              >
+                <option value="contract">Contract</option>
+                <option value="certificate">Certificate</option>
+                <option value="tariff">Tariff</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Carrier</label>
+              <input
+                value={createForm.carrier}
+                onChange={(e) => setCreateForm({ ...createForm, carrier: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                placeholder="Carrier name..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Effective Date</label>
+              <input
+                type="date"
+                value={createForm.effectiveDate}
+                onChange={(e) => setCreateForm({ ...createForm, effectiveDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Expiration Date</label>
+              <input
+                type="date"
+                value={createForm.expirationDate}
+                onChange={(e) => setCreateForm({ ...createForm, expirationDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+              Cancel
+            </button>
+            <button
+              onClick={() => createMutation.mutate(createForm)}
+              disabled={!createForm.name.trim() || createMutation.isPending}
+              className="px-4 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <TableSkeleton />
       ) : activeTab === 'contracts' ? (
@@ -124,6 +228,7 @@ export default function ContractsPage() {
 }
 
 function ContractsList({ contracts, search }: { contracts: Contract[]; search: string }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const filtered = contracts.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -149,38 +254,56 @@ function ContractsList({ contracts, search }: { contracts: Contract[]; search: s
         </thead>
         <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
           {filtered.map((contract) => (
-            <tr key={contract.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-              <td className="px-4 py-3">
-                <div className="font-medium text-slate-900 dark:text-white">{contract.name}</div>
-                {contract.contractNumber && <div className="text-xs text-slate-400">#{contract.contractNumber}</div>}
-              </td>
-              <td className="px-4 py-3 hidden md:table-cell">
-                <span className="text-xs font-medium px-2 py-1 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 capitalize">
-                  {contract.type}
-                </span>
-              </td>
-              <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">
-                {new Date(contract.startDate).toLocaleDateString()} — {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : 'Ongoing'}
-              </td>
-              <td className="px-4 py-3 hidden sm:table-cell text-sm font-medium text-slate-700 dark:text-slate-300">
-                {contract.maxLiability ? `$${Number(contract.maxLiability).toLocaleString()}` : '—'}
-              </td>
-              <td className="px-4 py-3">
-                <span className={cn(
-                  'text-xs font-medium px-2 py-1 rounded-full',
-                  contract.isActive
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-                    : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                )}>
-                  {contract.isActive ? 'Active' : 'Expired'}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right">
-                <button className="text-xs font-medium text-primary-500 hover:text-primary-600 inline-flex items-center gap-1">
-                  View <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </td>
-            </tr>
+            <Fragment key={contract.id}>
+              <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-slate-900 dark:text-white">{contract.name}</div>
+                  {contract.contractNumber && <div className="text-xs text-slate-400">#{contract.contractNumber}</div>}
+                </td>
+                <td className="px-4 py-3 hidden md:table-cell">
+                  <span className="text-xs font-medium px-2 py-1 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 capitalize">
+                    {contract.type}
+                  </span>
+                </td>
+                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">
+                  {new Date(contract.startDate).toLocaleDateString()} — {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : 'Ongoing'}
+                </td>
+                <td className="px-4 py-3 hidden sm:table-cell text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {contract.maxLiability ? `$${Number(contract.maxLiability).toLocaleString()}` : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={cn(
+                    'text-xs font-medium px-2 py-1 rounded-full',
+                    contract.isActive
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                  )}>
+                    {contract.isActive ? 'Active' : 'Expired'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => setExpandedId((prev) => (prev === contract.id ? null : contract.id))}
+                    className="text-xs font-medium text-primary-500 hover:text-primary-600 inline-flex items-center gap-1"
+                  >
+                    View <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', expandedId === contract.id && 'rotate-90')} />
+                  </button>
+                </td>
+              </tr>
+              {expandedId === contract.id && (
+                <tr className="bg-slate-50/50 dark:bg-slate-800/50">
+                  <td colSpan={6} className="px-4 py-3">
+                    <div className="flex flex-wrap gap-6 text-sm">
+                      <div><span className="text-slate-500">ID:</span> {contract.id}</div>
+                      <div><span className="text-slate-500">Customer ID:</span> {contract.customerId}</div>
+                      {contract.carrierId && <div><span className="text-slate-500">Carrier ID:</span> {contract.carrierId}</div>}
+                      {contract.releaseValue != null && <div><span className="text-slate-500">Release Value:</span> ${Number(contract.releaseValue).toLocaleString()}</div>}
+                      <div><span className="text-slate-500">Created:</span> {new Date(contract.createdAt).toLocaleString()}</div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>

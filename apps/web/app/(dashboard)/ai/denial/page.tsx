@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
@@ -54,6 +55,7 @@ export default function DenialResponsePage() {
       const output = data.structuredOutput || data.result;
       setResult(output);
     },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Denial response generation failed. Check your input and try again.'),
   });
 
   const handleGenerate = () => {
@@ -130,6 +132,14 @@ export default function DenialResponsePage() {
           )}
         </button>
       </div>
+
+      {denialMutation.isError && (
+        <div className="card p-4 border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {(denialMutation.error as any)?.response?.data?.error || (denialMutation.error as Error)?.message || 'Denial response generation failed. Check your input and try again.'}
+          </p>
+        </div>
+      )}
 
       {result && (
         <div className="space-y-4">

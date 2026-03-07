@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { post } from '@/lib/api-client';
+import { post, apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { CLAIM_TYPES } from 'shared';
 import {
@@ -108,6 +108,7 @@ export default function NewClaimPage() {
   const [products, setProducts] = useState<ProductEntry[]>([]);
   const [locations, setLocations] = useState<LocationEntry[]>([]);
   const [documents, setDocuments] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
   const form = useForm<ClaimInfoForm>({
     resolver: zodResolver(claimInfoSchema),
@@ -116,12 +117,40 @@ export default function NewClaimPage() {
 
   const createClaim = useMutation({
     mutationFn: (data: Record<string, unknown>) => post('/claims', data) as Promise<{ id: string }>,
-    onSuccess: (result: { id: string }) => {
+    onSuccess: async (result: { id: string }) => {
       toast.success('Claim created successfully');
+
+      if (documents.length > 0) {
+        setUploadProgress({ current: 0, total: documents.length });
+        let failed = 0;
+        for (let i = 0; i < documents.length; i++) {
+          setUploadProgress({ current: i + 1, total: documents.length });
+          try {
+            const formData = new FormData();
+            formData.append('file', documents[i]);
+            formData.append('claimId', result.id);
+            formData.append('documentName', documents[i].name);
+            await apiClient.post('/documents/upload', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+          } catch {
+            failed++;
+          }
+        }
+        setUploadProgress(null);
+        if (failed > 0) {
+          toast.warning(`${documents.length - failed} of ${documents.length} documents uploaded. ${failed} failed.`);
+        } else {
+          toast.success(`All ${documents.length} documents uploaded`);
+        }
+      }
+
       router.push(`/claims/${result.id}`);
     },
     onError: () => toast.error('Failed to create claim'),
   });
+
+  const isSubmitting = createClaim.isPending || uploadProgress !== null;
 
   async function handleNext() {
     if (currentStep === 0) {
@@ -180,14 +209,26 @@ export default function NewClaimPage() {
         {currentStep === 5 && <StepReview claimData={form.getValues()} parties={parties} products={products} locations={locations} documents={documents} />}
       </div>
 
+      {uploadProgress && (
+        <div className="card p-4 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-300">Uploading documents...</span>
+            <span className="text-slate-500">{uploadProgress.current} / {uploadProgress.total}</span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+            <div className="bg-primary-500 h-2 rounded-full transition-all" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <button onClick={handleBack} disabled={currentStep === 0} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30">Back</button>
+        <button onClick={handleBack} disabled={currentStep === 0 || isSubmitting} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30">Back</button>
         {currentStep < steps.length - 1 ? (
           <button onClick={handleNext} className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2 rounded-lg text-sm font-semibold">Next</button>
         ) : (
-          <button onClick={handleSubmit} disabled={createClaim.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-2">
-            {createClaim.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            {createClaim.isPending ? 'Creating...' : 'Create Claim'}
+          <button onClick={handleSubmit} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-2">
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+            {uploadProgress ? 'Uploading documents...' : createClaim.isPending ? 'Creating...' : 'Create Claim'}
           </button>
         )}
       </div>

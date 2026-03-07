@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, del, put, post } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Workflow, Plus, Edit2, Trash2, Play, Pause,
   Mail, CheckSquare, Clock, AlertTriangle, Bell,
   Zap, Search, ChevronDown, ChevronUp,
   ToggleLeft, ToggleRight, Copy, X, Save,
-  FileText, Send, Timer, ArrowRight,
+  FileText, Send, Timer, ArrowRight, ShieldAlert,
 } from 'lucide-react';
 
 type RuleStatus = 'active' | 'paused' | 'draft';
@@ -64,6 +65,9 @@ const ACTIONS: { key: ActionType; label: string; icon: typeof Mail }[] = [
 ];
 
 export default function AutomationPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.isSuperAdmin || currentUser?.permissions?.includes('settings.manage_automation') || false;
+
   const { data: fetchedRules = [], isLoading: rulesLoading } = useQuery({
     queryKey: ['automation-rules'],
     queryFn: () => getList<AutomationRule>('/automation/rules'),
@@ -74,6 +78,30 @@ export default function AutomationPage() {
   });
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [rulesInitialized, setRulesInitialized] = useState(false);
+  const queryClient = useQueryClient();
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: (ruleId: string) => del(`/automation/rules/${ruleId}`),
+    onSuccess: (_, ruleId) => {
+      setRules(rules => rules.filter(r => r.id !== ruleId));
+      queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+      toast.success('Rule deleted');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete rule'),
+  });
+
+  const updateRuleMutation = useMutation({
+    mutationFn: (rule: AutomationRule) => put<AutomationRule>(`/automation/rules/${rule.id}`, rule),
+    onSuccess: (updatedRule: AutomationRule) => {
+      setRules(rules => rules.map(r => r.id === updatedRule.id ? updatedRule : r));
+      queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+      toast.success('Rule updated');
+      setEditingRule(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update rule');
+    },
+  });
 
   useEffect(() => {
     if (!rulesInitialized && !rulesLoading) {
@@ -89,6 +117,17 @@ export default function AutomationPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | RuleStatus>('all');
 
   const isLoading = rulesLoading || templatesLoading;
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <ShieldAlert className="w-12 h-12 text-red-400 mb-4" />
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h1>
+        <p className="text-sm text-slate-500">You don&apos;t have permission to manage automation rules. Contact your administrator.</p>
+      </div>
+    );
+  }
+
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /><TableSkeleton /></div>;
   if (rules.length === 0 && !showBuilder) return <EmptyState icon={Workflow} title="No automation rules yet" description="Create your first rule to automate claim workflows." />;
 
@@ -105,10 +144,35 @@ export default function AutomationPage() {
     totalTriggers: rules.reduce((s, r) => s + r.timesTriggered, 0),
   };
 
+  const toggleRuleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      put(`/automation/rules/${id}`, { isActive }),
+    onSuccess: (_, variables) => {
+      setRules(rules => rules.map(r => r.id === variables.id ? { ...r, status: variables.isActive ? 'active' : 'paused' } : r));
+      queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+      toast.success('Rule updated');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to update rule'),
+  });
+
   function toggleRule(id: string) {
-    setRules(rules.map(r => r.id === id ? { ...r, status: r.status === 'active' ? 'paused' : 'active' } : r));
-    toast.success('Rule updated');
+    const rule = rules.find(r => r.id === id);
+    if (!rule) return;
+    const isActive = rule.status === 'active';
+    toggleRuleMutation.mutate({ id, isActive: !isActive });
   }
+
+  const createRuleMutation = useMutation({
+    mutationFn: (rule: AutomationRule) => post<AutomationRule>('/automation/rules', rule),
+    onSuccess: (data) => {
+      setRules(rules => [data, ...rules]);
+      queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+      setShowBuilder(false);
+      setEditingRule(null);
+      toast.success('Rule created');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to create rule'),
+  });
 
   function applyTemplate(template: AutomationTemplate) {
     const newRule: AutomationRule = {
@@ -186,7 +250,10 @@ export default function AutomationPage() {
       )}
 
       {/* Rule Builder */}
-      {showBuilder && <RuleBuilder onClose={() => setShowBuilder(false)} onSave={(rule) => { setRules([rule, ...rules]); setShowBuilder(false); toast.success('Rule created'); }} />}
+      {showBuilder && <RuleBuilder onClose={() => { setShowBuilder(false); setEditingRule(null); }} onSave={(rule) => createRuleMutation.mutate(rule)} />}
+
+      {/* Edit Rule Builder */}
+      {editingRule && <RuleBuilder initialRule={editingRule} onClose={() => setEditingRule(null)} onSave={(rule) => updateRuleMutation.mutate(rule)} />}
 
       {/* Filters */}
       <div className="flex items-center gap-3">
@@ -232,11 +299,11 @@ export default function AutomationPage() {
               </div>
 
               <div className="flex items-center gap-1">
-                <button onClick={() => toggleRule(rule.id)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                <button onClick={() => toggleRule(rule.id)} disabled={toggleRuleMutation.isPending} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50">
                   {rule.status === 'active' ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-slate-400" />}
                 </button>
-                <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => { setRules(rules.filter(r => r.id !== rule.id)); toast.success('Rule deleted'); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => setEditingRule(rule)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={() => deleteRuleMutation.mutate(rule.id)} disabled={deleteRuleMutation.isPending} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           </div>
@@ -246,11 +313,13 @@ export default function AutomationPage() {
   );
 }
 
-function RuleBuilder({ onClose, onSave }: { onClose: () => void; onSave: (rule: AutomationRule) => void }) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [trigger, setTrigger] = useState<TriggerType>('claim_filed');
-  const [actions, setActions] = useState<{ type: ActionType; delayDays: number; description: string }[]>([]);
+function RuleBuilder({ initialRule, onClose, onSave }: { initialRule?: AutomationRule; onClose: () => void; onSave: (rule: AutomationRule) => void }) {
+  const [name, setName] = useState(initialRule?.name ?? '');
+  const [description, setDescription] = useState(initialRule?.description ?? '');
+  const [trigger, setTrigger] = useState<TriggerType>(initialRule?.trigger ?? 'claim_filed');
+  const [actions, setActions] = useState<{ type: ActionType; delayDays: number; description: string }[]>(
+    initialRule?.actions.map(a => ({ type: a.type, delayDays: a.delayDays, description: a.config?.description ?? '' })) ?? []
+  );
   const [newActionType, setNewActionType] = useState<ActionType>('send_email');
   const [newActionDelay, setNewActionDelay] = useState(0);
 
@@ -262,18 +331,22 @@ function RuleBuilder({ onClose, onSave }: { onClose: () => void; onSave: (rule: 
   function save() {
     if (!name.trim()) { toast.error('Rule name is required'); return; }
     if (actions.length === 0) { toast.error('Add at least one action'); return; }
-    onSave({
-      id: crypto.randomUUID(),
+    const rule: AutomationRule = {
+      id: initialRule?.id ?? crypto.randomUUID(),
       name, description, trigger,
       actions: actions.map((a, i) => ({ id: String(i), type: a.type, delayDays: a.delayDays, config: {} })),
-      status: 'draft', timesTriggered: 0, createdAt: new Date().toISOString().split('T')[0],
-    });
+      status: initialRule?.status ?? 'draft',
+      timesTriggered: initialRule?.timesTriggered ?? 0,
+      lastTriggered: initialRule?.lastTriggered,
+      createdAt: initialRule?.createdAt ?? new Date().toISOString().split('T')[0],
+    };
+    onSave(rule);
   }
 
   return (
     <div className="card p-6 border-2 border-primary-200 dark:border-primary-500/30 space-y-5">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white">New Automation Rule</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white">{initialRule ? 'Edit Automation Rule' : 'New Automation Rule'}</h3>
         <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
       </div>
 
@@ -324,7 +397,7 @@ function RuleBuilder({ onClose, onSave }: { onClose: () => void; onSave: (rule: 
 
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500">Cancel</button>
-        <button onClick={save} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1"><Save className="w-4 h-4" /> Create Rule</button>
+        <button onClick={save} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-1"><Save className="w-4 h-4" /> {initialRule ? 'Update Rule' : 'Create Rule'}</button>
       </div>
     </div>
   );

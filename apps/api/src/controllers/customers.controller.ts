@@ -97,6 +97,46 @@ export const customersController = {
     res.json(reports);
   }),
 
+  listProducts: asyncHandler(async (req, res) => {
+    const tenant = req.tenant;
+    const result = await customersService.listAllProducts(tenant?.effectiveCorporateId ?? null, tenant?.isSuperAdmin ?? false);
+    res.json(result);
+  }),
+
+  listContacts: asyncHandler(async (req, res) => {
+    const tenant = req.tenant;
+    const result = await customersService.listAllContacts(tenant?.effectiveCorporateId ?? null, tenant?.isSuperAdmin ?? false);
+    res.json(result);
+  }),
+
+  listLocations: asyncHandler(async (req, res) => {
+    const tenant = req.tenant;
+    const result = await customersService.listAllAddresses(tenant?.effectiveCorporateId ?? null, tenant?.isSuperAdmin ?? false);
+    res.json(result);
+  }),
+
+  createProduct: asyncHandler(async (req, res) => {
+    const { customerId, ...data } = req.body;
+    if (!customerId) { res.status(400).json({ error: 'customerId required' }); return; }
+    const product = await customersService.addProduct(customerId, data);
+    res.status(201).json(product);
+  }),
+
+  updateProduct: asyncHandler(async (req, res) => {
+    const customerId = (req.body.customerId ?? req.query.customerId) as string;
+    if (!customerId) { res.status(400).json({ error: 'customerId required' }); return; }
+    const { customerId: _c, ...data } = req.body;
+    const product = await customersService.updateProduct(customerId, req.params.id as string, data);
+    res.json(product);
+  }),
+
+  deleteProduct: asyncHandler(async (req, res) => {
+    const customerId = req.query.customerId as string;
+    if (!customerId) { res.status(400).json({ error: 'customerId required' }); return; }
+    await customersService.removeProduct(customerId, req.params.id as string);
+    res.status(204).send();
+  }),
+
   getCountries: asyncHandler(async (_req, res) => {
     const countries = await customersService.getCountries();
     res.json(countries);

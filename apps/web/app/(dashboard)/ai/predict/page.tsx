@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import {
@@ -31,6 +32,7 @@ export default function AIPredictPage() {
         summary: typeof data.result === 'string' ? data.result : data.summary || '',
       });
     },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'AI analysis failed. Make sure you have a valid claim ID.'),
   });
 
   const handlePredict = () => {
@@ -73,6 +75,14 @@ export default function AIPredictPage() {
           </button>
         </div>
       </div>
+
+      {predictMutation.isError && (
+        <div className="card p-4 border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {(predictMutation.error as any)?.response?.data?.error || (predictMutation.error as Error)?.message || 'AI analysis failed. Make sure you have a valid claim ID.'}
+          </p>
+        </div>
+      )}
 
       {/* Results */}
       {result?.prediction && (

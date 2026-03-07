@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
@@ -86,6 +87,7 @@ export default function RootCauseAnalysisPage() {
     onSuccess: (data) => {
       setResult(data.structuredOutput);
     },
+    onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Root cause analysis failed. Try again later.'),
   });
 
   const handleAnalyze = () => {
@@ -134,6 +136,14 @@ export default function RootCauseAnalysisPage() {
           </button>
         </div>
       </div>
+
+      {rcMutation.isError && (
+        <div className="card p-4 border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {(rcMutation.error as any)?.response?.data?.error || (rcMutation.error as Error)?.message || 'Root cause analysis failed. Try again later.'}
+          </p>
+        </div>
+      )}
 
       {analysis && (
         <div className="space-y-4">

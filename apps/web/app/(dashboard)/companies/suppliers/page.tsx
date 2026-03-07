@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -28,6 +28,32 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [creating, setCreating] = useState(false);
+  const queryClient = useQueryClient();
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: Supplier) => {
+      if (data.id) {
+        return put(`/shipments/suppliers/${data.id}`, data);
+      }
+      return post('/shipments/suppliers', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+      toast.success(creating ? 'Supplier added' : 'Supplier updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to save supplier'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => del(`/shipments/suppliers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+      toast.success('Supplier deleted');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete supplier'),
+  });
 
   const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ['suppliers'],
@@ -102,7 +128,7 @@ export default function SuppliersPage() {
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => { setEditing(null); setCreating(false); }} className="px-4 py-2 text-sm text-slate-500">Cancel</button>
-            <button onClick={() => { toast.success(creating ? 'Supplier added' : 'Supplier updated'); setEditing(null); setCreating(false); }} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold"><Save className="w-4 h-4 inline mr-1" /> Save</button>
+            <button onClick={() => editing && saveMutation.mutate(editing)} disabled={saveMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"><Save className="w-4 h-4 inline mr-1" /> Save</button>
           </div>
         </div>
       )}
@@ -131,7 +157,7 @@ export default function SuppliersPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => { setEditing(s); setCreating(false); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => toast.error('Cannot delete supplier with active claims')} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => { if (confirm('Delete this supplier?')) deleteMutation.mutate(s.id); }} disabled={deleteMutation.isPending} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button>
                 </td>
               </tr>
             ))}

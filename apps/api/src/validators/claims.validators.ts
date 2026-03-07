@@ -27,6 +27,7 @@ export const updateClaimSchema = z.object({
   shipDate: z.string().datetime().optional(),
   deliveryDate: z.string().datetime().optional(),
   filingDate: z.string().datetime().optional(),
+  acknowledgmentDate: z.string().optional(),
 });
 
 export const listClaimsQuerySchema = z.object({
@@ -37,6 +38,11 @@ export const listClaimsQuerySchema = z.object({
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  filedDateFrom: z.string().optional(),
+  filedDateTo: z.string().optional(),
+  hasTasks: z.coerce.boolean().optional(),
+  hasOverdueTasks: z.coerce.boolean().optional(),
+  unreadEmails: z.coerce.boolean().optional(),
   sortBy: z.string().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
