@@ -34,7 +34,6 @@
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "shared": "workspace:*",
-    "twilio": "^5.12.2",
     "uuid": "^11.0.5",
     "zod": "^3.24.2"
   },

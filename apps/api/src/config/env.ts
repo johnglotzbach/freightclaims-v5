@@ -56,11 +56,6 @@ const envSchema = z.object({
   // ConvertAPI (document conversion — PDF, Word, images, etc.)
   CONVERT_API_SECRET: z.string().default(''),
 
-  // Twilio (SMS notifications)
-  TWILIO_ACCOUNT_SID: z.string().default(''),
-  TWILIO_AUTH_TOKEN: z.string().default(''),
-  TWILIO_PHONE_NUMBER: z.string().default(''),
-
   // External APIs
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   SMARTY_KEY: z.string().optional(),
