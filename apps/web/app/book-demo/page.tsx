@@ -16,6 +16,7 @@ import {
   Truck, CalendarDays, CheckCircle2, ArrowRight, Send, Users,
   Brain, Shield, BarChart3, Clock, Headphones,
 } from 'lucide-react';
+import { PublicNavbar } from '@/components/layout/public-navbar';
 
 export default function BookDemoPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -46,16 +47,7 @@ export default function BookDemoPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center"><Truck className="w-5 h-5 text-white" /></div>
-            <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Freight<span className="text-primary-500">Claims</span></span>
-          </Link>
-          <Link href="/login" className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500">Sign In</Link>
-        </div>
-      </nav>
+      <PublicNavbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
         <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">

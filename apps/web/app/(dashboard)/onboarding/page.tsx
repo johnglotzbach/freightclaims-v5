@@ -432,7 +432,7 @@ export default function OnboardingPage() {
 
         {/* Help link at the bottom */}
         <p className="text-center text-xs text-slate-400 mt-6">
-          Having trouble? <a href="/support" className="text-primary-500 hover:underline">Get help</a> or
+          Having trouble? <a href="/help" className="text-primary-500 hover:underline">Get help</a> or
           email <a href="mailto:support@freightclaims.com" className="text-primary-500 hover:underline">support@freightclaims.com</a>
         </p>
       </div>

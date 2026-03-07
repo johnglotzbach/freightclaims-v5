@@ -12,6 +12,7 @@ import {
   Brain, Users, Settings, BarChart3, Clock, ArrowRight,
   Headphones, Search, ExternalLink, HelpCircle, Zap, Globe,
 } from 'lucide-react';
+import { PublicNavbar } from '@/components/layout/public-navbar';
 
 export const metadata = {
   title: 'Support & Help Center',
@@ -72,27 +73,7 @@ const KB_CATEGORIES = [
 export default function SupportPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center shadow-md shadow-primary-500/20">
-              <Truck className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Freight<span className="text-primary-500">Claims</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">
-              Sign In
-            </Link>
-            <Link href="/register" className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-md shadow-primary-500/20">
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <PublicNavbar />
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-primary-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-16 sm:py-20">
@@ -194,10 +175,10 @@ export default function SupportPage() {
                 <ul className="space-y-1.5">
                   {cat.articles.map((article) => (
                     <li key={article}>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 hover:text-primary-500 cursor-pointer transition-colors flex items-center gap-1">
+                      <Link href="/help" className="text-xs text-slate-500 dark:text-slate-400 hover:text-primary-500 transition-colors flex items-center gap-1">
                         <Book className="w-3 h-3 flex-shrink-0" />
                         {article}
-                      </span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -207,31 +188,46 @@ export default function SupportPage() {
         </div>
       </section>
 
+      {/* In-app help center banner */}
+      <section className="py-8 bg-primary-50 dark:bg-primary-500/5 border-y border-primary-100 dark:border-primary-500/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-primary-900 dark:text-primary-100">Looking for in-depth guides?</h3>
+            <p className="text-xs text-primary-700 dark:text-primary-300 mt-0.5">Our full Help Center with step-by-step tutorials is available inside the app.</p>
+          </div>
+          <Link href="/login" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-md shadow-primary-500/20 flex-shrink-0">
+            Log in to Help Center <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </section>
+
       {/* Popular topics */}
       <section className="py-12 bg-slate-50 dark:bg-slate-900/50 border-y border-slate-100 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Popular Topics</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
-              'How do I file my first claim?',
-              'What are the Carmack Amendment deadlines?',
-              'How does the AI intake agent work?',
-              'Can I import claims from a spreadsheet?',
-              'How do I set up user permissions?',
-              'How do I configure email notifications?',
-              'What does the Negotiation Agent do?',
-              'How is my data kept secure?',
-              'How do I use the AI Copilot chat?',
+              { q: 'How do I file my first claim?', cat: 'getting-started' },
+              { q: 'What are the Carmack Amendment deadlines?', cat: 'claims-management' },
+              { q: 'How does the AI intake agent work?', cat: 'ai-features' },
+              { q: 'Can I import claims from a spreadsheet?', cat: 'getting-started' },
+              { q: 'How do I set up user permissions?', cat: 'account-settings' },
+              { q: 'How do I configure email notifications?', cat: 'account-settings' },
+              { q: 'What does the Negotiation Agent do?', cat: 'ai-features' },
+              { q: 'How is my data kept secure?', cat: 'account-settings' },
+              { q: 'How do I use the AI Copilot chat?', cat: 'ai-features' },
             ].map((topic) => (
-              <div
-                key={topic}
-                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 hover:border-primary-200 dark:hover:border-primary-500/30 cursor-pointer transition-colors group"
+              <Link
+                key={topic.q}
+                href="/help"
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 hover:border-primary-200 dark:hover:border-primary-500/30 transition-colors group"
               >
                 <Book className="w-4 h-4 text-slate-400 group-hover:text-primary-500 flex-shrink-0 transition-colors" />
                 <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                  {topic}
+                  {topic.q}
                 </span>
-              </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-primary-400 ml-auto flex-shrink-0 transition-colors" />
+              </Link>
             ))}
           </div>
         </div>
