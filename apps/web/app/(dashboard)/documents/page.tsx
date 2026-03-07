@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { get } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
+import { PdfViewer } from '@/components/pdf-viewer';
 import {
   FileText, Search, Upload, Download, Eye, Trash2,
   FolderOpen, Image, Brain, List, Grid,
@@ -47,6 +48,7 @@ export default function DocumentsPage() {
   const [category, setCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selected, setSelected] = useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = useState<{ url: string; name: string } | null>(null);
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['documents'],
@@ -98,6 +100,24 @@ export default function DocumentsPage() {
 
   function toggleSelect(id: string) {
     setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
+  }
+
+  async function handleView(doc: Document) {
+    try {
+      const { url } = await get<{ url: string }>(`/documents/${doc.id}/url`);
+      setViewingDoc({ url, name: doc.name });
+    } catch {
+      window.open(`/api/v1/documents/${doc.id}/url`, '_blank');
+    }
+  }
+
+  async function handleDownload(doc: Document) {
+    try {
+      const { url } = await get<{ url: string }>(`/documents/${doc.id}/url`);
+      window.open(url, '_blank');
+    } catch {
+      window.open(`/api/v1/documents/${doc.id}/url`, '_blank');
+    }
   }
 
   return (
@@ -252,8 +272,8 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
-                        <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
+                        <button onClick={() => handleView(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
+                        <button onClick={() => handleDownload(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
                         <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500" title="AI Extract"><Brain className="w-4 h-4" /></button>
                         <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-4 h-4" /></button>
                       </div>
@@ -289,13 +309,20 @@ export default function DocumentsPage() {
               </span>
               <div className="text-[10px] text-primary-500 mt-1">{doc.claimNumber}</div>
               <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Eye className="w-3.5 h-3.5" /></button>
-                <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Download className="w-3.5 h-3.5" /></button>
+                <button onClick={() => handleView(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Eye className="w-3.5 h-3.5" /></button>
+                <button onClick={() => handleDownload(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Download className="w-3.5 h-3.5" /></button>
                 <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           ))}
         </div>
+      )}
+      {viewingDoc && (
+        <PdfViewer
+          url={viewingDoc.url}
+          fileName={viewingDoc.name}
+          onClose={() => setViewingDoc(null)}
+        />
       )}
     </div>
   );

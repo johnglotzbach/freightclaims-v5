@@ -64,7 +64,15 @@ export function errorHandler(
 
   // Zod validation errors (in case they bubble past the validate middleware)
   if (err.name === 'ZodError') {
-    res.status(400).json({ success: false, error: 'Validation failed', details: (err as any).issues });
+    if (env.NODE_ENV === 'production') {
+      res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        fields: (err as any).issues.map((i: { path: string[] }) => i.path.join('.')),
+      });
+    } else {
+      res.status(400).json({ success: false, error: 'Validation failed', details: (err as any).issues });
+    }
     return;
   }
 
@@ -75,8 +83,13 @@ export function errorHandler(
   }
 
   // Unexpected errors — never leak internals in production
+  const SENSITIVE_KEYS = ['password', 'currentPassword', 'newPassword', 'token', 'resetToken', 'refreshToken', 'apiKey', 'secret', 'ssn', 'creditCard'];
+  const sanitizedBody = req.body && typeof req.body === 'object'
+    ? Object.fromEntries(Object.entries(req.body).map(([k, v]) => [k, SENSITIVE_KEYS.includes(k) ? '[REDACTED]' : v]))
+    : req.body;
+
   logger.error(
-    { err, path: req.path, method: req.method, body: req.body },
+    { err, path: req.path, method: req.method, body: sanitizedBody },
     'Unhandled error',
   );
 

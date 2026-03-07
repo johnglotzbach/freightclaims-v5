@@ -12,6 +12,27 @@ const isDev = process.env.NODE_ENV === 'development';
 
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
+  redact: {
+    paths: [
+      'req.headers.authorization',
+      'req.body.password',
+      'req.body.currentPassword',
+      'req.body.newPassword',
+      'req.body.creditCard',
+      'req.body.ssn',
+      'req.body.token',
+      'req.body.resetToken',
+      'req.body.refreshToken',
+      'req.body.apiKey',
+      'req.body.secret',
+      '*.passwordHash',
+      '*.password',
+      '*.token',
+      '*.apiKey',
+      '*.secret',
+    ],
+    censor: '[REDACTED]',
+  },
   ...(isDev && {
     transport: {
       target: 'pino-pretty' as const,

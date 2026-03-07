@@ -15,10 +15,23 @@ import { usersRepository } from '../repositories/users.repository';
 import { env } from '../config/env';
 import { generateToken, generateRefreshToken } from '../middleware/auth.middleware';
 import type { JwtPayload } from '../middleware/auth.middleware';
-import { UnauthorizedError, NotFoundError, ConflictError } from '../utils/errors';
+import { UnauthorizedError, NotFoundError, ConflictError, BadRequestError } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { smtpService } from './smtp.service';
 
 const BCRYPT_ROUNDS = 12;
+
+function validatePasswordComplexity(password: string): void {
+  const issues: string[] = [];
+  if (password.length < 8) issues.push('at least 8 characters');
+  if (!/[A-Z]/.test(password)) issues.push('at least 1 uppercase letter');
+  if (!/[a-z]/.test(password)) issues.push('at least 1 lowercase letter');
+  if (!/[0-9]/.test(password)) issues.push('at least 1 number');
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) issues.push('at least 1 special character');
+  if (issues.length > 0) {
+    throw new BadRequestError(`Password must contain: ${issues.join(', ')}`);
+  }
+}
 
 /**
  * Builds a complete JWT payload from a user record (including role + permissions).
@@ -80,9 +93,16 @@ export const usersService = {
     const existing = await usersRepository.findByEmail(data.email as string);
     if (existing) throw new ConflictError('Email already registered');
 
+    validatePasswordComplexity(data.password as string);
     const passwordHash = await bcrypt.hash(data.password as string, BCRYPT_ROUNDS);
     const { password: _pw, ...rest } = data;
     const user = await usersRepository.create({ ...rest, passwordHash });
+
+    await smtpService.sendWelcome({
+      to: data.email as string,
+      userName: (data.firstName as string) || (data.email as string),
+      loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
+    }).catch((err) => logger.error({ err }, 'Failed to send welcome email'));
 
     return safeUser(user as unknown as Record<string, unknown>);
   },
@@ -121,6 +141,13 @@ export const usersService = {
       resetTokenExpiresAt: new Date(Date.now() + 3600_000),
     });
 
+    const resetUrl = `${env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
+    await smtpService.sendPasswordReset({
+      to: user.email,
+      resetUrl,
+      userName: (user as any).firstName || user.email,
+    }).catch((err) => logger.error({ err, email }, 'Failed to send password reset email'));
+
     logger.info({ email }, 'Password reset token generated');
   },
 
@@ -133,6 +160,7 @@ export const usersService = {
       const user = await usersRepository.findById(decoded.userId);
       if (!user) throw new NotFoundError('User not found');
 
+      validatePasswordComplexity(newPassword);
       const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
       await usersRepository.update(user.id, {
         passwordHash,
@@ -167,6 +195,7 @@ export const usersService = {
     const valid = await bcrypt.compare(data.currentPassword, user.passwordHash);
     if (!valid) throw new UnauthorizedError('Current password is incorrect');
 
+    validatePasswordComplexity(data.newPassword);
     const passwordHash = await bcrypt.hash(data.newPassword, BCRYPT_ROUNDS);
     return usersRepository.update(userId, { passwordHash });
   },

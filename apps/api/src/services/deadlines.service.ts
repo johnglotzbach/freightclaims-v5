@@ -7,6 +7,8 @@
  */
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { smtpService } from './smtp.service';
+import { env } from '../config/env';
 
 const CARMACK_DEADLINES = {
   FILING_DEADLINE_MONTHS: 9,
@@ -151,6 +153,24 @@ export async function checkDeadlines(): Promise<DeadlineAlert[]> {
       await prisma.notification.createMany({ data: notifData }).catch((err: any) =>
         logger.warn({ err }, 'Failed to create deadline notifications')
       );
+    }
+
+    for (const admin of adminUsers) {
+      const adminUser = await prisma.user.findUnique({ where: { id: admin.id }, select: { email: true } });
+      if (adminUser?.email) {
+        for (const alert of alerts.filter(a => a.severity === 'critical')) {
+          const msg = notifications.find(n => n.message.includes(alert.claimNumber));
+          if (msg) {
+            await smtpService.sendClaimNotification({
+              to: adminUser.email,
+              claimNumber: alert.claimNumber,
+              subject: msg.title,
+              body: msg.message,
+              claimUrl: `${env.NEXT_PUBLIC_APP_URL}/claims/${alert.claimId}`,
+            }).catch(() => {});
+          }
+        }
+      }
     }
 
     logger.info({ alertCount: alerts.length, notifiedUsers: adminUsers.length }, 'Deadline check completed');

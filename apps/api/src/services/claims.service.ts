@@ -14,6 +14,9 @@ import { claimsRepository } from '../repositories/claims.repository';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import type { JwtPayload } from '../middleware/auth.middleware';
+import { smtpService } from './smtp.service';
+import { env } from '../config/env';
+import { prisma } from '../config/database';
 
 export const claimsService = {
   /**
@@ -115,7 +118,23 @@ export const claimsService = {
       throw new BadRequestError(`Cannot transition from ${claim.status} to ${newStatus}`);
     }
 
-    return claimsRepository.updateStatus(id, newStatus, user.userId);
+    const updated = await claimsRepository.updateStatus(id, newStatus, user.userId);
+
+    const freshClaim = await claimsRepository.findById(id);
+    if (freshClaim) {
+      const creator = await prisma.user.findUnique({ where: { id: freshClaim.createdById }, select: { email: true, firstName: true } });
+      if (creator?.email) {
+        await smtpService.sendClaimNotification({
+          to: creator.email,
+          claimNumber: freshClaim.claimNumber,
+          subject: `Status changed to ${newStatus}`,
+          body: `Your claim ${freshClaim.claimNumber} has been updated to status: ${newStatus}.`,
+          claimUrl: `${env.NEXT_PUBLIC_APP_URL}/claims/${id}`,
+        }).catch((err: any) => logger.error({ err, claimId: id }, 'Failed to send status change email'));
+      }
+    }
+
+    return updated;
   },
 
   // --- Parties ---
