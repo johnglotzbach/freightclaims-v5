@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -106,7 +106,7 @@ export default function RolesPage() {
 
   const { data: roles = [], isLoading } = useQuery({
     queryKey: ['roles'],
-    queryFn: () => get<Role[]>('/users/roles'),
+    queryFn: () => getList<Role>('/users/roles/all'),
   });
 
   if (isLoading) {

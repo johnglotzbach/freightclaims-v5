@@ -58,7 +58,7 @@ export default function CompanyEditorPage() {
 
   const { data: locations = [], isLoading: locationsLoading } = useQuery({
     queryKey: ['customer-locations', id],
-    queryFn: () => get<Location[]>(`/customers/${id}/locations`),
+    queryFn: () => get<Location[]>(`/customers/${id}/addresses`),
   });
 
   const { data: contacts = [], isLoading: contactsLoading } = useQuery({

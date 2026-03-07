@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,7 +31,7 @@ export default function SuppliersPage() {
 
   const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ['suppliers'],
-    queryFn: () => get<Supplier[]>('/shipments/suppliers'),
+    queryFn: () => getList<Supplier>('/shipments/suppliers/all'),
   });
 
   const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.code?.toLowerCase().includes(search.toLowerCase()));

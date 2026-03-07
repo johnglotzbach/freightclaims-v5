@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -38,7 +38,7 @@ interface Carrier {
 export default function CarriersPage() {
   const { data: carriers = [], isLoading } = useQuery({
     queryKey: ['carriers'],
-    queryFn: () => get<Carrier[]>('/shipments/carriers'),
+    queryFn: () => getList<Carrier>('/shipments/carriers/all'),
   });
   const [search, setSearch] = useState('');
   const [modeFilter, setModeFilter] = useState('all');

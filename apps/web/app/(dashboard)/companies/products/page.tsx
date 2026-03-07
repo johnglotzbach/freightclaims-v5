@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import {
@@ -26,7 +26,7 @@ export default function AllProductsPage() {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products'],
-    queryFn: () => get<Product[]>('/customers/products'),
+    queryFn: () => getList<Product>('/customers/products'),
   });
 
   const filtered = products.filter(p =>

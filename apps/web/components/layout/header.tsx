@@ -27,20 +27,42 @@ interface SearchResult {
   href: string;
 }
 
-interface Notification {
+interface RawNotification {
   id: string;
-  type: 'claim' | 'task' | 'email' | 'comment' | 'system';
+  type: string;
   title: string;
-  body: string;
-  timestamp: string;
-  isRead: boolean;
-  href?: string;
+  message: string;
+  link?: string | null;
+  readAt: string | null;
+  createdAt: string;
 }
 
 interface CorporateAccount {
   id: string;
   name: string;
   code: string;
+}
+
+function toSearchResults(raw: unknown): SearchResult[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const out: SearchResult[] = [];
+    const claims = Array.isArray(obj.claims) ? obj.claims : [];
+    const customers = Array.isArray(obj.customers) ? obj.customers : [];
+    const carriers = Array.isArray(obj.carriers) ? obj.carriers : [];
+    claims.forEach((c: any) => out.push({ id: c.id, type: 'claim', title: c.claimNumber || c.id, subtitle: c.proNumber, href: `/claims/${c.id}` }));
+    customers.forEach((c: any) => out.push({ id: c.id, type: 'customer', title: c.name || c.id, href: `/customers/${c.id}` }));
+    carriers.forEach((c: any) => out.push({ id: c.id, type: 'carrier', title: c.name || c.id, subtitle: c.scacCode, href: `/companies/carriers` }));
+    return out;
+  }
+  return [];
+}
+
+function extractArray<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as any).data)) return (raw as any).data;
+  return [];
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
@@ -58,27 +80,33 @@ export function Header({ onMenuClick }: HeaderProps) {
   const userRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: notifications = [] } = useQuery({
+  const { data: rawNotifications } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => get<Notification[]>('/email/notifications'),
+    queryFn: () => get<unknown>('/email/notifications'),
     refetchInterval: 30_000,
   });
 
-  const { data: corporateAccounts = [] } = useQuery({
+  const notifications: RawNotification[] = extractArray(rawNotifications);
+
+  const { data: rawCorporateAccounts } = useQuery({
     queryKey: ['corporate-accounts'],
-    queryFn: () => get<CorporateAccount[]>('/customers?type=corporate'),
+    queryFn: () => get<unknown>('/customers?type=corporate'),
   });
 
-  const { data: searchResults = [] } = useQuery({
+  const corporateAccounts: CorporateAccount[] = extractArray(rawCorporateAccounts);
+
+  const { data: rawSearchResults } = useQuery({
     queryKey: ['search', searchQuery],
-    queryFn: () => get<SearchResult[]>(`/search?q=${encodeURIComponent(searchQuery)}`),
+    queryFn: () => get<unknown>(`/search?q=${encodeURIComponent(searchQuery)}`),
     enabled: searchQuery.length >= 2,
   });
+
+  const searchResults: SearchResult[] = rawSearchResults ? toSearchResults(rawSearchResults) : [];
 
   const [currentCorporateId, setCurrentCorporateId] = useState<string | null>(null);
   const currentCorporate = corporateAccounts.find(a => a.id === currentCorporateId) || corporateAccounts[0];
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = notifications.filter(n => !n.readAt).length;
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -125,7 +153,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <button onClick={() => setSearchOpen(true)} className="relative flex-1 max-w-md hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-text">
             <Search className="w-4 h-4" />
             <span>Search claims, customers, carriers...</span>
-            <kbd className="ml-auto text-[10px] bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
+            <kbd className="ml-auto text-[10px] bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 font-mono">&#8984;K</kbd>
           </button>
           <button onClick={() => setSearchOpen(true)} className="sm:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <Search className="w-5 h-5" />
@@ -182,17 +210,18 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <div className="py-8 text-center"><p className="text-sm text-slate-400">No notifications</p></div>
                   ) : notifications.map(notif => {
                     const Icon = typeIcons[notif.type] || Bell;
+                    const isRead = !!notif.readAt;
                     return (
-                      <button key={notif.id} onClick={() => { if (notif.href) router.push(notif.href); setNotifOpen(false); }} className={cn('w-full flex gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0', !notif.isRead && 'bg-primary-50/50 dark:bg-primary-500/5')}>
-                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', !notif.isRead ? 'bg-primary-100 dark:bg-primary-900' : 'bg-slate-100 dark:bg-slate-700')}>
-                          <Icon className={cn('w-4 h-4', !notif.isRead ? 'text-primary-500' : 'text-slate-400')} />
+                      <button key={notif.id} onClick={() => { if (notif.link) router.push(notif.link); setNotifOpen(false); }} className={cn('w-full flex gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0', !isRead && 'bg-primary-50/50 dark:bg-primary-500/5')}>
+                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', !isRead ? 'bg-primary-100 dark:bg-primary-900' : 'bg-slate-100 dark:bg-slate-700')}>
+                          <Icon className={cn('w-4 h-4', !isRead ? 'text-primary-500' : 'text-slate-400')} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className={cn('text-sm', !notif.isRead ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-400')}>{notif.title}</p>
-                          <p className="text-xs text-slate-500 truncate">{notif.body}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3" />{notif.timestamp}</p>
+                          <p className={cn('text-sm', !isRead ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-400')}>{notif.title}</p>
+                          <p className="text-xs text-slate-500 truncate">{notif.message}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3" />{notif.createdAt ? new Date(notif.createdAt).toLocaleDateString() : ''}</p>
                         </div>
-                        {!notif.isRead && <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-2" />}
+                        {!isRead && <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-2" />}
                       </button>
                     );
                   })}
@@ -274,8 +303,8 @@ export function Header({ onMenuClick }: HeaderProps) {
             )}
 
             <div className="flex items-center gap-4 px-5 py-2.5 border-t border-slate-100 dark:border-slate-700 text-[10px] text-slate-400">
-              <span><kbd className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">↑↓</kbd> Navigate</span>
-              <span><kbd className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">↵</kbd> Open</span>
+              <span><kbd className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">&uarr;&darr;</kbd> Navigate</span>
+              <span><kbd className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">&crarr;</kbd> Open</span>
               <span><kbd className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">Esc</kbd> Close</span>
             </div>
           </div>

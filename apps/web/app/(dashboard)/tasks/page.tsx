@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import {
@@ -43,7 +43,7 @@ export default function TasksPage() {
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['claims-tasks'],
-    queryFn: () => get<Task[]>('/claims/tasks'),
+    queryFn: () => getList<Task>('/claims/tasks'),
   });
 
   if (isLoading) {

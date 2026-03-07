@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { get, post } from '@/lib/api-client';
+import { get, getList, post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -53,7 +53,7 @@ export default function ClaimEmailPage() {
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ['claim-emails', id],
-    queryFn: () => get<EmailThread[]>(`/email/claims/${id}`),
+    queryFn: () => getList<EmailThread>(`/email/claims/${id}`),
     enabled: !!id,
   });
 

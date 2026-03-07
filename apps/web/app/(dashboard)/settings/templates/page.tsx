@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -42,7 +42,7 @@ export default function TemplatesPage() {
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['templates'],
-    queryFn: () => get<Template[]>('/users/templates'),
+    queryFn: () => getList<Template>('/users/templates/email'),
   });
 
   const filtered = templates.filter(t => t.type === activeType && (search === '' || t.name.toLowerCase().includes(search.toLowerCase())));

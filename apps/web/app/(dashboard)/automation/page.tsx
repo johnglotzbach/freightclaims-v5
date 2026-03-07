@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -66,11 +66,11 @@ const ACTIONS: { key: ActionType; label: string; icon: typeof Mail }[] = [
 export default function AutomationPage() {
   const { data: fetchedRules = [], isLoading: rulesLoading } = useQuery({
     queryKey: ['automation-rules'],
-    queryFn: () => get<AutomationRule[]>('/automation/rules'),
+    queryFn: () => getList<AutomationRule>('/automation/rules'),
   });
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['automation-templates'],
-    queryFn: () => get<AutomationTemplate[]>('/automation/templates'),
+    queryFn: () => getList<AutomationTemplate>('/automation/templates'),
   });
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [rulesInitialized, setRulesInitialized] = useState(false);

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import {
@@ -29,7 +29,7 @@ export default function AllLocationsPage() {
 
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations'],
-    queryFn: () => get<Location[]>('/customers/locations'),
+    queryFn: () => getList<Location>('/customers/locations'),
   });
 
   const filtered = locations.filter(l => `${l.name} ${l.customerName} ${l.city} ${l.state}`.toLowerCase().includes(search.toLowerCase()));

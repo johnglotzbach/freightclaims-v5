@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { get, getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { PdfViewer } from '@/components/pdf-viewer';
@@ -52,7 +52,7 @@ export default function DocumentsPage() {
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['documents'],
-    queryFn: () => get<Document[]>('/documents'),
+    queryFn: () => getList<Document>('/documents'),
   });
 
   if (isLoading) {

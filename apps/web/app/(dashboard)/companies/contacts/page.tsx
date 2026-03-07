@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import {
@@ -30,7 +30,7 @@ export default function AllContactsPage() {
 
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ['contacts'],
-    queryFn: () => get<Contact[]>('/customers/contacts'),
+    queryFn: () => getList<Contact>('/customers/contacts'),
   });
 
   const filtered = contacts.filter(c => {

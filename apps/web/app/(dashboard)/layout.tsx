@@ -9,13 +9,22 @@
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
-import { OnboardingTour } from '@/components/onboarding/onboarding-tour';
-import { ChatbotWidget } from '@/components/ai/chatbot-widget';
+import { ClientErrorBoundary } from '@/components/error-boundary';
+
+const OnboardingTour = dynamic(
+  () => import('@/components/onboarding/onboarding-tour').then((m) => ({ default: m.OnboardingTour })),
+  { ssr: false },
+);
+const ChatbotWidget = dynamic(
+  () => import('@/components/ai/chatbot-widget').then((m) => ({ default: m.ChatbotWidget })),
+  { ssr: false },
+);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, loadUser } = useAuth();
@@ -49,16 +58,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950">
-      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+      <ClientErrorBoundary>
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+      </ClientErrorBoundary>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header onMenuClick={() => setMobileMenuOpen(true)} />
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 animate-page-enter overflow-x-hidden">
+        <ClientErrorBoundary>
+          <Header onMenuClick={() => setMobileMenuOpen(true)} />
+        </ClientErrorBoundary>
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">
           {children}
         </main>
       </div>
-      <ChatbotWidget />
-      <OnboardingTour />
+      <ClientErrorBoundary>
+        <ChatbotWidget />
+      </ClientErrorBoundary>
+      <ClientErrorBoundary>
+        <OnboardingTour />
+      </ClientErrorBoundary>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,12 +35,12 @@ export default function ApiSetupPage() {
 
   const { data: apiKeys = [], isLoading: loadingKeys } = useQuery({
     queryKey: ['api-keys'],
-    queryFn: () => get<ApiKey[]>('/users/api-keys'),
+    queryFn: () => getList<ApiKey>('/users/api-keys'),
   });
 
   const { data: carriers = [], isLoading: loadingCarriers } = useQuery({
     queryKey: ['carriers'],
-    queryFn: () => get<IntegratedCarrier[]>('/shipments/carriers'),
+    queryFn: () => getList<IntegratedCarrier>('/shipments/carriers/all'),
   });
 
   const isLoading = loadingKeys || loadingCarriers;

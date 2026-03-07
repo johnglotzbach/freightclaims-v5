@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -52,7 +52,7 @@ export default function MassUploadPage() {
 
   const { data: history = [], isLoading: historyLoading } = useQuery({
     queryKey: ['mass-upload-history'],
-    queryFn: () => get<UploadHistory[]>('/claims/mass-upload/history'),
+    queryFn: () => getList<UploadHistory>('/claims/mass-upload/history'),
   });
 
   const handleDrop = useCallback((e: React.DragEvent) => {

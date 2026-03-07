@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import {
@@ -59,7 +59,7 @@ export default function AIEntryPage() {
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['ai-documents'],
-    queryFn: () => get<ProcessedDocument[]>('/ai/documents'),
+    queryFn: () => getList<ProcessedDocument>('/ai/documents'),
   });
 
   if (isLoading) {

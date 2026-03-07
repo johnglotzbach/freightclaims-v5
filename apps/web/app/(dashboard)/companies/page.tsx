@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import {
@@ -41,7 +41,7 @@ export default function CompaniesPage() {
 
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ['customers'],
-    queryFn: () => get<Company[]>('/customers'),
+    queryFn: () => getList<Company>('/customers'),
   });
 
   if (isLoading) {

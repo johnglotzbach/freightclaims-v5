@@ -90,6 +90,18 @@ export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<
   return response.data;
 }
 
+/**
+ * GET that always returns an array — handles both raw arrays and
+ * paginated `{ data: T[], pagination }` responses from the API.
+ */
+export async function getList<T>(url: string, config?: AxiosRequestConfig): Promise<T[]> {
+  const response = await client.get(url, config);
+  const d = response.data;
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === 'object' && Array.isArray((d as any).data)) return (d as any).data;
+  return [];
+}
+
 export async function post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   const response = await client.post<T>(url, data, config);
   return response.data;

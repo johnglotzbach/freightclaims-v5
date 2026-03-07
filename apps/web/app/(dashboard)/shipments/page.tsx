@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { get } from '@/lib/api-client';
+import { getList } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -46,7 +46,7 @@ const STATUS_CONFIG: Record<ShipmentStatus, { label: string; color: string }> = 
 export default function ShipmentsPage() {
   const { data: shipments = [], isLoading } = useQuery({
     queryKey: ['shipments'],
-    queryFn: () => get<Shipment[]>('/shipments'),
+    queryFn: () => getList<Shipment>('/shipments'),
   });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ShipmentStatus>('all');
