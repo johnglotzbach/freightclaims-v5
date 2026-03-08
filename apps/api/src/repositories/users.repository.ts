@@ -135,4 +135,6 @@ export const usersRepository = {
   async getLetterTemplates() { return prisma.letterTemplate.findMany(); },
   async createLetterTemplate(data: Record<string, unknown>) { return prisma.letterTemplate.create({ data: data as any }); },
   async updateLetterTemplate(id: string, data: Record<string, unknown>) { return prisma.letterTemplate.update({ where: { id }, data: data as any }); },
+  async deleteEmailTemplate(id: string) { return prisma.emailTemplate.delete({ where: { id } }); },
+  async deleteLetterTemplate(id: string) { return prisma.letterTemplate.delete({ where: { id } }); },
 };

@@ -241,6 +241,8 @@ export const usersService = {
   async getLetterTemplates() { return usersRepository.getLetterTemplates(); },
   async createLetterTemplate(data: Record<string, unknown>) { return usersRepository.createLetterTemplate(data); },
   async updateLetterTemplate(id: string, data: Record<string, unknown>) { return usersRepository.updateLetterTemplate(id, data); },
+  async deleteEmailTemplate(id: string) { return usersRepository.deleteEmailTemplate(id); },
+  async deleteLetterTemplate(id: string) { return usersRepository.deleteLetterTemplate(id); },
 
   async adminResetPassword(userId: string) {
     const user = await usersRepository.findById(userId);

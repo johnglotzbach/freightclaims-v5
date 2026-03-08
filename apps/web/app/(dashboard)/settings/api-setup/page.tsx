@@ -150,7 +150,7 @@ export default function ApiSetupPage() {
                     </button>
                     <button onClick={() => { navigator.clipboard.writeText(key.key); toast.success('Copied to clipboard'); }} className="text-slate-400 hover:text-slate-600"><Copy className="w-3.5 h-3.5" /></button>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">Created {key.createdAt} &middot; Last used {key.lastUsed || 'Never'}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Created {key.createdAt} · Last used {key.lastUsed || 'Never'}</p>
                 </div>
                 <button onClick={() => { if (confirm('Revoke this API key? It will stop working immediately.')) revokeKeyMutation.mutate(key.id); }} disabled={revokeKeyMutation.isPending} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
               </div>

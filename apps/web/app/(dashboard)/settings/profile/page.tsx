@@ -80,7 +80,7 @@ function GeneralTab() {
         </div>
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white">{firstName} {lastName}</h3>
-          <p className="text-xs text-slate-500">{user?.role || 'User'}</p>
+          <p className="text-xs text-slate-500">{user?.roleName || (typeof user?.role === 'string' ? user.role : 'User')}</p>
         </div>
       </div>
 
@@ -198,7 +198,8 @@ function NotificationsTab() {
 
 function SignatureTab() {
   const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
-  const defaultSig = user ? `<p>Best regards,</p><p><strong>${user.firstName || ''} ${user.lastName || ''}</strong><br/>${user.role || ''}<br/>FreightClaims<br/>${user.email || ''}</p>` : '';
+  const roleName = user?.roleName || (typeof user?.role === 'string' ? user.role : '') || '';
+  const defaultSig = user ? `<p>Best regards,</p><p><strong>${user.firstName || ''} ${user.lastName || ''}</strong><br/>${roleName}<br/>FreightClaims<br/>${user.email || ''}</p>` : '';
   const [signature, setSignature] = useState(defaultSig);
   useEffect(() => { if (defaultSig && !signature) setSignature(defaultSig); }, [defaultSig]);
 

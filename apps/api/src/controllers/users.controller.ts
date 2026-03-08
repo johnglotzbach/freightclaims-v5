@@ -155,6 +155,44 @@ export const usersController = {
     res.json(template);
   }),
 
+  deleteEmailTemplate: asyncHandler(async (req, res) => {
+    await usersService.deleteEmailTemplate(req.params.id as string);
+    res.status(204).send();
+  }),
+
+  deleteLetterTemplate: asyncHandler(async (req, res) => {
+    await usersService.deleteLetterTemplate(req.params.id as string);
+    res.status(204).send();
+  }),
+
+  getApiKeys: asyncHandler(async (_req, res) => {
+    res.json([]);
+  }),
+
+  createApiKey: asyncHandler(async (_req, res) => {
+    res.status(501).json({ message: 'API key management coming soon' });
+  }),
+
+  deleteApiKey: asyncHandler(async (_req, res) => {
+    res.status(501).json({ message: 'API key management coming soon' });
+  }),
+
+  saveWebhookConfig: asyncHandler(async (_req, res) => {
+    res.status(501).json({ message: 'Webhook configuration coming soon' });
+  }),
+
+  onboarding: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const { workspace, preferences } = req.body;
+    if (workspace?.companyName) {
+      await usersService.update(user.userId, { companyName: workspace.companyName });
+    }
+    if (preferences) {
+      await usersService.updatePreferences(user.userId, preferences);
+    }
+    res.json({ message: 'Onboarding complete' });
+  }),
+
   adminResetPassword: asyncHandler(async (req, res) => {
     await usersService.adminResetPassword(req.params.id as string);
     res.json({ message: 'Password has been reset. A temporary password has been generated.' });

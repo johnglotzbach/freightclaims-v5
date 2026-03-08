@@ -22,6 +22,7 @@ interface User {
   lastName: string;
   email: string;
   role: string;
+  roleName?: string;
   status: string;
   lastLogin: string | null;
 }
@@ -172,7 +173,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300">
-                      <Shield className="w-3 h-3" /> {user.role}
+                      <Shield className="w-3 h-3" /> {user.roleName || (typeof user.role === 'string' ? user.role : 'User')}
                     </span>
                   </td>
                   <td className="px-4 py-3.5 hidden sm:table-cell">

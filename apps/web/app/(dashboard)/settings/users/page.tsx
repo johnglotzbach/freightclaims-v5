@@ -19,6 +19,7 @@ interface User {
   lastName: string;
   email: string;
   role: string;
+  roleName?: string;
   corporateName?: string;
   isSuperAdmin?: boolean;
   isActive: boolean;
@@ -214,7 +215,7 @@ export default function UsersPage() {
                       'text-xs font-medium px-2 py-1 rounded',
                       user.isSuperAdmin ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                     )}>
-                      {user.isSuperAdmin ? 'Super Admin' : user.role}
+                      {user.isSuperAdmin ? 'Super Admin' : (user.roleName || (typeof user.role === 'string' ? user.role : 'User'))}
                     </span>
                   </td>
                   {currentUser?.isSuperAdmin && (
@@ -257,7 +258,7 @@ export default function UsersPage() {
 function UserEditForm({ user, onSave, onCancel, isSaving }: { user: User; onSave: (data: Partial<User>) => void; onCancel: () => void; isSaving: boolean }) {
   const [firstName, setFirstName] = useState(user.firstName);
   const [lastName, setLastName] = useState(user.lastName);
-  const [role, setRole] = useState(user.role);
+  const [role, setRole] = useState(user.roleName || (typeof user.role === 'string' ? user.role : 'User'));
 
   return (
     <div className="flex flex-wrap items-end gap-3">

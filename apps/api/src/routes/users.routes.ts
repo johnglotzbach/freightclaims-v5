@@ -47,9 +47,20 @@ usersRouter.put('/permissions/:id', authorize(['admin']), usersController.update
 usersRouter.get('/templates/email', usersController.getEmailTemplates);
 usersRouter.post('/templates/email', authorize(['admin']), usersController.createEmailTemplate);
 usersRouter.put('/templates/email/:id', authorize(['admin']), usersController.updateEmailTemplate);
+usersRouter.delete('/templates/email/:id', authorize(['admin']), usersController.deleteEmailTemplate);
 usersRouter.get('/templates/letter', usersController.getLetterTemplates);
 usersRouter.post('/templates/letter', authorize(['admin']), usersController.createLetterTemplate);
 usersRouter.put('/templates/letter/:id', authorize(['admin']), usersController.updateLetterTemplate);
+usersRouter.delete('/templates/letter/:id', authorize(['admin']), usersController.deleteLetterTemplate);
+
+// API keys & webhook config (must be before /:id)
+usersRouter.get('/api-keys', usersController.getApiKeys);
+usersRouter.post('/api-keys', authorize(['admin']), usersController.createApiKey);
+usersRouter.delete('/api-keys/:id', authorize(['admin']), usersController.deleteApiKey);
+usersRouter.put('/webhook-config', authorize(['admin']), usersController.saveWebhookConfig);
+
+// Onboarding (must be before /:id)
+usersRouter.post('/onboarding', usersController.onboarding);
 
 // User management (admin only) - parameterized routes LAST
 usersRouter.get('/', authorize(['admin']), usersController.list);
