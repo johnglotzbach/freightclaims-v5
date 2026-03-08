@@ -6,50 +6,15 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   FileText, Building2, BarChart3,
-  Bot, Settings, ChevronLeft, ChevronRight, X,
+  Bot, Settings, ChevronLeft, ChevronRight, ChevronDown, X,
   Users, FolderOpen, Workflow, Sparkles, CheckSquare,
   FileSearch, Upload, Shield,
   Layers, TrendingUp, HelpCircle,
   Crown, Globe, CreditCard, UserPlus, Lock,
-  LayoutDashboard, Mail,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: typeof FileText;
-  permission?: string;
-  children?: { label: string; href: string; permission?: string }[];
-};
-
-const companySubItems = [
-  { label: 'Customers', href: '/customers' },
-  { label: 'Capacity Providers', href: '/companies/carriers' },
-  { label: 'Insurance', href: '/companies/suppliers' },
-  { label: 'All Companies', href: '/companies' },
-  { label: 'All Contacts', href: '/companies/contacts' },
-  { label: 'All Products', href: '/companies/products' },
-  { label: 'All Locations', href: '/companies/locations' },
-];
-
-const aiSubItems = [
-  { label: 'AI Copilot', href: '/ai', permission: 'ai.copilot' },
-  { label: 'Outcome Predictor', href: '/ai/predict', permission: 'ai.agents' },
-  { label: 'Carrier Risk Scoring', href: '/ai/risk', permission: 'ai.agents' },
-  { label: 'Fraud Detection', href: '/ai/fraud', permission: 'ai.agents' },
-  { label: 'Denial Response', href: '/ai/denial', permission: 'ai.agents' },
-  { label: 'Carrier Comms', href: '/ai/communication', permission: 'ai.agents' },
-  { label: 'Root Cause Analysis', href: '/ai/rootcause', permission: 'ai.agents' },
-];
-
-const settingsSubItems = [
-  { label: 'General', href: '/settings' },
-  { label: 'Templates', href: '/settings/templates', permission: 'email.templates' },
-  { label: 'API & Integrations', href: '/settings/api-setup', permission: 'settings.manage' },
-  { label: 'Profile', href: '/settings/profile' },
-];
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -60,12 +25,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, hasPermission } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const isSuperAdmin = user?.isSuperAdmin || false;
   const isWorkspaceAdmin = !isSuperAdmin && (
     hasPermission('users.manage') || hasPermission('settings.manage') || hasPermission('roles.manage')
   );
+  const canManageTeam = isSuperAdmin || isWorkspaceAdmin;
+  const showFull = !collapsed || mobileOpen;
 
   useEffect(() => {
     const saved = localStorage.getItem('fc-sidebar-collapsed');
@@ -73,22 +40,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   }, []);
 
   useEffect(() => {
-    if (pathname.startsWith('/companies') || pathname.startsWith('/customers'))
-      setExpandedSections(s => ({ ...s, companies: true }));
-    if (pathname.startsWith('/ai'))
-      setExpandedSections(s => ({ ...s, ai: true }));
-    if (pathname.startsWith('/settings'))
-      setExpandedSections(s => ({ ...s, settings: true }));
+    if (pathname.startsWith('/companies') || pathname.startsWith('/customers')) toggle('companies', true);
+    if (pathname.startsWith('/ai')) toggle('ai', true);
+    if (pathname.startsWith('/manage') || pathname.startsWith('/settings') || pathname.startsWith('/workspace')) toggle('manage', true);
+    if (pathname.startsWith('/admin')) toggle('platform', true);
   }, [pathname]);
 
-  function toggleCollapse() {
-    const next = !collapsed;
-    setCollapsed(next);
-    localStorage.setItem('fc-sidebar-collapsed', String(next));
-  }
-
-  function toggleSection(key: string) {
-    setExpandedSections(s => ({ ...s, [key]: !s[key] }));
+  function toggle(key: string, force?: boolean) {
+    setExpanded(s => ({ ...s, [key]: force !== undefined ? force : !s[key] }));
   }
 
   function isActive(href: string) {
@@ -100,343 +59,234 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     if (href === '/ai') return pathname === '/ai' || pathname.startsWith('/ai/');
     return pathname === href || pathname.startsWith(href + '/');
   }
-
-  function isExactActive(href: string) {
-    return pathname === href;
-  }
-
-  const showFull = !collapsed || mobileOpen;
+  function isExact(href: string) { return pathname === href; }
 
   const displayName = user?.corporateName || 'FreightClaims';
-  const roleBadge = isSuperAdmin
-    ? 'Super Admin'
+  const roleBadge = isSuperAdmin ? 'Super Admin' : isWorkspaceAdmin ? 'Admin' : user?.roleName || 'User';
+  const badgeColor = isSuperAdmin
+    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
     : isWorkspaceAdmin
-      ? 'Workspace Admin'
-      : user?.roleName || 'User';
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+      : 'bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400';
 
-  const mainNavItems = useMemo(() => {
-    const items: NavItem[] = [];
-
-    if (hasPermission('claims.view') || isSuperAdmin) {
-      items.push({ label: 'Claims', href: '/claims/list', icon: FileText });
-      items.push({ label: 'Dashboard', href: '/claims', icon: BarChart3 });
-    }
-
-    if (hasPermission('claims.create') || isSuperAdmin) {
-      items.push({ label: 'AI Entry', href: '/ai-entry', icon: Sparkles });
-    }
-
-    if (hasPermission('reports.view') || isSuperAdmin) {
-      items.push({ label: 'Insights', href: '/reports', icon: TrendingUp });
-    }
-
-    if (hasPermission('claims.view') || isSuperAdmin) {
-      items.push({ label: 'Tasks', href: '/tasks', icon: CheckSquare });
-    }
-
-    if (hasPermission('customers.view') || isSuperAdmin) {
-      items.push({
-        label: 'Companies',
-        href: '/companies',
-        icon: Building2,
-        children: companySubItems,
-      });
-    }
-
-    if (hasPermission('documents.view') || isSuperAdmin) {
-      items.push({ label: 'Documents', href: '/documents', icon: FolderOpen });
-    }
-
-    if (hasPermission('reports.export') || isSuperAdmin) {
-      items.push({ label: 'Reports', href: '/reports/export', icon: FileSearch });
-    }
-
-    if (hasPermission('ai.copilot') || hasPermission('ai.agents') || isSuperAdmin) {
-      items.push({
-        label: 'AI Tools',
-        href: '/ai',
-        icon: Bot,
-        children: aiSubItems.filter(sub =>
-          isSuperAdmin || !sub.permission || hasPermission(sub.permission)
-        ),
-      });
-    }
-
-    return items;
-  }, [user, isSuperAdmin, hasPermission]);
-
-  const toolItems = useMemo(() => {
-    const items: NavItem[] = [];
-
-    if (hasPermission('documents.upload') || isSuperAdmin) {
-      items.push({ label: 'Mass Upload', href: '/mass-upload', icon: Upload });
-    }
-
-    if (hasPermission('automation.manage') || isSuperAdmin) {
-      items.push({ label: 'Automation', href: '/automation', icon: Workflow });
-    }
-
-    if (hasPermission('settings.view') || isSuperAdmin) {
-      items.push({ label: 'Claim Config', href: '/claims/settings', icon: Layers });
-    }
-
-    items.push({ label: 'Help Center', href: '/help', icon: HelpCircle });
-
-    items.push({
-      label: 'Settings',
-      href: '/settings',
-      icon: Settings,
-      children: settingsSubItems.filter(sub =>
-        isSuperAdmin || !sub.permission || hasPermission(sub.permission)
-      ),
-    });
-
-    return items;
-  }, [user, isSuperAdmin, hasPermission]);
-
-  function renderNavLink(item: NavItem, isChild = false) {
-    const active = isChild ? isExactActive(item.href) : isActive(item.href);
-    const Icon = item.icon;
-    const hasChildren = item.children && item.children.length > 0;
-    const sectionKey = item.label.toLowerCase().replace(/\s+/g, '');
-    const isExpanded = expandedSections[sectionKey];
-
+  function NavLink({ href, icon: Icon, label, indent, amber }: { href: string; icon: typeof FileText; label: string; indent?: boolean; amber?: boolean }) {
+    const active = indent ? isExact(href) : isActive(href);
     return (
-      <div key={item.href}>
-        <Link
-          href={item.href}
-          onClick={() => {
-            onMobileClose?.();
-            if (hasChildren && showFull) toggleSection(sectionKey);
-          }}
-          className={cn(
-            'flex items-center gap-3 px-3 rounded-xl text-sm font-medium transition-all',
-            'active:scale-[0.98] touch-manipulation',
-            isChild ? 'py-1.5 text-xs ml-8' : 'py-2.5',
-            active
-              ? isChild
-                ? 'text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-500/5'
+      <Link
+        href={href}
+        onClick={onMobileClose}
+        className={cn(
+          'flex items-center gap-3 rounded-xl text-sm font-medium transition-all active:scale-[0.98]',
+          indent ? 'px-3 py-1.5 ml-8 text-xs' : 'px-3 py-2',
+          active
+            ? indent
+              ? 'text-primary-600 dark:text-primary-400 bg-primary-50/60 dark:bg-primary-500/5'
+              : amber
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 shadow-sm'
                 : 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 shadow-sm'
-              : isChild
-                ? 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
+            : indent
+              ? 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
+        )}
+      >
+        {!indent && <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && (amber ? 'text-amber-500' : 'text-primary-500'))} />}
+        {showFull && <span>{label}</span>}
+      </Link>
+    );
+  }
+
+  function SectionHeader({ label }: { label: string }) {
+    if (!showFull) return <div className="pt-2 border-t border-slate-200 dark:border-slate-700 my-1 mx-2" />;
+    return <div className="px-3 pt-4 pb-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p></div>;
+  }
+
+  function Expandable({ sectionKey, icon: Icon, label, children, amber }: { sectionKey: string; icon: typeof FileText; label: string; children: React.ReactNode; amber?: boolean }) {
+    const isExp = expanded[sectionKey];
+    const active = isActive(
+      sectionKey === 'companies' ? '/companies'
+        : sectionKey === 'ai' ? '/ai'
+        : sectionKey === 'manage' ? '/workspace'
+        : sectionKey === 'platform' ? '/admin'
+        : '/__none__'
+    );
+    return (
+      <div>
+        <button
+          onClick={() => toggle(sectionKey)}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all active:scale-[0.98]',
+            active
+              ? amber ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 shadow-sm' : 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 shadow-sm'
+              : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
           )}
         >
-          {!isChild && <Icon className={cn('w-5 h-5 flex-shrink-0', active && 'text-primary-500')} />}
-          {showFull && <span>{item.label}</span>}
-        </Link>
-
-        {hasChildren && showFull && isExpanded && (
-          <div className="mt-0.5 space-y-0.5">
-            {item.children!.map(sub => (
-              <Link
-                key={sub.href}
-                href={sub.href}
-                onClick={onMobileClose}
-                className={cn(
-                  'block px-3 py-1.5 ml-8 rounded-lg text-xs font-medium transition-colors',
-                  isExactActive(sub.href)
-                    ? 'text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-500/5'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                )}
-              >
-                {sub.label}
-              </Link>
-            ))}
-          </div>
-        )}
+          <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && (amber ? 'text-amber-500' : 'text-primary-500'))} />
+          {showFull && (
+            <>
+              <span className="flex-1 text-left">{label}</span>
+              <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 transition-transform', isExp && 'rotate-180')} />
+            </>
+          )}
+        </button>
+        {showFull && isExp && <div className="mt-0.5 space-y-0.5">{children}</div>}
       </div>
     );
   }
 
   const sidebarContent = (
     <>
-      {/* Account Identity */}
-      <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-700">
+      {/* ── Identity ── */}
+      <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-700 relative">
         <Link href="/claims" className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-            <span className="text-white font-bold text-sm">
-              {displayName.slice(0, 2).toUpperCase()}
-            </span>
+            <span className="text-white font-bold text-sm">{displayName.slice(0, 2).toUpperCase()}</span>
           </div>
           {showFull && (
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">
-                {displayName}
-              </p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">{displayName}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                {isSuperAdmin && (
-                  <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                )}
-                <span className={cn(
-                  'text-[10px] font-semibold px-1.5 py-0.5 rounded-full truncate',
-                  isSuperAdmin
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
-                    : isWorkspaceAdmin
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
-                      : 'bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400'
-                )}>
-                  {roleBadge}
-                </span>
+                {isSuperAdmin && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full truncate', badgeColor)}>{roleBadge}</span>
               </div>
             </div>
           )}
         </Link>
         {mobileOpen && onMobileClose && (
-          <button onClick={onMobileClose} className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 absolute top-3 right-3" aria-label="Close menu">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onMobileClose} className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 absolute top-3 right-3" aria-label="Close menu"><X className="w-5 h-5" /></button>
         )}
       </div>
 
-      {/* Super Admin Platform Management */}
+      {/* ── Super Admin Platform Banner ── */}
       {isSuperAdmin && showFull && (
-        <div className="px-2 pt-3 space-y-0.5">
-          <div className="mx-1 mb-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-500/20">
-            <div className="flex items-center gap-2">
-              <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Platform Admin</span>
-            </div>
-            <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Full platform access</p>
+        <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-500/20">
+          <div className="flex items-center gap-2">
+            <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Platform Admin</span>
           </div>
-          <div className="px-3 pb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Platform Management</p>
-          </div>
-          {[
-            { label: 'All Workspaces', href: '/admin/workspaces', icon: Globe },
-            { label: 'All Users', href: '/admin/users', icon: Users },
-            { label: 'Billing & Plans', href: '/admin/billing', icon: CreditCard },
-            { label: 'Platform Settings', href: '/admin/settings', icon: Settings },
-          ].map(item => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onMobileClose}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
-                  'active:scale-[0.98] touch-manipulation',
-                  active
-                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
-                )}
-              >
-                <Icon className={cn('w-5 h-5 flex-shrink-0', active && 'text-amber-500')} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-      {isSuperAdmin && !showFull && (
-        <div className="px-2 pt-2 space-y-0.5">
-          {[
-            { label: 'All Workspaces', href: '/admin/workspaces', icon: Globe },
-            { label: 'All Users', href: '/admin/users', icon: Users },
-          ].map(item => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center justify-center px-3 py-2.5 rounded-xl transition-all',
-                  active
-                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
-                )}
-                title={item.label}
-              >
-                <Icon className={cn('w-5 h-5', active && 'text-amber-500')} />
-              </Link>
-            );
-          })}
+          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Full platform access · All workspaces</p>
         </div>
       )}
 
-      {/* Workspace Admin Section */}
-      {isWorkspaceAdmin && !isSuperAdmin && showFull && (
-        <div className="px-2 pt-3 space-y-0.5">
-          <div className="mx-1 mb-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/50 dark:border-emerald-500/20">
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Workspace</span>
-            </div>
-            <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/60 mt-0.5">{displayName}</p>
-          </div>
-          <div className="px-3 pb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">My Workspace</p>
-          </div>
-          {[
-            { label: 'Team Members', href: '/workspace/members', icon: UserPlus },
-            { label: 'Roles & Permissions', href: '/workspace/roles', icon: Lock },
-            { label: 'Billing', href: '/workspace/billing', icon: CreditCard },
-          ].map(item => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onMobileClose}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
-                  'active:scale-[0.98] touch-manipulation',
-                  active
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
-                )}
-              >
-                <Icon className={cn('w-5 h-5 flex-shrink-0', active && 'text-emerald-500')} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <nav className="flex-1 px-2 py-1 overflow-y-auto space-y-0.5">
 
-      {/* Primary Navigation */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {showFull && (
-          <div className="px-3 pb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Main</p>
-          </div>
-        )}
-
-        {mainNavItems.map(item => renderNavLink(item))}
-
-        {toolItems.length > 0 && (
+        {/* ── PLATFORM (Super Admin only) ── */}
+        {isSuperAdmin && (
           <>
-            {showFull && (
-              <div className="pt-3 pb-1 px-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Tools & Config</p>
-              </div>
-            )}
-            {!showFull && <div className="pt-2 border-t border-slate-200 dark:border-slate-700 my-1" />}
-            {toolItems.map(item => renderNavLink(item))}
+            <SectionHeader label="Platform" />
+            <Expandable sectionKey="platform" icon={Globe} label="Platform Admin" amber>
+              <NavLink href="/admin/workspaces" icon={Building2} label="All Workspaces" indent />
+              <NavLink href="/admin/users" icon={Users} label="All Users" indent />
+              <NavLink href="/admin/billing" icon={CreditCard} label="Billing & Plans" indent />
+              <NavLink href="/admin/settings" icon={Settings} label="Platform Settings" indent />
+            </Expandable>
           </>
         )}
+
+        {/* ── WORK ── */}
+        <SectionHeader label="Work" />
+        {(isSuperAdmin || hasPermission('claims.view')) && (
+          <>
+            <NavLink href="/claims/list" icon={FileText} label="Claims" />
+            <NavLink href="/claims" icon={BarChart3} label="Dashboard" />
+          </>
+        )}
+        {(isSuperAdmin || hasPermission('claims.create')) && (
+          <NavLink href="/ai-entry" icon={Sparkles} label="AI Entry" />
+        )}
+        {(isSuperAdmin || hasPermission('claims.view')) && (
+          <NavLink href="/tasks" icon={CheckSquare} label="Tasks" />
+        )}
+
+        {/* ── DATA ── */}
+        <SectionHeader label="Data" />
+        {(isSuperAdmin || hasPermission('customers.view')) && (
+          <Expandable sectionKey="companies" icon={Building2} label="Companies">
+            <NavLink href="/customers" icon={Building2} label="Customers" indent />
+            <NavLink href="/companies/carriers" icon={Building2} label="Capacity Providers" indent />
+            <NavLink href="/companies/suppliers" icon={Building2} label="Insurance" indent />
+            <NavLink href="/companies" icon={Building2} label="All Companies" indent />
+            <NavLink href="/companies/contacts" icon={Building2} label="All Contacts" indent />
+            <NavLink href="/companies/products" icon={Building2} label="All Products" indent />
+            <NavLink href="/companies/locations" icon={Building2} label="All Locations" indent />
+          </Expandable>
+        )}
+        {(isSuperAdmin || hasPermission('documents.view')) && (
+          <NavLink href="/documents" icon={FolderOpen} label="Documents" />
+        )}
+        {(isSuperAdmin || hasPermission('reports.view')) && (
+          <NavLink href="/reports" icon={TrendingUp} label="Insights" />
+        )}
+        {(isSuperAdmin || hasPermission('reports.export')) && (
+          <NavLink href="/reports/export" icon={FileSearch} label="Reports" />
+        )}
+
+        {/* ── TOOLS ── */}
+        {(isSuperAdmin || hasPermission('ai.copilot') || hasPermission('ai.agents')) && (
+          <>
+            <SectionHeader label="Tools" />
+            <Expandable sectionKey="ai" icon={Bot} label="AI Tools">
+              <NavLink href="/ai" icon={Bot} label="AI Copilot" indent />
+              <NavLink href="/ai/predict" icon={Bot} label="Outcome Predictor" indent />
+              <NavLink href="/ai/risk" icon={Bot} label="Carrier Risk Scoring" indent />
+              <NavLink href="/ai/fraud" icon={Bot} label="Fraud Detection" indent />
+              <NavLink href="/ai/denial" icon={Bot} label="Denial Response" indent />
+              <NavLink href="/ai/communication" icon={Bot} label="Carrier Comms" indent />
+              <NavLink href="/ai/rootcause" icon={Bot} label="Root Cause Analysis" indent />
+            </Expandable>
+          </>
+        )}
+        {(isSuperAdmin || hasPermission('documents.upload')) && (
+          <NavLink href="/mass-upload" icon={Upload} label="Mass Upload" />
+        )}
+        {(isSuperAdmin || hasPermission('automation.manage')) && (
+          <NavLink href="/automation" icon={Workflow} label="Automation" />
+        )}
+        {(isSuperAdmin || hasPermission('settings.view')) && (
+          <NavLink href="/claims/settings" icon={Layers} label="Claim Config" />
+        )}
+
+        {/* ── MANAGEMENT (consolidated) ── */}
+        {canManageTeam && (
+          <>
+            <SectionHeader label="Management" />
+            <Expandable sectionKey="manage" icon={LayoutDashboard} label="Management">
+              <NavLink href="/workspace/members" icon={UserPlus} label="Team Members" indent />
+              <NavLink href="/workspace/roles" icon={Lock} label="Roles & Permissions" indent />
+              <NavLink href="/workspace/billing" icon={CreditCard} label="Billing" indent />
+              <NavLink href="/settings" icon={Settings} label="General Settings" indent />
+              <NavLink href="/settings/templates" icon={Settings} label="Templates" indent />
+              <NavLink href="/settings/api-setup" icon={Settings} label="API & Integrations" indent />
+              <NavLink href="/settings/profile" icon={Settings} label="My Profile" indent />
+            </Expandable>
+          </>
+        )}
+
+        {/* Non-admin users still get Settings & Profile */}
+        {!canManageTeam && (
+          <>
+            <SectionHeader label="Account" />
+            <NavLink href="/settings" icon={Settings} label="Settings" />
+            <NavLink href="/settings/profile" icon={Settings} label="My Profile" />
+          </>
+        )}
+
+        <NavLink href="/help" icon={HelpCircle} label="Help Center" />
       </nav>
 
-      {/* Onboarding Checklist */}
+      {/* ── Onboarding ── */}
       {showFull && (
         <div className="px-3 pb-3">
           <OnboardingChecklist />
         </div>
       )}
 
-      {/* Collapse toggle */}
+      {/* ── Collapse ── */}
       <div className="px-2 pb-3 hidden lg:block">
         <button
-          onClick={toggleCollapse}
+          onClick={() => { const next = !collapsed; setCollapsed(next); localStorage.setItem('fc-sidebar-collapsed', String(next)); }}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
-          {collapsed ? (
-            <ChevronRight className="w-4 h-4 mx-auto" />
-          ) : (
+          {collapsed ? <ChevronRight className="w-4 h-4 mx-auto" /> : (
             <>
               <ChevronLeft className="w-4 h-4" />
               <span>Collapse</span>
@@ -450,27 +300,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   return (
     <>
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={onMobileClose} aria-hidden />
-      )}
-
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 transform transition-transform duration-200 ease-out lg:hidden',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full',
-        )}
-      >
-        {sidebarContent}
-      </aside>
-
-      <aside
-        className={cn(
-          'hidden lg:flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 transition-all duration-200 flex-shrink-0',
-          collapsed ? 'w-[68px]' : 'w-64',
-        )}
-      >
-        {sidebarContent}
-      </aside>
+      {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={onMobileClose} aria-hidden />}
+      <aside className={cn('fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 transform transition-transform duration-200 ease-out lg:hidden', mobileOpen ? 'translate-x-0' : '-translate-x-full')}>{sidebarContent}</aside>
+      <aside className={cn('hidden lg:flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 transition-all duration-200 flex-shrink-0', collapsed ? 'w-[68px]' : 'w-64')}>{sidebarContent}</aside>
     </>
   );
 }
