@@ -12,7 +12,7 @@ import {
   Layers, TrendingUp, HelpCircle,
   Crown, Globe, CreditCard, UserPlus, Lock,
   LayoutDashboard, Truck, MapPin, Package, ShieldCheck,
-  FileSpreadsheet, Contact, Ship,
+  FileSpreadsheet, Contact, Ship, Newspaper,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
@@ -194,6 +194,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       )}
 
       <nav className="flex-1 px-2 py-1 overflow-y-auto space-y-0.5">
+
+        {/* NEWS - visible to everyone */}
+        <SidebarNavLink href="/news" icon={Newspaper} label="News & Updates" {...linkProps} />
 
         {/* PLATFORM (Super Admin only) */}
         {isSuperAdmin && (

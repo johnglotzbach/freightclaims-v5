@@ -22,6 +22,23 @@ export const emailRepository = {
     const subject = data.subject as string;
     const body = data.body as string;
 
+    const attachmentIds = Array.isArray(data.attachmentIds) ? data.attachmentIds as string[] : [];
+    let smtpAttachments: Array<{ filename: string; content: Buffer | string; contentType?: string }> = [];
+
+    if (attachmentIds.length > 0) {
+      const docs = await prisma.claimDocument.findMany({
+        where: { id: { in: attachmentIds } },
+        select: { id: true, documentName: true, s3Key: true, mimeType: true },
+      });
+      for (const doc of docs) {
+        smtpAttachments.push({
+          filename: doc.documentName,
+          content: doc.s3Key,
+          contentType: doc.mimeType || 'application/octet-stream',
+        });
+      }
+    }
+
     let status = 'pending';
     let messageId: string | null = null;
 
@@ -33,6 +50,7 @@ export const emailRepository = {
         text: body.replace(/<[^>]*>/g, ''),
         from,
         ...(ccArr.length > 0 && { cc: ccArr.join(', ') }),
+        ...(smtpAttachments.length > 0 && { attachments: smtpAttachments }),
       });
       messageId = result.messageId;
       status = 'sent';
@@ -58,7 +76,19 @@ export const emailRepository = {
   },
 
   async getByClaimId(claimId: string) {
-    return prisma.emailLog.findMany({ where: { claimId }, orderBy: { createdAt: 'desc' } });
+    const logs = await prisma.emailLog.findMany({ where: { claimId }, orderBy: { createdAt: 'desc' } });
+    return logs.map((log: any) => ({
+      id: log.id,
+      from: log.from || '',
+      to: log.to ? log.to.split(/[,;]\s*/).filter(Boolean) : [],
+      cc: [],
+      subject: log.subject || '',
+      body: log.body || '',
+      date: log.createdAt,
+      isRead: true,
+      isInbound: log.direction === 'inbound',
+      attachments: [],
+    }));
   },
 
   async getNotifications(userId: string) {

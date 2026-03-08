@@ -16,7 +16,7 @@ export const emailRouter: Router = Router();
 emailRouter.use(authenticate);
 
 // --- Send email ---
-emailRouter.post('/send', authorize(['admin', 'manager']), emailController.send);
+emailRouter.post('/send', authorize(['admin', 'manager', 'email']), emailController.send);
 
 // --- Email history for a claim ---
 emailRouter.get('/claim/:claimId', emailController.getByClaimId);

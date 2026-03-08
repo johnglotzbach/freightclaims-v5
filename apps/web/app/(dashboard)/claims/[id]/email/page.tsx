@@ -57,7 +57,7 @@ export default function ClaimEmailPage() {
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ['claim-emails', id],
-    queryFn: () => getList<EmailThread>(`/email/claims/${id}`),
+    queryFn: () => getList<EmailThread>(`/email/claim/${id}`),
     enabled: !!id,
   });
 
@@ -68,7 +68,7 @@ export default function ClaimEmailPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: (payload: { to: string[]; cc: string[]; subject: string; body: string; claimId: string }) =>
+    mutationFn: (payload: { to: string[]; cc: string[]; subject: string; body: string; claimId: string; attachmentIds?: string[] }) =>
       post<{ sent: boolean }>('/email/send', payload),
     onSuccess: () => {
       toast.success('Email sent successfully');
@@ -115,12 +115,16 @@ export default function ClaimEmailPage() {
 
   function handleSend() {
     if (!to.trim()) { toast.error('Recipient is required'); return; }
+    const docAttachmentIds = attachments
+      .filter(a => a.source === 'documents')
+      .map(a => a.id);
     sendMutation.mutate({
       to: to.split(/[\s,;]+/).filter(Boolean),
       cc: cc ? cc.split(/[\s,;]+/).filter(Boolean) : [],
       subject,
       body,
       claimId: id!,
+      ...(docAttachmentIds.length > 0 && { attachmentIds: docAttachmentIds }),
     });
   }
 

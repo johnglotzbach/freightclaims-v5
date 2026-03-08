@@ -243,6 +243,21 @@ async function main() {
   }
 
   // ================================================================
+  // NEWS CATEGORIES
+  // ================================================================
+  console.log('Creating news categories...');
+  const newsCategories = [
+    { name: 'Announcement', slug: 'announcement', color: '#3B82F6' },
+    { name: 'New Feature', slug: 'feature', color: '#8B5CF6' },
+    { name: 'Bug Fix', slug: 'bugfix', color: '#EF4444' },
+    { name: 'Improvement', slug: 'improvement', color: '#10B981' },
+  ];
+  for (const nc of newsCategories) {
+    await prisma.newsCategory.upsert({ where: { slug: nc.slug }, update: {}, create: nc });
+  }
+  console.log(`  ${newsCategories.length} news categories created`);
+
+  // ================================================================
   // DONE
   // ================================================================
   console.log('\n========================================');
