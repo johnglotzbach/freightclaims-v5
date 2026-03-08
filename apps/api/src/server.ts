@@ -103,6 +103,22 @@ app.get('/ready', async (_req, res) => {
   }
 });
 
+app.get('/ai-health', async (_req, res) => {
+  try {
+    const { env: appEnv } = await import('./config/env');
+    const keyPresent = !!(appEnv.GEMINI_API_KEY && appEnv.GEMINI_API_KEY.trim().length > 0);
+    const keyPrefix = keyPresent ? appEnv.GEMINI_API_KEY.slice(0, 8) + '...' : '(empty)';
+    if (!keyPresent) {
+      return res.json({ status: 'misconfigured', geminiKey: keyPrefix, model: appEnv.AI_MODEL, error: 'GEMINI_API_KEY is empty or not set' });
+    }
+    const { generateContent } = await import('./services/agents/gemini-client');
+    const result = await generateContent('Reply with exactly: OK', { config: { maxOutputTokens: 10, temperature: 0 } });
+    res.json({ status: 'ok', geminiKey: keyPrefix, model: appEnv.AI_MODEL, testResponse: result.text.trim(), tokenUsage: result.tokenUsage });
+  } catch (err: any) {
+    res.json({ status: 'error', error: err.message || String(err) });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // API v1 routes
 // ---------------------------------------------------------------------------

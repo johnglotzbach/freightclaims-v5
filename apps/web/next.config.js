@@ -18,6 +18,14 @@ const nextConfig = {
         source: '/api/v1/:path*',
         destination: `${apiBase}/api/v1/:path*`,
       },
+      {
+        source: '/ai-health',
+        destination: `${apiBase}/ai-health`,
+      },
+      {
+        source: '/health',
+        destination: `${apiBase}/health`,
+      },
     ];
   },
   async headers() {
