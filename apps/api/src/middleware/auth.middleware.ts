@@ -92,13 +92,17 @@ export function authorize(allowedRoles: string[]) {
     }
 
     const normalizedAllowed = allowedRoles.map((r) => r.toLowerCase());
+    const userRole = (user.role || '').toLowerCase();
     const userPermissions = (user.permissions || []).map((p) => p.toLowerCase());
 
-    const hasRole = normalizedAllowed.some(
-      (role) => userPermissions.includes(role) || userPermissions.includes(`${role}.manage`),
+    const hasRole = normalizedAllowed.includes(userRole);
+    const hasPermission = normalizedAllowed.some(
+      (role) => userPermissions.includes(role)
+        || userPermissions.includes(`${role}.manage`)
+        || userPermissions.some((p) => p.startsWith(`${role}.`)),
     );
 
-    if (!hasRole) {
+    if (!hasRole && !hasPermission) {
       res.status(403).json({ success: false, message: 'Insufficient permissions' });
       return;
     }

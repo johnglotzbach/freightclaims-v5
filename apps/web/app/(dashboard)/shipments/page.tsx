@@ -84,10 +84,25 @@ export default function ShipmentsPage() {
   }
 
   if (isLoading) return <div className="space-y-6"><StatsSkeleton /><TableSkeleton /></div>;
-  if (shipments.length === 0) return <EmptyState icon={Truck} title="No shipments yet" description="Create your first shipment to start tracking freight." />;
+  if (shipments.length === 0) return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><Truck className="w-6 h-6 text-primary-500" /> Shipments</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Track and manage all freight shipments</p>
+        </div>
+        <div className="flex gap-2">
+          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"><Upload className="w-4 h-4" /> Import</button>
+          <Link href="/shipments/new" className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold"><Plus className="w-4 h-4" /> New Shipment</Link>
+        </div>
+      </div>
+      <EmptyState icon={Truck} title="No shipments yet" description="Create your first shipment or import a CSV to start tracking freight." />
+    </div>
+  );
 
   const filtered = shipments.filter(s => {
-    const matchesSearch = [s.proNumber, s.bolNumber, s.carrierName, s.originCity, s.destinationCity].some(v => v.toLowerCase().includes(search.toLowerCase()));
+    const matchesSearch = [s.proNumber, s.bolNumber, s.carrierName, s.originCity, s.destinationCity].some(v => (v || '').toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
     const matchesMode = modeFilter === 'all' || s.mode === modeFilter;
     return matchesSearch && matchesStatus && matchesMode;

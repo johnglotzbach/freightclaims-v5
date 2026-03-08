@@ -50,10 +50,10 @@ export default function OnboardingPage() {
 
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
-    slackNotifications: false,
+    pushNotifications: false,
+    dailyDigest: true,
     aiAutoProcess: true,
     complianceAlerts: true,
-    weeklyDigest: true,
   });
 
   function addInvite() {
@@ -351,7 +351,7 @@ export default function OnboardingPage() {
                 {[
                   { key: 'emailNotifications', icon: Mail, label: 'Email notifications', desc: 'Claim updates, deadline alerts, and AI actions' },
                   { key: 'complianceAlerts', icon: Shield, label: 'Compliance alerts', desc: 'Carmack deadline warnings and carrier response tracking' },
-                  { key: 'weeklyDigest', icon: FileText, label: 'Weekly digest', desc: 'Summary of claims activity, settlements, and AI performance' },
+                  { key: 'dailyDigest', icon: FileText, label: 'Daily digest', desc: 'Summary of claims activity, settlements, and AI performance' },
                 ].map((item) => (
                   <label
                     key={item.key}

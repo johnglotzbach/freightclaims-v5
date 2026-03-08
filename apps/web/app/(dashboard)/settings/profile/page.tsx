@@ -46,6 +46,7 @@ export default function ProfileSettingsPage() {
 
 function GeneralTab() {
   const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
+  const { data: prefs } = useQuery({ queryKey: ['preferences'], queryFn: () => get<any>('/users/me/preferences') });
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -58,9 +59,13 @@ function GeneralTab() {
       setLastName(user.lastName || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
-      setTimezone(user.timezone || 'America/New_York');
     }
   }, [user]);
+
+  useEffect(() => {
+    const p = prefs?.data || prefs;
+    if (p?.timezone) setTimezone(p.timezone);
+  }, [prefs]);
 
   const saveMutation = useMutation({
     mutationFn: (data: { firstName: string; lastName: string; email: string; phone: string; timezone: string }) =>
@@ -107,7 +112,7 @@ function GeneralTab() {
 }
 
 function NotificationsTab() {
-  const initialPrefs: Record<string, { email: boolean; push: boolean; inApp: boolean }> = {
+  const defaultPrefs: Record<string, { email: boolean; push: boolean; inApp: boolean }> = {
     claim_created: { email: true, push: true, inApp: true },
     claim_filed: { email: true, push: true, inApp: true },
     claim_settled: { email: true, push: false, inApp: true },
@@ -125,11 +130,19 @@ function NotificationsTab() {
     automation_triggered: { email: false, push: false, inApp: true },
     stagnant_claim: { email: true, push: true, inApp: true },
   };
-  const [preferences, setPreferences] = useState(initialPrefs);
+  const [preferences, setPreferences] = useState(defaultPrefs);
+  const { data: savedPrefs } = useQuery({ queryKey: ['preferences'], queryFn: () => get<any>('/users/me/preferences') });
+
+  useEffect(() => {
+    const p = savedPrefs?.data || savedPrefs;
+    if (p?.notificationPreferences && typeof p.notificationPreferences === 'object') {
+      setPreferences(prev => ({ ...prev, ...p.notificationPreferences }));
+    }
+  }, [savedPrefs]);
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, { email: boolean; push: boolean; inApp: boolean }>) =>
-      put('/users/me/preferences', data),
+      put('/users/me/preferences', { notificationPreferences: data }),
     onSuccess: () => toast.success('Notification preferences saved'),
     onError: (err: Error) => toast.error(err.message || 'Failed to save preferences'),
   });
@@ -200,8 +213,21 @@ function SignatureTab() {
   const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
   const roleName = user?.roleName || (typeof user?.role === 'string' ? user.role : '') || '';
   const defaultSig = user ? `<p>Best regards,</p><p><strong>${user.firstName || ''} ${user.lastName || ''}</strong><br/>${roleName}<br/>FreightClaims<br/>${user.email || ''}</p>` : '';
-  const [signature, setSignature] = useState(defaultSig);
-  useEffect(() => { if (defaultSig && !signature) setSignature(defaultSig); }, [defaultSig]);
+  const [signature, setSignature] = useState('');
+  const [sigLoaded, setSigLoaded] = useState(false);
+  const { data: savedPrefs } = useQuery({ queryKey: ['preferences'], queryFn: () => get<any>('/users/me/preferences') });
+
+  useEffect(() => {
+    if (sigLoaded) return;
+    const p = savedPrefs?.data || savedPrefs;
+    if (p?.emailSignature) {
+      setSignature(p.emailSignature);
+      setSigLoaded(true);
+    } else if (defaultSig && user) {
+      setSignature(defaultSig);
+      setSigLoaded(true);
+    }
+  }, [savedPrefs, defaultSig, user, sigLoaded]);
 
   const saveMutation = useMutation({
     mutationFn: (data: { signature: string }) => put('/users/me/preferences', { emailSignature: data.signature }),
@@ -227,9 +253,22 @@ function DashboardTab() {
   const [defaultView, setDefaultView] = useState('claims');
   const [claimsPerPage, setClaimsPerPage] = useState(25);
   const [defaultDateRange, setDefaultDateRange] = useState('30');
+  const allCols = ['Claim Number', 'PRO Number', 'Status', 'Customer', 'Carrier', 'Amount', 'Filed Date', 'Ship Date', 'Delivery Date', 'Type', 'Assigned To', 'Days Open'];
   const [columns, setColumns] = useState<Record<string, boolean>>(
-    Object.fromEntries(['Claim Number', 'PRO Number', 'Status', 'Customer', 'Carrier', 'Amount', 'Filed Date', 'Ship Date', 'Delivery Date', 'Type', 'Assigned To', 'Days Open'].map(c => [c, true]))
+    Object.fromEntries(allCols.map(c => [c, true]))
   );
+  const { data: savedPrefs } = useQuery({ queryKey: ['preferences'], queryFn: () => get<any>('/users/me/preferences') });
+
+  useEffect(() => {
+    const p = savedPrefs?.data || savedPrefs;
+    if (p?.dashboardSettings) {
+      const s = p.dashboardSettings;
+      if (s.defaultView) setDefaultView(s.defaultView);
+      if (s.claimsPerPage) setClaimsPerPage(s.claimsPerPage);
+      if (s.defaultDateRange) setDefaultDateRange(s.defaultDateRange);
+      if (s.columns) setColumns(s.columns);
+    }
+  }, [savedPrefs]);
 
   const saveMutation = useMutation({
     mutationFn: (data: { defaultView: string; claimsPerPage: number; defaultDateRange: string; columns: Record<string, boolean> }) =>

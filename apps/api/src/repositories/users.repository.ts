@@ -63,8 +63,26 @@ export const usersRepository = {
     }));
     return { data: safeUsers, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },
-  async getPreferences(userId: string) { return prisma.userPreference.findUnique({ where: { userId } }); },
-  async updatePreferences(userId: string, data: Record<string, unknown>) { return prisma.userPreference.upsert({ where: { userId }, update: data as any, create: { userId, ...data } as any }); },
+  async getPreferences(userId: string) {
+    const prefs = await prisma.userPreference.findUnique({ where: { userId } });
+    if (!prefs) {
+      return { emailNotifications: true, pushNotifications: true, dailyDigest: false, theme: 'light', timezone: 'America/New_York' };
+    }
+    return prefs;
+  },
+  async updatePreferences(userId: string, data: Record<string, unknown>) {
+    const known = ['emailNotifications', 'pushNotifications', 'dailyDigest', 'theme', 'timezone'];
+    const prismaData: Record<string, unknown> = {};
+    for (const key of known) {
+      if (data[key] !== undefined) prismaData[key] = data[key];
+    }
+    const result = await prisma.userPreference.upsert({
+      where: { userId },
+      update: prismaData as any,
+      create: { userId, ...prismaData } as any,
+    });
+    return result;
+  },
   async getRoles() {
     const roles = await prisma.role.findMany({
       include: {

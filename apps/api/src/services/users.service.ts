@@ -231,10 +231,14 @@ export const usersService = {
     if (userData.lastName !== undefined) userFields.lastName = userData.lastName;
     if (userData.email !== undefined) userFields.email = userData.email;
     if (userData.phone !== undefined) userFields.phone = userData.phone;
+    if (userData.isActive !== undefined) userFields.isActive = userData.isActive;
+    if (userData.roleId !== undefined) userFields.roleId = userData.roleId;
     if (Object.keys(userFields).length > 0) {
-      return usersRepository.update(id, userFields);
+      await usersRepository.update(id, userFields);
     }
-    return usersRepository.findById(id);
+    const updated = await usersRepository.findById(id);
+    if (!updated) throw new NotFoundError(`User ${id} not found`);
+    return safeUser(updated as unknown as Record<string, unknown>);
   },
 
   async delete(id: string) {
@@ -250,7 +254,8 @@ export const usersService = {
 
     validatePasswordComplexity(data.newPassword);
     const passwordHash = await bcrypt.hash(data.newPassword, BCRYPT_ROUNDS);
-    return usersRepository.update(userId, { passwordHash });
+    await usersRepository.update(userId, { passwordHash });
+    return { message: 'Password changed successfully' };
   },
 
   async list(query: Record<string, unknown>, user?: { corporateId?: string | null; isSuperAdmin?: boolean }) {
@@ -272,6 +277,32 @@ export const usersService = {
   async updateLetterTemplate(id: string, data: Record<string, unknown>) { return usersRepository.updateLetterTemplate(id, data); },
   async deleteEmailTemplate(id: string) { return usersRepository.deleteEmailTemplate(id); },
   async deleteLetterTemplate(id: string) { return usersRepository.deleteLetterTemplate(id); },
+
+  async inviteToWorkspace(data: Record<string, unknown>, inviterCorporateId: string) {
+    const existing = await usersRepository.findByEmail(data.email as string);
+    if (existing) throw new ConflictError('A user with this email already exists');
+
+    const tempPassword = `Invite${Date.now().toString(36).slice(-6)}!A`;
+    const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+
+    const user = await usersRepository.create({
+      email: data.email,
+      firstName: data.firstName || '',
+      lastName: data.lastName || '',
+      passwordHash,
+      corporateId: inviterCorporateId,
+      roleId: (data.roleId as string) || null,
+      isActive: true,
+    });
+
+    await smtpService.sendEmail({
+      to: data.email as string,
+      subject: 'You\'ve been invited to FreightClaims',
+      html: `<p>You've been invited to join a workspace on FreightClaims.</p><p>Your temporary password: <strong>${tempPassword}</strong></p><p><a href="${env.NEXT_PUBLIC_APP_URL}/login">Sign in here</a> and change your password.</p>`,
+    }).catch((err) => logger.error({ err }, 'Failed to send invite email'));
+
+    return safeUser(user as unknown as Record<string, unknown>);
+  },
 
   async adminResetPassword(userId: string) {
     const user = await usersRepository.findById(userId);

@@ -62,6 +62,9 @@ usersRouter.put('/webhook-config', authorize(['admin']), usersController.saveWeb
 // Onboarding (must be before /:id)
 usersRouter.post('/onboarding', usersController.onboarding);
 
+// Invite member to workspace (admin or manager)
+usersRouter.post('/invite', authorize(['admin', 'manager']), usersController.invite);
+
 // User management (admin only) - parameterized routes LAST
 usersRouter.get('/', authorize(['admin']), usersController.list);
 usersRouter.post('/', authorize(['admin']), validate(registerSchema), usersController.create);

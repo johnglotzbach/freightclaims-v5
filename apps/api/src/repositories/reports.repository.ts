@@ -15,15 +15,74 @@ function buildDateWhere(body: Record<string, unknown>) {
   };
 }
 
+async function buildMonthlyTrend(where: Record<string, unknown>) {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+  sixMonthsAgo.setHours(0, 0, 0, 0);
+
+  const claims = await prisma.claim.findMany({
+    where: { ...where, createdAt: { gte: sixMonthsAgo } } as any,
+    select: { createdAt: true, status: true, claimAmount: true },
+  });
+
+  const months: Record<string, { filed: number; settled: number; amount: number }> = {};
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(sixMonthsAgo);
+    d.setMonth(d.getMonth() + i);
+    const key = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+    months[key] = { filed: 0, settled: 0, amount: 0 };
+  }
+
+  for (const c of claims) {
+    const key = c.createdAt.toLocaleString('default', { month: 'short', year: '2-digit' });
+    if (months[key]) {
+      months[key].filed++;
+      months[key].amount += Number(c.claimAmount || 0);
+      if (c.status === 'settled') months[key].settled++;
+    }
+  }
+
+  return Object.entries(months).map(([month, data]) => ({ month, ...data }));
+}
+
+async function buildTopCarriers(where: Record<string, unknown>) {
+  const parties = await prisma.claimParty.findMany({
+    where: { type: 'carrier', claim: where } as any,
+    select: { name: true, claim: { select: { claimAmount: true, settledAmount: true } } },
+  });
+
+  const byCarrier: Record<string, { claims: number; totalSettlement: number }> = {};
+  for (const p of parties) {
+    const name = p.name || 'Unknown';
+    if (!byCarrier[name]) byCarrier[name] = { claims: 0, totalSettlement: 0 };
+    byCarrier[name].claims++;
+    byCarrier[name].totalSettlement += Number(p.claim?.settledAmount ?? 0);
+  }
+
+  return Object.entries(byCarrier)
+    .sort((a, b) => b[1].claims - a[1].claims)
+    .slice(0, 10)
+    .map(([name, data]) => ({
+      name,
+      claims: data.claims,
+      avgSettlement: data.claims > 0 ? Math.round(data.totalSettlement / data.claims) : 0,
+    }));
+}
+
 export const reportsRepository = {
   async getDashboard(corporateId?: string | null) {
     const where = corporateId ? { corporateId } : {};
 
-    const [total, pending, settled, denied, recent] = await Promise.all([
+    const [total, pending, settled, aggregates, recent] = await Promise.all([
       prisma.claim.count({ where }),
       prisma.claim.count({ where: { ...where, status: { in: ['pending', 'in_review'] } } }),
       prisma.claim.count({ where: { ...where, status: 'settled' } }),
-      prisma.claim.count({ where: { ...where, status: 'denied' } }),
+      prisma.claim.aggregate({
+        where,
+        _sum: { claimAmount: true, settledAmount: true },
+        _avg: { settledAmount: true },
+      }),
       prisma.claim.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -33,6 +92,8 @@ export const reportsRepository = {
     ]);
 
     const settlementRate = total > 0 ? Math.round((settled / total) * 100) : 0;
+    const totalClaimValue = Number(aggregates._sum?.claimAmount ?? 0);
+    const avgSettlement = Number(aggregates._avg?.settledAmount ?? 0);
 
     const statusCounts = await prisma.claim.groupBy({ by: ['status'], where, _count: true });
     const claimsByStatus = statusCounts.map((s) => ({
@@ -68,12 +129,13 @@ export const reportsRepository = {
         { label: 'Total Claims', value: total, change: 0 },
         { label: 'Pending Review', value: pending, change: 0 },
         { label: 'Settlement Rate', value: settlementRate, change: 0 },
-        { label: 'Denied', value: denied, change: 0 },
+        { label: 'Avg Settlement', value: Math.round(avgSettlement), change: 0 },
       ],
+      totalClaimValue,
       claimsByStatus,
       claimsByType,
-      monthlyTrend: [],
-      topCarriers: [],
+      monthlyTrend: await buildMonthlyTrend(where),
+      topCarriers: await buildTopCarriers(where),
       recentClaims: recent.map((c) => ({
         id: c.id,
         claimNumber: c.claimNumber,

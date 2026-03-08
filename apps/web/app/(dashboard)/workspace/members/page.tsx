@@ -63,10 +63,7 @@ export default function WorkspaceMembersPage() {
   );
 
   const inviteMutation = useMutation({
-    mutationFn: (data: typeof inviteForm) => post('/users/register', {
-      ...data,
-      companyName: undefined,
-    }),
+    mutationFn: (data: typeof inviteForm) => post('/users/invite', data),
     onSuccess: () => {
       toast.success('Team member added successfully');
       queryClient.invalidateQueries({ queryKey: ['workspace-members'] });
@@ -77,7 +74,7 @@ export default function WorkspaceMembersPage() {
   });
 
   const resetPasswordMutation = useMutation({
-    mutationFn: (userId: string) => put(`/users/${userId}/reset-password`, {}),
+    mutationFn: (userId: string) => post(`/users/${userId}/reset-password`, {}),
     onSuccess: () => { toast.success('Password reset sent'); setMenuOpen(null); },
     onError: () => toast.error('Failed to reset password'),
   });

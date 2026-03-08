@@ -6,6 +6,7 @@ import { get, post } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
+import { useAuth } from '@/hooks/use-auth';
 import {
   FileText, Plus, Search, ChevronRight, Shield, Truck, X,
 } from 'lucide-react';
@@ -39,31 +40,38 @@ interface InsuranceCertificate {
 
 type Tab = 'contracts' | 'insurance' | 'tariffs';
 
-const createFormDefaults = {
-  name: '',
-  type: 'contract' as 'contract' | 'certificate' | 'tariff',
-  carrier: '',
-  effectiveDate: '',
-  expirationDate: '',
-};
-
 export default function ContractsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('contracts');
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState(createFormDefaults);
 
-  const createMutation = useMutation({
-    mutationFn: (data: typeof createFormDefaults) => post('/contracts', data),
+  const [contractForm, setContractForm] = useState({ name: '', startDate: '', endDate: '', maxLiability: '', type: 'shipping' });
+  const [certForm, setCertForm] = useState({ certificateNumber: '', provider: '', coverageAmount: '', effectiveDate: '', expirationDate: '', policyType: 'cargo' });
+
+  const customerId = (user as any)?.corporateId || (user as any)?.customerId || '';
+
+  const createContractMutation = useMutation({
+    mutationFn: (data: typeof contractForm) => post('/contracts', { ...data, customerId, maxLiability: data.maxLiability ? Number(data.maxLiability) : undefined }),
     onSuccess: () => {
-      toast.success('Created successfully');
+      toast.success('Contract created');
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      setShowCreate(false);
+      setContractForm({ name: '', startDate: '', endDate: '', maxLiability: '', type: 'shipping' });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to create contract'),
+  });
+
+  const createCertMutation = useMutation({
+    mutationFn: (data: typeof certForm) => post('/contracts/insurance', { ...data, customerId, coverageAmount: Number(data.coverageAmount) || 0 }),
+    onSuccess: () => {
+      toast.success('Certificate created');
       queryClient.invalidateQueries({ queryKey: ['insurance-certificates'] });
       setShowCreate(false);
-      setCreateForm(createFormDefaults);
+      setCertForm({ certificateNumber: '', provider: '', coverageAmount: '', effectiveDate: '', expirationDate: '', policyType: 'cargo' });
     },
-    onError: () => toast.error('Failed to create'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to create certificate'),
   });
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery({
@@ -92,13 +100,7 @@ export default function ContractsPage() {
           <p className="text-sm text-slate-500 mt-0.5">Manage shipping contracts, insurance certificates, and carrier tariffs</p>
         </div>
         <button
-          onClick={() => {
-            setCreateForm({
-              ...createFormDefaults,
-              type: activeTab === 'contracts' ? 'contract' : activeTab === 'insurance' ? 'certificate' : 'tariff',
-            });
-            setShowCreate(true);
-          }}
+          onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -138,77 +140,88 @@ export default function ContractsPage() {
         />
       </div>
 
-      {/* Create form modal */}
-      {showCreate && (
+      {showCreate && activeTab === 'contracts' && (
         <div className="card p-6 border-2 border-primary-200 dark:border-primary-500/30">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-900 dark:text-white">
-              {createForm.type === 'contract' ? 'New Contract' : createForm.type === 'certificate' ? 'New Certificate' : 'New Tariff'}
-            </h3>
-            <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
-              <X className="w-4 h-4" />
-            </button>
+            <h3 className="font-semibold text-slate-900 dark:text-white">New Contract</h3>
+            <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><X className="w-4 h-4" /></button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Name *</label>
-              <input
-                value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                placeholder="Name..."
-              />
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Contract Name *</label>
+              <input value={contractForm.name} onChange={(e) => setContractForm({ ...contractForm, name: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" placeholder="e.g., FedEx Ground Agreement 2025" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Start Date *</label>
+              <input type="date" value={contractForm.startDate} onChange={(e) => setContractForm({ ...contractForm, startDate: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">End Date</label>
+              <input type="date" value={contractForm.endDate} onChange={(e) => setContractForm({ ...contractForm, endDate: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Max Liability ($)</label>
+              <input type="number" value={contractForm.maxLiability} onChange={(e) => setContractForm({ ...contractForm, maxLiability: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" placeholder="0" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
-              <select
-                value={createForm.type}
-                onChange={(e) => setCreateForm({ ...createForm, type: e.target.value as typeof createForm.type })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-              >
-                <option value="contract">Contract</option>
-                <option value="certificate">Certificate</option>
-                <option value="tariff">Tariff</option>
+              <select value={contractForm.type} onChange={(e) => setContractForm({ ...contractForm, type: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                <option value="shipping">Shipping</option>
+                <option value="carrier">Carrier</option>
+                <option value="liability">Liability</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Carrier</label>
-              <input
-                value={createForm.carrier}
-                onChange={(e) => setCreateForm({ ...createForm, carrier: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                placeholder="Carrier name..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Effective Date</label>
-              <input
-                type="date"
-                value={createForm.effectiveDate}
-                onChange={(e) => setCreateForm({ ...createForm, effectiveDate: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Expiration Date</label>
-              <input
-                type="date"
-                value={createForm.expirationDate}
-                onChange={(e) => setCreateForm({ ...createForm, expirationDate: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-              />
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
-              Cancel
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+            <button onClick={() => createContractMutation.mutate(contractForm)} disabled={!contractForm.name.trim() || !contractForm.startDate || createContractMutation.isPending} className="px-4 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg disabled:opacity-50">
+              {createContractMutation.isPending ? 'Creating...' : 'Create Contract'}
             </button>
-            <button
-              onClick={() => createMutation.mutate(createForm)}
-              disabled={!createForm.name.trim() || createMutation.isPending}
-              className="px-4 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg disabled:opacity-50"
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create'}
+          </div>
+        </div>
+      )}
+
+      {showCreate && activeTab === 'insurance' && (
+        <div className="card p-6 border-2 border-primary-200 dark:border-primary-500/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 dark:text-white">New Insurance Certificate</h3>
+            <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Certificate Number *</label>
+              <input value={certForm.certificateNumber} onChange={(e) => setCertForm({ ...certForm, certificateNumber: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" placeholder="CERT-001" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Provider *</label>
+              <input value={certForm.provider} onChange={(e) => setCertForm({ ...certForm, provider: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" placeholder="Insurance provider name" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Policy Type</label>
+              <select value={certForm.policyType} onChange={(e) => setCertForm({ ...certForm, policyType: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                <option value="cargo">Cargo</option>
+                <option value="general_liability">General Liability</option>
+                <option value="auto">Auto</option>
+                <option value="umbrella">Umbrella</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Coverage Amount ($) *</label>
+              <input type="number" value={certForm.coverageAmount} onChange={(e) => setCertForm({ ...certForm, coverageAmount: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" placeholder="100000" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Effective Date *</label>
+              <input type="date" value={certForm.effectiveDate} onChange={(e) => setCertForm({ ...certForm, effectiveDate: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Expiration Date *</label>
+              <input type="date" value={certForm.expirationDate} onChange={(e) => setCertForm({ ...certForm, expirationDate: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+            <button onClick={() => createCertMutation.mutate(certForm)} disabled={!certForm.certificateNumber.trim() || !certForm.provider.trim() || createCertMutation.isPending} className="px-4 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg disabled:opacity-50">
+              {createCertMutation.isPending ? 'Creating...' : 'Create Certificate'}
             </button>
           </div>
         </div>

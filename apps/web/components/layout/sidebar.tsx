@@ -11,7 +11,8 @@ import {
   FileSearch, Upload, Shield,
   Layers, TrendingUp, HelpCircle,
   Crown, Globe, CreditCard, UserPlus, Lock,
-  LayoutDashboard,
+  LayoutDashboard, Truck, MapPin, Package, ShieldCheck,
+  FileSpreadsheet, Contact, Ship,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-tour';
@@ -141,7 +142,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     if (pathname.startsWith('/companies') || pathname.startsWith('/customers')) toggle('companies', true);
     if (pathname.startsWith('/ai')) toggle('ai', true);
     if (pathname.startsWith('/manage') || pathname.startsWith('/settings') || pathname.startsWith('/workspace')) toggle('manage', true);
-    if (pathname.startsWith('/admin')) toggle('platform', true);
+    if (isSuperAdmin && pathname.startsWith('/admin')) toggle('platform', true);
   }, [pathname]);
 
   const toggle = (key: string, force?: boolean) => {
@@ -228,14 +229,15 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {(isSuperAdmin || hasPermission('customers.view')) && (
           <SidebarExpandable sectionKey="companies" icon={Building2} label="Companies" expanded={expanded} onToggle={toggle} pathname={pathname} showFull={showFull}>
             <SidebarNavLink href="/customers" icon={Building2} label="Customers" indent {...linkProps} />
-            <SidebarNavLink href="/companies/carriers" icon={Building2} label="Capacity Providers" indent {...linkProps} />
-            <SidebarNavLink href="/companies/suppliers" icon={Building2} label="Insurance" indent {...linkProps} />
-            <SidebarNavLink href="/companies" icon={Building2} label="All Companies" indent {...linkProps} />
-            <SidebarNavLink href="/companies/contacts" icon={Building2} label="All Contacts" indent {...linkProps} />
-            <SidebarNavLink href="/companies/products" icon={Building2} label="All Products" indent {...linkProps} />
-            <SidebarNavLink href="/companies/locations" icon={Building2} label="All Locations" indent {...linkProps} />
+            <SidebarNavLink href="/companies/carriers" icon={Truck} label="Carriers" indent {...linkProps} />
+            <SidebarNavLink href="/companies/suppliers" icon={Package} label="Suppliers" indent {...linkProps} />
+            <SidebarNavLink href="/companies/contacts" icon={Contact} label="Contacts" indent {...linkProps} />
+            <SidebarNavLink href="/companies/locations" icon={MapPin} label="Locations" indent {...linkProps} />
+            <SidebarNavLink href="/companies/products" icon={Layers} label="Products" indent {...linkProps} />
           </SidebarExpandable>
         )}
+        <SidebarNavLink href="/shipments" icon={Ship} label="Shipments" {...linkProps} />
+        <SidebarNavLink href="/contracts" icon={FileSpreadsheet} label="Contracts" {...linkProps} />
         {(isSuperAdmin || hasPermission('documents.view')) && (
           <SidebarNavLink href="/documents" icon={FolderOpen} label="Documents" {...linkProps} />
         )}

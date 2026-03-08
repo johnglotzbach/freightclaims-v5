@@ -184,17 +184,43 @@ export const usersController = {
   onboarding: asyncHandler(async (req, res) => {
     const user = getUser(req);
     const { workspace, preferences } = req.body;
-    if (workspace?.companyName) {
-      await usersService.update(user.userId, { companyName: workspace.companyName });
+
+    if (workspace?.companyName && user.corporateId) {
+      const { prisma } = await import('../config/database');
+      await prisma.customer.update({
+        where: { id: user.corporateId },
+        data: { name: workspace.companyName },
+      }).catch(() => {});
     }
+
     if (preferences) {
-      await usersService.updatePreferences(user.userId, preferences);
+      const safePrefs: Record<string, unknown> = {};
+      if (typeof preferences.emailNotifications === 'boolean') safePrefs.emailNotifications = preferences.emailNotifications;
+      if (typeof preferences.pushNotifications === 'boolean') safePrefs.pushNotifications = preferences.pushNotifications;
+      if (typeof preferences.dailyDigest === 'boolean') safePrefs.dailyDigest = preferences.dailyDigest;
+      if (typeof preferences.theme === 'string') safePrefs.theme = preferences.theme;
+      if (typeof preferences.timezone === 'string') safePrefs.timezone = preferences.timezone;
+      if (Object.keys(safePrefs).length > 0) {
+        await usersService.updatePreferences(user.userId, safePrefs);
+      }
     }
+
     res.json({ message: 'Onboarding complete' });
   }),
 
   adminResetPassword: asyncHandler(async (req, res) => {
     await usersService.adminResetPassword(req.params.id as string);
     res.json({ message: 'Password has been reset. A temporary password has been generated.' });
+  }),
+
+  invite: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const corporateId = user.corporateId;
+    if (!corporateId) {
+      res.status(400).json({ success: false, error: 'No workspace context. Cannot invite users.' });
+      return;
+    }
+    const invited = await usersService.inviteToWorkspace(req.body, corporateId);
+    res.status(201).json(invited);
   }),
 };

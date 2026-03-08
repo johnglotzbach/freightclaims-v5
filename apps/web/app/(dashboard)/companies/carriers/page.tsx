@@ -193,7 +193,7 @@ export default function CarriersPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
-                    <Link href={`/companies/${carrier.id}`} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><ExternalLink className="w-3 h-3" /> Full Profile</Link>
+                    <Link href={`/companies/carriers?selected=${carrier.id}`} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><ExternalLink className="w-3 h-3" /> Full Profile</Link>
                     <Link href={`/claims/list?carrier=${carrier.scacCode || carrier.id}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Database className="w-3 h-3" /> View Claims</Link>
                     <button onClick={() => { if (window.confirm(`Delete carrier ${carrier.name}?`)) deleteMutation.mutate(carrier.id); }} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium"><Trash2 className="w-3 h-3" /> Delete</button>
                   </div>
