@@ -120,6 +120,30 @@ app.get('/ai-health', async (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Local file serving (when STORAGE_MODE=local)
+// ---------------------------------------------------------------------------
+
+import { storageService } from './services/storage.service';
+import { authenticate } from './middleware/auth.middleware';
+
+app.get('/api/v1/files/*', authenticate, async (req, res) => {
+  try {
+    const key = decodeURIComponent(req.params[0]);
+    const { body, contentType } = await storageService.downloadDocument(key);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${key.split('/').pop()}"`);
+    res.send(body);
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      res.status(404).json({ success: false, error: 'File not found' });
+    } else {
+      logger.error({ err }, 'File download error');
+      res.status(500).json({ success: false, error: 'Failed to download file' });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // API v1 routes
 // ---------------------------------------------------------------------------
 
