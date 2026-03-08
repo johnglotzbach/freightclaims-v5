@@ -165,7 +165,14 @@ export const claimsService = {
 
     promises.push(claimsRepository.addTimeline(claim.id, 'draft', user.userId, 'Claim created'));
 
-    await Promise.allSettled(promises);
+    const settled = await Promise.allSettled(promises);
+    const failures = settled.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      logger.warn(
+        { claimId: claim.id, failedCount: failures.length, errors: failures.map(f => (f as PromiseRejectedResult).reason?.message || String((f as PromiseRejectedResult).reason)) },
+        'Some related records failed to create for claim',
+      );
+    }
 
     return claim;
   },

@@ -83,7 +83,13 @@ export const claimsController = {
   /** PUT /api/v1/claims/:id/status - Update claim status */
   updateStatus: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
-    const claim = await claimsService.updateStatus(req.params.id as string, req.body.status, user);
+    const newStatus = req.body.status;
+    if (!newStatus || typeof newStatus !== 'string') {
+      res.status(400).json({ success: false, error: 'Missing required field: status' });
+      return;
+    }
+    const result = await claimsService.updateStatus(req.params.id as string, newStatus, user);
+    const claim = Array.isArray(result) ? result[0] : result;
     res.json(claim);
   }),
 

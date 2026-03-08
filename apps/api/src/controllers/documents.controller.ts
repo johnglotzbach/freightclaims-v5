@@ -30,7 +30,8 @@ export const documentsController = {
     } catch (err: any) {
       const msg = err?.message || 'Upload failed';
       logger.error({ err, path: req.path }, `Upload error: ${msg}`);
-      res.status(400).json({ success: false, error: msg });
+      const isClientError = msg.includes('No files') || msg.includes('not allowed') || msg.includes('Authentication');
+      res.status(isClientError ? 400 : 500).json({ success: false, error: msg });
     }
   },
   delete: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.delete(req.params.id as string, user); res.status(204).send(); }),
