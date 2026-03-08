@@ -486,12 +486,13 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
   const [uploading, setUploading] = useState(false);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
     setUploading(true);
     try {
       const formData = new FormData();
-      Array.from(files).forEach(f => formData.append('files', f));
+      files.forEach(f => formData.append('files', f));
       formData.append('claimId', claimId);
       const rd = await uploadFile('/documents/upload', formData);
       const uploaded = rd?.data?.uploaded || rd?.uploaded || (Array.isArray(rd) ? rd : [rd]);

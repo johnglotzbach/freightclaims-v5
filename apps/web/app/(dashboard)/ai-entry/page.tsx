@@ -92,9 +92,9 @@ export default function AIEntryPage() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (files: FileList) => {
+    mutationFn: async (files: File[]) => {
       const formData = new FormData();
-      Array.from(files).forEach(f => formData.append('files', f));
+      files.forEach(f => formData.append('files', f));
       const uploadRes = await uploadFile('/documents/upload', formData);
       const docs = Array.isArray(uploadRes) ? uploadRes : [uploadRes];
       for (const doc of docs) {
@@ -110,7 +110,7 @@ export default function AIEntryPage() {
 
   function handleUploadClick() { fileInputRef.current?.click(); }
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files && e.target.files.length > 0) { uploadMutation.mutate(e.target.files); e.target.value = ''; }
+    if (e.target.files && e.target.files.length > 0) { const files = Array.from(e.target.files); uploadMutation.mutate(files); e.target.value = ''; }
   }
 
   const { data: documents = [], isLoading } = useQuery({

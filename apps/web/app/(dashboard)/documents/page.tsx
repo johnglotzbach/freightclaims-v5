@@ -86,9 +86,9 @@ export default function DocumentsPage() {
   const claimOptions = extractClaims(rawClaims);
 
   const uploadMutation = useMutation({
-    mutationFn: async (files: FileList) => {
+    mutationFn: async (files: File[]) => {
       const formData = new FormData();
-      Array.from(files).forEach(f => formData.append('files', f));
+      files.forEach(f => formData.append('files', f));
       if (uploadClaimId) {
         formData.append('claimId', uploadClaimId);
       }
@@ -164,7 +164,8 @@ export default function DocumentsPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
-      uploadMutation.mutate(e.target.files);
+      const files = Array.from(e.target.files);
+      uploadMutation.mutate(files);
       e.target.value = '';
     }
   }
