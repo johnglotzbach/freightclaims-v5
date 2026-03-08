@@ -18,7 +18,6 @@ import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
 import { NotFoundError } from '../utils/errors';
 import { env } from '../config/env';
-import { PDFParse } from 'pdf-parse';
 
 /**
  * Loads a document and verifies the requesting user has access via the
@@ -186,6 +185,7 @@ export const documentsService = {
       let textContent = '';
       if (doc.mimeType === 'application/pdf' || doc.mimeType?.includes('pdf')) {
         try {
+          const { PDFParse } = await import('pdf-parse');
           const parser = new PDFParse({ data: new Uint8Array(body) });
           const pdfResult = await parser.getText();
           textContent = pdfResult.text?.trim() || '';

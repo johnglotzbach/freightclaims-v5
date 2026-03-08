@@ -494,7 +494,8 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
       Array.from(files).forEach(f => formData.append('files', f));
       formData.append('claimId', claimId);
       const uploadRes = await apiClient.post('/documents/upload', formData);
-      const uploaded = Array.isArray(uploadRes.data) ? uploadRes.data : [uploadRes.data];
+      const rd = uploadRes.data;
+      const uploaded = rd?.data?.uploaded || rd?.uploaded || (Array.isArray(rd) ? rd : [rd]);
       toast.success(`${files.length} document(s) uploaded`);
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
 

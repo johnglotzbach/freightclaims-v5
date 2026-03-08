@@ -7,6 +7,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { documentsService } from '../services/documents.service';
 import type { JwtPayload } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -21,7 +22,17 @@ function getUser(req: Request): JwtPayload {
 export const documentsController = {
   list: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.list(req.query, user)); }),
   getById: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.getById(req.params.id as string, user)); }),
-  upload: asyncHandler(async (req, res) => { res.status(201).json(await documentsService.upload(req)); }),
+  upload: async (req: Request, res: Response) => {
+    try {
+      const result = await documentsService.upload(req);
+      const uploaded = Array.isArray(result) ? result : [result];
+      res.status(201).json({ success: true, data: { uploaded }, uploaded });
+    } catch (err: any) {
+      const msg = err?.message || 'Upload failed';
+      logger.error({ err, path: req.path }, `Upload error: ${msg}`);
+      res.status(400).json({ success: false, error: msg });
+    }
+  },
   delete: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.delete(req.params.id as string, user); res.status(204).send(); }),
   download: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.download(req.params.id as string, res, user); }),
   getSignedUrl: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.getSignedUrl(req.params.id as string, user)); }),

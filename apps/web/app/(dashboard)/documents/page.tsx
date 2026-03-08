@@ -97,7 +97,7 @@ export default function DocumentsPage() {
       return res.data;
     },
     onSuccess: (data) => {
-      const uploaded = Array.isArray(data) ? data : [data];
+      const uploaded = data?.data?.uploaded || data?.uploaded || (Array.isArray(data) ? data : [data]);
       toast.success(`${uploaded.length} document(s) uploaded successfully`);
       queryClient.invalidateQueries({ queryKey: ['documents'] });
       setShowUploadPanel(false);

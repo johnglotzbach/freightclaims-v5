@@ -69,9 +69,11 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request timeout — abort requests exceeding 30 seconds
+// Request timeout — abort requests exceeding 120 seconds for uploads, 30 seconds otherwise
 app.use((req, res, next) => {
-  req.setTimeout(30_000, () => {
+  const isUpload = req.path.includes('/upload') || req.path.includes('/mass-upload');
+  const timeout = isUpload ? 120_000 : 30_000;
+  req.setTimeout(timeout, () => {
     if (!res.headersSent) {
       res.status(408).json({ success: false, error: 'Request timed out' });
     }

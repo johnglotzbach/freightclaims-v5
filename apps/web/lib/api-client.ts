@@ -22,6 +22,7 @@ client.interceptors.request.use((config) => {
   }
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
+    config.timeout = 120_000;
   }
   return config;
 });
