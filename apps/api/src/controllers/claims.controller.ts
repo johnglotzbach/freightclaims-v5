@@ -250,7 +250,49 @@ export const claimsController = {
   // --- Mass Upload ---
   massUpload: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
-    const result = await claimsService.massUpload(req.body, user);
+    const file = (req as any).file as Express.Multer.File | undefined;
+
+    let rows: Record<string, unknown>[] = [];
+
+    if (file) {
+      const csvText = file.buffer.toString('utf-8');
+      const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        res.status(400).json({ error: 'CSV file must have a header row and at least one data row' });
+        return;
+      }
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const headerMap: Record<string, string> = {
+        'claim number': 'claimNumber', 'pro number': 'proNumber', 'bol number': 'bolNumber',
+        'claim type': 'claimType', 'claim amount': 'claimAmount', 'ship date': 'shipDate',
+        'delivery date': 'deliveryDate', 'customer name': 'customerName', 'carrier name': 'carrierName',
+        'origin city': 'originCity', 'origin state': 'originState', 'destination city': 'destinationCity',
+        'destination state': 'destinationState', 'description': 'description',
+        'company name': 'name', 'code': 'code', 'email': 'email', 'phone': 'phone',
+        'first name': 'firstName', 'last name': 'lastName', 'title': 'title',
+        'scac code': 'scacCode', 'dot number': 'dotNumber', 'mc number': 'mcNumber',
+      };
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: Record<string, unknown> = {};
+        headers.forEach((h, idx) => {
+          const key = headerMap[h.toLowerCase()] || h.replace(/\s+/g, '');
+          if (values[idx]) row[key] = values[idx];
+        });
+        if (Object.keys(row).length > 0) rows.push(row);
+      }
+    } else if (req.body?.rows) {
+      rows = req.body.rows;
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'No data rows found' });
+      return;
+    }
+
+    const uploadType = req.body?.type || (file ? 'claims' : 'claims');
+    const result = await claimsService.massUpload({ rows, type: uploadType }, user);
     res.json(result);
   }),
 
@@ -286,5 +328,13 @@ export const claimsController = {
     await claimsService.getById(req.params.id as string, user);
     const ack = await claimsService.createAcknowledgement(req.params.id as string, req.body, user);
     res.status(201).json(ack);
+  }),
+
+  fileClaim: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const claimId = req.params.id as string;
+    const { sendEmail, partyIds, notes } = req.body;
+    const result = await claimsService.fileClaim(claimId, { sendEmail, partyIds, notes }, user);
+    res.json(result);
   }),
 };

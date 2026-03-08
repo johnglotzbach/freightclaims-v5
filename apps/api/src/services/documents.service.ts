@@ -237,13 +237,13 @@ Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, s
     }
 
     if (!convertService.isConfigured) {
-      throw new Error('ConvertAPI not configured — set CONVERT_API_SECRET');
+      return { id, status: 'skipped', message: 'PDF conversion not available (ConvertAPI not configured). Document stored as-is.' };
     }
 
     const { body } = await storageService.downloadDocument(doc.s3Key);
     const result = await convertService.autoConvertToPdf(body, doc.documentName ?? 'document', doc.mimeType ?? 'application/octet-stream');
     if (!result) {
-      throw new Error(`Unsupported format for conversion: ${doc.mimeType}`);
+      return { id, status: 'unsupported', message: `Format ${doc.mimeType} cannot be converted to PDF` };
     }
 
     const pdfFilename = `${randomUUID()}-${result.fileName}`;
@@ -252,20 +252,17 @@ Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, s
     const category = parts[2] || 'general';
     const { key: pdfKey } = await storageService.uploadDocument(claimId, category, pdfFilename, result.buffer, 'application/pdf');
 
-    await documentsRepository.update(id, { pdfKey });
-
     return { id, status: 'converted', pdfKey };
   },
 
   async mergeClaimDocs(claimId: string, documentIds: string[], user: JwtPayload) {
-    // Verify the user has access to the claim being merged
     const claim = await prisma.claim.findUnique({ where: { id: claimId }, select: { corporateId: true } });
     if (!user.isSuperAdmin && claim?.corporateId && claim.corporateId !== user.corporateId) {
       throw new NotFoundError(`Claim ${claimId} not found`);
     }
 
     if (!convertService.isConfigured) {
-      throw new Error('ConvertAPI not configured — set CONVERT_API_SECRET');
+      return { status: 'skipped', message: 'Document merging requires ConvertAPI. Upload each document individually instead.' };
     }
 
     const files = [];

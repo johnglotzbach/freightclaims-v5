@@ -73,9 +73,12 @@ export const claimsService = {
     const claim = await claimsRepository.findById(id);
     if (!claim) throw new NotFoundError(`Claim ${id} not found`);
 
-    // Corporate scoping -- non-admins can only see their own company's claims
-    if (user.role !== 'admin' && claim.customerId !== user.customerId) {
-      throw new NotFoundError(`Claim ${id} not found`);
+    if (!user.isSuperAdmin) {
+      const userCorp = user.corporateId;
+      const claimCorp = (claim as any).corporateId;
+      if (userCorp && claimCorp && userCorp !== claimCorp) {
+        throw new NotFoundError(`Claim ${id} not found`);
+      }
     }
 
     return claim;
@@ -265,7 +268,7 @@ export const claimsService = {
         priority: (data.priority as string) || 'medium',
         status: 'pending',
         dueDate: data.dueDate ? new Date(data.dueDate as string) : null,
-        assignedToId: (data.assignedToId as string) || null,
+        assignedTo: (data.assignedTo as string) || (data.assignedToId as string) || null,
         createdById: user.userId,
       } as any,
     });
@@ -308,5 +311,34 @@ export const claimsService = {
   async getAcknowledgement(claimId: string) { return claimsRepository.getAcknowledgement(claimId); },
   async createAcknowledgement(claimId: string, data: Record<string, unknown>, user: JwtPayload) {
     return claimsRepository.createAcknowledgement(claimId, { ...data, userId: user.userId });
+  },
+
+  /** Files a claim: transitions status to 'pending' and optionally emails carriers */
+  async fileClaim(claimId: string, opts: { sendEmail?: boolean; partyIds?: string[]; notes?: string }, user: JwtPayload) {
+    const claim = await this.getById(claimId, user);
+
+    await claimsRepository.update(claimId, {
+      status: 'pending',
+      filingDate: new Date(),
+    });
+    await claimsRepository.addTimeline(claimId, 'pending', user.userId, opts.notes || 'Claim filed');
+
+    if (opts.sendEmail && opts.partyIds?.length) {
+      const parties = await claimsRepository.getParties(claimId);
+      const selectedParties = parties.filter((p: any) => opts.partyIds!.includes(p.id));
+      for (const party of selectedParties) {
+        if ((party as any).email) {
+          await smtpService.sendClaimNotification({
+            to: (party as any).email,
+            claimNumber: claim.claimNumber,
+            subject: `Freight Claim ${claim.claimNumber} Filed`,
+            body: `A freight claim has been filed with your company.\n\nClaim Number: ${claim.claimNumber}\nPRO: ${claim.proNumber}\nAmount: $${claim.claimAmount}\n\n${opts.notes || ''}`,
+            claimUrl: `${env.NEXT_PUBLIC_APP_URL}/claims/${claimId}`,
+          }).catch((err: any) => logger.error({ err, partyId: (party as any).id }, 'Failed to send filing email to carrier'));
+        }
+      }
+    }
+
+    return { success: true, status: 'pending', message: 'Claim filed successfully' };
   },
 };

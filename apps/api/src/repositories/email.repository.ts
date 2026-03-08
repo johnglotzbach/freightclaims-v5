@@ -9,6 +9,7 @@
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { smtpService } from '../services/smtp.service';
+import { storageService } from '../services/storage.service';
 
 export const emailRepository = {
   /** Sends an email via SMTP and logs it to the database */
@@ -23,7 +24,7 @@ export const emailRepository = {
     const body = data.body as string;
 
     const attachmentIds = Array.isArray(data.attachmentIds) ? data.attachmentIds as string[] : [];
-    let smtpAttachments: Array<{ filename: string; content: Buffer | string; contentType?: string }> = [];
+    const smtpAttachments: Array<{ filename: string; content: Buffer; contentType?: string }> = [];
 
     if (attachmentIds.length > 0) {
       const docs = await prisma.claimDocument.findMany({
@@ -31,11 +32,16 @@ export const emailRepository = {
         select: { id: true, documentName: true, s3Key: true, mimeType: true },
       });
       for (const doc of docs) {
-        smtpAttachments.push({
-          filename: doc.documentName,
-          content: doc.s3Key,
-          contentType: doc.mimeType || 'application/octet-stream',
-        });
+        try {
+          const { body: fileBuffer, contentType } = await storageService.downloadDocument(doc.s3Key);
+          smtpAttachments.push({
+            filename: doc.documentName,
+            content: fileBuffer,
+            contentType: contentType || doc.mimeType || 'application/octet-stream',
+          });
+        } catch (err) {
+          logger.warn({ err, docId: doc.id, s3Key: doc.s3Key }, 'Failed to download attachment for email');
+        }
       }
     }
 

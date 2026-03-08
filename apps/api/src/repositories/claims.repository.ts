@@ -170,20 +170,53 @@ export const claimsRepository = {
   /** Bulk-creates claims from a parsed CSV/Excel upload */
   async massUpload(data: Record<string, unknown>, userId: string) {
     const rows = (data.rows as Record<string, unknown>[]) || [];
-    const results = { created: 0, errors: [] as string[] };
+    const results = { created: 0, errors: [] as string[], total: rows.length };
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { corporateId: true, customerId: true } });
+    const customerId = user?.customerId || user?.corporateId;
 
     for (let i = 0; i < rows.length; i++) {
       try {
-        await prisma.claim.create({
+        const row = rows[i];
+        const parseDate = (v: unknown): Date | undefined => {
+          if (!v) return undefined;
+          const d = new Date(v as string);
+          return isNaN(d.getTime()) ? undefined : d;
+        };
+
+        const claimNumber = (row.claimNumber as string) ||
+          `FC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+        const claim = await prisma.claim.create({
           data: {
-            ...rows[i],
-            createdById: userId,
+            claimNumber,
+            proNumber: (row.proNumber as string) || claimNumber,
+            claimType: (row.claimType as string) || 'damage',
+            claimAmount: Number(row.claimAmount) || 0,
+            description: (row.description as string) || null,
+            shipDate: parseDate(row.shipDate),
+            deliveryDate: parseDate(row.deliveryDate),
             status: 'draft',
-          } as any,
+            createdById: userId,
+            customerId: customerId || userId,
+            corporateId: user?.corporateId || null,
+          },
         });
+
+        if (row.carrierName) {
+          await prisma.claimParty.create({
+            data: { claimId: claim.id, type: 'carrier', name: row.carrierName as string },
+          }).catch(() => {});
+        }
+        if (row.bolNumber) {
+          await prisma.claimIdentifier.create({
+            data: { claimId: claim.id, type: 'bol', value: row.bolNumber as string },
+          }).catch(() => {});
+        }
+
         results.created++;
-      } catch (err) {
-        results.errors.push(`Row ${i + 1}: ${String(err)}`);
+      } catch (err: any) {
+        results.errors.push(`Row ${i + 1}: ${err.message || String(err)}`);
       }
     }
 

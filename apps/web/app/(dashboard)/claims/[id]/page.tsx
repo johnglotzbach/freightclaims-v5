@@ -493,13 +493,16 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
       const formData = new FormData();
       Array.from(files).forEach(f => formData.append('files', f));
       formData.append('claimId', claimId);
-      await apiClient.post('/documents/upload', formData);
+      const uploadRes = await apiClient.post('/documents/upload', formData);
+      const uploaded = Array.isArray(uploadRes.data) ? uploadRes.data : [uploadRes.data];
       toast.success(`${files.length} document(s) uploaded`);
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
 
-      try {
-        await post(`/documents/${claimId}/process`, {});
-      } catch {}
+      for (const doc of uploaded) {
+        if (doc?.id) {
+          try { await post(`/documents/${doc.id}/process`, {}); } catch {}
+        }
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Upload failed');
     } finally {

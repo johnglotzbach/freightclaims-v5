@@ -6,11 +6,16 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import { customersService } from '../services/customers.service';
+import type { JwtPayload } from '../middleware/auth.middleware';
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch(next);
   };
+}
+
+function getUser(req: Request): JwtPayload {
+  return (req as Request & { user: JwtPayload }).user;
 }
 
 export const customersController = {
@@ -88,7 +93,8 @@ export const customersController = {
   }),
 
   addNote: asyncHandler(async (req, res) => {
-    const note = await customersService.addNote(req.params.id as string, req.body);
+    const user = getUser(req);
+    const note = await customersService.addNote(req.params.id as string, { ...req.body, createdBy: user.userId });
     res.status(201).json(note);
   }),
 

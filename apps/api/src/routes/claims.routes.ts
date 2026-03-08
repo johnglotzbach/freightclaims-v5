@@ -10,6 +10,7 @@
  *          apps/api/src/validators/claims.validators.ts
  */
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { claimsController } from '../controllers/claims.controller';
@@ -18,6 +19,8 @@ import {
   updateClaimSchema,
   listClaimsQuerySchema,
 } from '../validators/claims.validators';
+
+const massUploadMulter = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export const claimsRouter: Router = Router();
 
@@ -31,7 +34,7 @@ claimsRouter.post('/', validate(createClaimSchema), claimsController.create);
 
 claimsRouter.get('/dashboard/stats', claimsController.getDashboardStats);
 
-claimsRouter.post('/mass-upload', authorize(['admin', 'manager']), claimsController.massUpload);
+claimsRouter.post('/mass-upload', authorize(['admin', 'manager']), massUploadMulter.single('file'), claimsController.massUpload);
 claimsRouter.get('/mass-upload/history', claimsController.getMassUploadHistory);
 
 claimsRouter.get('/settings/all', authorize(['admin']), claimsController.getSettings);
@@ -84,3 +87,6 @@ claimsRouter.post('/:id/identifiers', claimsController.addIdentifier);
 // --- Acknowledgement ---
 claimsRouter.get('/:id/acknowledgement', claimsController.getAcknowledgement);
 claimsRouter.post('/:id/acknowledgement', claimsController.createAcknowledgement);
+
+// --- File claim (submit to carrier) ---
+claimsRouter.post('/:id/file', claimsController.fileClaim);

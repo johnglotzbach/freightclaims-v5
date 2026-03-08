@@ -61,7 +61,18 @@ contractsRouter.get('/insurance/:id', async (req, res, next) => {
 
 contractsRouter.put('/insurance/:id', async (req, res, next) => {
   try {
-    const cert = await prisma.insuranceCertificate.update({ where: { id: req.params.id }, data: req.body });
+    const { certificateNumber, provider, policyType, coverageAmount, effectiveDate, expirationDate, deductible, customerId, carrierId } = req.body;
+    const data: Record<string, unknown> = {};
+    if (certificateNumber !== undefined) data.certificateNumber = certificateNumber;
+    if (provider !== undefined) data.provider = provider;
+    if (policyType !== undefined) data.policyType = policyType;
+    if (coverageAmount !== undefined) data.coverageAmount = coverageAmount;
+    if (effectiveDate !== undefined) data.effectiveDate = new Date(effectiveDate);
+    if (expirationDate !== undefined) data.expirationDate = new Date(expirationDate);
+    if (deductible !== undefined) data.deductible = deductible;
+    if (customerId !== undefined) data.customerId = customerId;
+    if (carrierId !== undefined) data.carrierId = carrierId;
+    const cert = await prisma.insuranceCertificate.update({ where: { id: req.params.id }, data });
     res.json({ success: true, data: cert });
   } catch (err) { next(err); }
 });
@@ -82,8 +93,15 @@ contractsRouter.post('/tariffs', async (req, res, next) => {
     if (!carrierId || !name) {
       return res.status(400).json({ success: false, error: 'carrierId and name are required' });
     }
+    const { maxLiability, filingDeadlineDays, rules: bodyRules } = req.body;
     const tariff = await prisma.carrierTariff.create({
-      data: { ...req.body, effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date() },
+      data: {
+        carrierId, name,
+        effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date(),
+        rules: bodyRules || {},
+        maxLiability: maxLiability || undefined,
+        filingDeadlineDays: filingDeadlineDays || undefined,
+      },
     });
     res.status(201).json({ success: true, data: tariff });
   } catch (err) { next(err); }
@@ -105,7 +123,8 @@ contractsRouter.post('/release-values', async (req, res, next) => {
     if (!carrierId) {
       return res.status(400).json({ success: false, error: 'carrierId is required' });
     }
-    const rv = await prisma.releaseValueTable.create({ data: req.body });
+    const { carrierId: rvCarrierId, commodityType, releaseValue: rvVal, unit, notes } = req.body;
+    const rv = await prisma.releaseValueTable.create({ data: { carrierId: rvCarrierId, commodityType, releaseValue: rvVal, unit, notes } as any });
     res.status(201).json({ success: true, data: rv });
   } catch (err) { next(err); }
 });

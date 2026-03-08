@@ -197,19 +197,29 @@ export default function DocumentsPage() {
 
   async function handleView(doc: Document) {
     try {
-      const { url } = await get<{ url: string }>(`/documents/${doc.id}/url`);
-      setViewingDoc({ url, name: doc.name });
+      const result = await get<{ url: string }>(`/documents/${doc.id}/url`);
+      const url = (result as any)?.url || (result as any)?.data?.url;
+      if (url) {
+        setViewingDoc({ url, name: doc.name });
+      } else {
+        toast.error('Could not get document URL');
+      }
     } catch {
-      window.open(`/api/v1/documents/${doc.id}/url`, '_blank');
+      toast.error('Failed to load document preview');
     }
   }
 
   async function handleDownload(doc: Document) {
     try {
-      const { url } = await get<{ url: string }>(`/documents/${doc.id}/url`);
-      window.open(url, '_blank');
+      const result = await get<{ url: string }>(`/documents/${doc.id}/url`);
+      const url = (result as any)?.url || (result as any)?.data?.url;
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        toast.error('Could not get download URL');
+      }
     } catch {
-      window.open(`/api/v1/documents/${doc.id}/url`, '_blank');
+      toast.error('Failed to get download URL');
     }
   }
 

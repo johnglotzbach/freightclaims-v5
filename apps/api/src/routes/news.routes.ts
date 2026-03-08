@@ -6,7 +6,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../config/database';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 export const newsRouter: Router = Router();
 
@@ -87,7 +87,7 @@ newsRouter.post('/unsubscribe', async (req, res, next) => {
 
 // --- Admin endpoints (authenticated) ---
 
-newsRouter.use('/admin', authenticate);
+newsRouter.use('/admin', authenticate, authorize(['admin']));
 
 newsRouter.get('/admin/posts', async (req, res, next) => {
   try {

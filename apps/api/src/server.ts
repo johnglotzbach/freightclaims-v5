@@ -41,6 +41,7 @@ import { onboardingRouter } from './routes/onboarding.routes';
 import { chatbotRouter } from './routes/chatbot.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { adminRouter } from './routes/admin.routes';
+import { newsRouter } from './routes/news.routes';
 
 const app: express.Application = express();
 
@@ -171,6 +172,7 @@ v1.use('/onboarding', onboardingRouter);
 v1.use('/chatbot', chatbotRouter);
 v1.use('/notifications', notificationsRouter);
 v1.use('/admin', adminRouter);
+v1.use('/news', newsRouter);
 
 app.use('/api/v1', v1);
 

@@ -18,5 +18,10 @@ export const reportsService = {
   async getMetricsPerCarrier(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getMetricsPerCarrier(body, user.customerId ?? undefined); },
   async getMetricsPerDestination(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getMetricsPerDestination(body, user.customerId ?? undefined); },
   async getWriteOffAmount(body: Record<string, unknown>, user: JwtPayload) { return reportsRepository.getWriteOffAmount(body, user.customerId ?? undefined); },
-  async exportReport(type: string, query: Record<string, unknown>, user: JwtPayload, _res: Response) { return reportsRepository.exportReport(type, query, user.customerId ?? undefined); },
+  async exportReport(type: string, query: Record<string, unknown>, user: JwtPayload, res: Response) {
+    const result = await reportsRepository.exportReport(type, query, user.customerId ?? undefined);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.data);
+  },
 };

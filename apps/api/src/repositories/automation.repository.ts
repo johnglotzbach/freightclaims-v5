@@ -95,14 +95,17 @@ export const automationRepository = {
         where: { id: claimId },
         data: { status: actions.setStatus as string },
       });
-      await prisma.claimTimeline.create({
-        data: {
-          claimId,
-          status: actions.setStatus as string,
-          description: `Auto-updated by rule: ${rule.name}`,
-          changedById: 'system',
-        },
-      });
+      const systemUser = await prisma.user.findFirst({ where: { isSuperAdmin: true }, select: { id: true } });
+      if (systemUser) {
+        await prisma.claimTimeline.create({
+          data: {
+            claimId,
+            status: actions.setStatus as string,
+            description: `Auto-updated by rule: ${rule.name}`,
+            changedById: systemUser.id,
+          },
+        });
+      }
     }
 
     if (actions.notify && actions.notifyUserId) {
