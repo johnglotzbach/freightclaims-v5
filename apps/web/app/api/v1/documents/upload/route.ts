@@ -8,26 +8,24 @@ const API_BASE = API_HOST ? `http://${API_HOST}` : 'http://localhost:4000';
 
 export async function POST(req: NextRequest) {
   try {
-    const headers: Record<string, string> = {};
+    const authorization = req.headers.get('authorization');
+    if (!authorization) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
 
-    const auth = req.headers.get('authorization');
-    if (auth) headers['authorization'] = auth;
+    const incoming = await req.formData();
 
-    const ct = req.headers.get('content-type');
-    if (ct) headers['content-type'] = ct;
-
-    const cl = req.headers.get('content-length');
-    if (cl) headers['content-length'] = cl;
-
-    const corp = req.headers.get('x-corporate-id');
-    if (corp) headers['x-corporate-id'] = corp;
+    const outgoing = new FormData();
+    for (const [key, value] of incoming.entries()) {
+      outgoing.append(key, value);
+    }
 
     const res = await fetch(`${API_BASE}/api/v1/documents/upload`, {
       method: 'POST',
-      headers,
-      body: req.body,
-      // @ts-expect-error duplex required for streaming request bodies in Node.js
-      duplex: 'half',
+      headers: {
+        authorization,
+      },
+      body: outgoing,
       signal: AbortSignal.timeout(120_000),
     });
 
@@ -36,7 +34,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('Upload proxy error:', err?.message || err);
     return NextResponse.json(
-      { success: false, error: 'Upload failed: ' + (err?.message || 'unknown') },
+      { success: false, error: 'Upload failed: ' + (err?.message || 'unknown error') },
       { status: 502 },
     );
   }

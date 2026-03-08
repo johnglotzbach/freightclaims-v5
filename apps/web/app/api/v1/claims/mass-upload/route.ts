@@ -8,20 +8,21 @@ const API_BASE = API_HOST ? `http://${API_HOST}` : 'http://localhost:4000';
 
 export async function POST(req: NextRequest) {
   try {
-    const headers: Record<string, string> = {};
-    const auth = req.headers.get('authorization');
-    if (auth) headers['authorization'] = auth;
-    const ct = req.headers.get('content-type');
-    if (ct) headers['content-type'] = ct;
-    const cl = req.headers.get('content-length');
-    if (cl) headers['content-length'] = cl;
+    const authorization = req.headers.get('authorization');
+    if (!authorization) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const incoming = await req.formData();
+    const outgoing = new FormData();
+    for (const [key, value] of incoming.entries()) {
+      outgoing.append(key, value);
+    }
 
     const res = await fetch(`${API_BASE}/api/v1/claims/mass-upload`, {
       method: 'POST',
-      headers,
-      body: req.body,
-      // @ts-expect-error duplex required for streaming request bodies
-      duplex: 'half',
+      headers: { authorization },
+      body: outgoing,
       signal: AbortSignal.timeout(120_000),
     });
 
