@@ -160,6 +160,19 @@ export const claimsController = {
     res.status(201).json(comment);
   }),
 
+  // --- Global tasks (all tasks across claims) ---
+  getAllTasks: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const tasks = await claimsService.getAllTasks(user);
+    res.json(tasks);
+  }),
+
+  createGlobalTask: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const task = await claimsService.createGlobalTask(req.body, user);
+    res.status(201).json(task);
+  }),
+
   // --- Tasks (verify claim ownership first) ---
   getTasks: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);

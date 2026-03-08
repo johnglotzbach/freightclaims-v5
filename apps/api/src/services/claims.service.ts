@@ -167,6 +167,34 @@ export const claimsService = {
   },
 
   // --- Tasks ---
+  async getAllTasks(user: JwtPayload) {
+    const where: Record<string, unknown> = {};
+    if (!user.isSuperAdmin && user.corporateId) {
+      where.claim = { corporateId: user.corporateId };
+    }
+    return prisma.claimTask.findMany({
+      where: where as any,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        claim: { select: { id: true, claimNumber: true } },
+      },
+    });
+  },
+  async createGlobalTask(data: Record<string, unknown>, user: JwtPayload) {
+    return prisma.claimTask.create({
+      data: {
+        claimId: data.claimId as string,
+        title: data.title as string,
+        description: (data.description as string) || '',
+        priority: (data.priority as string) || 'medium',
+        status: 'pending',
+        dueDate: data.dueDate ? new Date(data.dueDate as string) : null,
+        assignedToId: (data.assignedToId as string) || null,
+        createdById: user.userId,
+      } as any,
+    });
+  },
   async getTasks(claimId: string) { return claimsRepository.getTasks(claimId); },
   async addTask(claimId: string, data: Record<string, unknown>, user: JwtPayload) {
     return claimsRepository.addTask(claimId, { ...data, createdById: user.userId });

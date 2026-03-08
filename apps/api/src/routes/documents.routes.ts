@@ -19,7 +19,7 @@ export const documentsRouter: Router = Router();
 documentsRouter.use(authenticate);
 
 // --- Document upload (must be before /:id) ---
-documentsRouter.post('/upload', upload.array('files', 20), documentsController.upload);
+documentsRouter.post('/upload', upload.any(), documentsController.upload);
 
 // --- Document merge (must be before /:id) ---
 documentsRouter.post('/merge', documentsController.mergeClaimDocs);

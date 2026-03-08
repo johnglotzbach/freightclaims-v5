@@ -33,6 +33,10 @@ customersRouter.post('/products', customersController.createProduct);
 customersRouter.put('/products/:id', customersController.updateProduct);
 customersRouter.delete('/products/:id', customersController.deleteProduct);
 
+// --- Lookups (must be before /:id) ---
+customersRouter.get('/lookup/countries', customersController.getCountries);
+customersRouter.get('/lookup/address-autocomplete', customersController.addressAutocomplete);
+
 customersRouter.get('/:id', customersController.getById);
 customersRouter.post('/', authorize(['admin']), validate(createCustomerSchema), customersController.create);
 customersRouter.put('/:id', authorize(['admin', 'manager']), validate(updateCustomerSchema), customersController.update);
@@ -57,8 +61,3 @@ customersRouter.post('/:id/notes', customersController.addNote);
 // --- Customer reports ---
 customersRouter.get('/:id/reports', customersController.getReports);
 
-// --- Countries lookup ---
-customersRouter.get('/lookup/countries', customersController.getCountries);
-
-// --- Address autocomplete ---
-customersRouter.get('/lookup/address-autocomplete', customersController.addressAutocomplete);

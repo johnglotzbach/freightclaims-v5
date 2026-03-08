@@ -37,6 +37,10 @@ claimsRouter.get('/mass-upload/history', claimsController.getMassUploadHistory);
 claimsRouter.get('/settings/all', authorize(['admin']), claimsController.getSettings);
 claimsRouter.put('/settings', authorize(['admin']), claimsController.updateSettings);
 
+// --- Global tasks (must be before /:id) ---
+claimsRouter.get('/tasks', claimsController.getAllTasks);
+claimsRouter.post('/tasks', claimsController.createGlobalTask);
+
 // --- Parameterized /:id routes ---
 
 claimsRouter.get('/:id', claimsController.getById);

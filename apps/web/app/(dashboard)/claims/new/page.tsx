@@ -127,12 +127,10 @@ export default function NewClaimPage() {
           setUploadProgress({ current: i + 1, total: documents.length });
           try {
             const formData = new FormData();
-            formData.append('file', documents[i]);
+            formData.append('files', documents[i]);
             formData.append('claimId', result.id);
             formData.append('documentName', documents[i].name);
-            await apiClient.post('/documents/upload', formData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            await apiClient.post('/documents/upload', formData);
           } catch {
             failed++;
           }
