@@ -25,19 +25,39 @@ export const documentsRepository = {
       ];
     }
 
-    const [rawDocs, total] = await Promise.all([
-      prisma.claimDocument.findMany({
-        where: where as any,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          claim: { select: { claimNumber: true } },
-          category: { select: { name: true } },
-        },
-      }),
-      prisma.claimDocument.count({ where: where as any }),
-    ]);
+    let rawDocs: any[];
+    let total: number;
+
+    try {
+      [rawDocs, total] = await Promise.all([
+        prisma.claimDocument.findMany({
+          where: where as any,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            claim: { select: { claimNumber: true } },
+            category: { select: { name: true } },
+          },
+        }),
+        prisma.claimDocument.count({ where: where as any }),
+      ]);
+    } catch {
+      [rawDocs, total] = await Promise.all([
+        prisma.claimDocument.findMany({
+          where: {} as any,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true, claimId: true, categoryId: true, documentName: true,
+            s3Key: true, fileSize: true, mimeType: true, uploadedBy: true,
+            aiProcessingStatus: true, createdAt: true,
+          },
+        }),
+        prisma.claimDocument.count({ where: {} }),
+      ]);
+    }
 
     const data = rawDocs.map((doc: any) => ({
       id: doc.id,

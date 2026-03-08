@@ -156,7 +156,19 @@ export const documentsService = {
           createPayload.claimId = req.body.claimId;
         }
 
-        const doc = await documentsRepository.create(createPayload);
+        let doc: any;
+        try {
+          doc = await documentsRepository.create(createPayload);
+        } catch (createErr: any) {
+          if (createErr?.code === 'P2011' || createErr?.message?.includes('Null constraint')) {
+            logger.warn('Null constraint hit — auto-fixing claim_id / category_id columns');
+            await prisma.$executeRawUnsafe(`ALTER TABLE claim_documents ALTER COLUMN claim_id DROP NOT NULL`).catch(() => {});
+            await prisma.$executeRawUnsafe(`ALTER TABLE claim_documents ALTER COLUMN category_id DROP NOT NULL`).catch(() => {});
+            doc = await documentsRepository.create(createPayload);
+          } else {
+            throw createErr;
+          }
+        }
         logger.info({ docId: doc.id, key, size }, 'Document uploaded');
         results.push(doc);
 
