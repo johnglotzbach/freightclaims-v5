@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getList, apiClient } from '@/lib/api-client';
+import { getList, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -61,7 +61,7 @@ export default function MassUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
-      return apiClient.post('/claims/mass-upload', formData);
+      return uploadFile('/claims/mass-upload', formData);
     },
     onSuccess: () => {
       toast.success('Upload completed. Processing...');

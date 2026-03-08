@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, post as apiPost, put, del, apiClient } from '@/lib/api-client';
+import { get, post as apiPost, put, del, uploadFile } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -356,8 +356,8 @@ function PostEditor({
     try {
       const formData = new FormData();
       formData.append('files', file);
-      const res = await apiClient.post('/documents/upload', formData, { headers: {} });
-      const uploaded = res.data?.data?.uploaded?.[0] || res.data?.uploaded?.[0];
+      const res = await uploadFile('/documents/upload', formData);
+      const uploaded = res?.data?.uploaded?.[0] || res?.uploaded?.[0];
       if (uploaded?.url || uploaded?.s3Key) {
         setCoverImage(uploaded.url || `/api/v1/documents/${uploaded.id}/download`);
         toast.success('Image uploaded');

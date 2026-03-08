@@ -125,4 +125,37 @@ export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<
   return response.data;
 }
 
+/**
+ * Direct file upload using the browser's native fetch — bypasses the Next.js
+ * proxy entirely and sends multipart/form-data straight to the API server.
+ * This avoids body corruption issues with Next.js rewrites/Route Handlers.
+ */
+const UPLOAD_BASE = process.env.NEXT_PUBLIC_UPLOAD_URL || process.env.NEXT_PUBLIC_API_DIRECT_URL || '';
+
+export async function uploadFile(path: string, formData: FormData): Promise<any> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const corpId = typeof window !== 'undefined' ? localStorage.getItem('fc-impersonate-corporate') : null;
+  if (corpId) headers['X-Corporate-Id'] = corpId;
+
+  const url = UPLOAD_BASE ? `${UPLOAD_BASE}${path}` : `/api/v1${path}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData,
+    credentials: 'include',
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err: any = new Error(data?.error || data?.message || `Upload failed (${res.status})`);
+    err.response = { data, status: res.status };
+    throw err;
+  }
+  return data;
+}
+
 export { client as apiClient };

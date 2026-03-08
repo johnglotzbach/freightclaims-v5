@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { get, put, post, del, getList, apiClient } from '@/lib/api-client';
+import { get, put, post, del, getList, apiClient, uploadFile } from '@/lib/api-client';
 import { cn, getStatusBadgeClass } from '@/lib/utils';
 import { formatCurrency, formatDate, formatDateTime, CLAIM_STATUSES, CARMACK_TIMELINES, daysBetween } from 'shared';
 import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
@@ -493,8 +493,7 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
       const formData = new FormData();
       Array.from(files).forEach(f => formData.append('files', f));
       formData.append('claimId', claimId);
-      const uploadRes = await apiClient.post('/documents/upload', formData);
-      const rd = uploadRes.data;
+      const rd = await uploadFile('/documents/upload', formData);
       const uploaded = rd?.data?.uploaded || rd?.uploaded || (Array.isArray(rd) ? rd : [rd]);
       toast.success(`${files.length} document(s) uploaded`);
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });

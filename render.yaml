@@ -112,6 +112,8 @@ services:
           property: hostport
       - key: NEXT_PUBLIC_API_URL
         value: /api/v1
+      - key: NEXT_PUBLIC_UPLOAD_URL
+        value: https://freightclaims-api.onrender.com/api/v1
 
   # --- AI Agent Service (Python/FastAPI) ---
   - type: web

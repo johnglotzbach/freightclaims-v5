@@ -2,8 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, getList, del, post } from '@/lib/api-client';
-import { apiClient } from '@/lib/api-client';
+import { get, getList, del, post, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
@@ -93,8 +92,7 @@ export default function DocumentsPage() {
       if (uploadClaimId) {
         formData.append('claimId', uploadClaimId);
       }
-      const res = await apiClient.post('/documents/upload', formData);
-      return res.data;
+      return await uploadFile('/documents/upload', formData);
     },
     onSuccess: (data) => {
       const uploaded = data?.data?.uploaded || data?.uploaded || (Array.isArray(data) ? data : [data]);

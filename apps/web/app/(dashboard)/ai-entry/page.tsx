@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getList, post, apiClient } from '@/lib/api-client';
+import { getList, post, apiClient, uploadFile } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -95,8 +95,8 @@ export default function AIEntryPage() {
     mutationFn: async (files: FileList) => {
       const formData = new FormData();
       Array.from(files).forEach(f => formData.append('files', f));
-      const uploadRes = await apiClient.post<any>('/documents/upload', formData);
-      const docs = Array.isArray(uploadRes.data) ? uploadRes.data : [uploadRes.data];
+      const uploadRes = await uploadFile('/documents/upload', formData);
+      const docs = Array.isArray(uploadRes) ? uploadRes : [uploadRes];
       for (const doc of docs) {
         if (doc?.id) {
           await apiClient.post(`/documents/${doc.id}/process`).catch(() => {});

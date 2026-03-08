@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { post, apiClient } from '@/lib/api-client';
+import { post, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { CLAIM_TYPES } from 'shared';
 import {
@@ -158,7 +158,7 @@ export default function NewClaimPage() {
             formData.append('claimId', result.id);
             formData.append('documentName', documents[i].file.name);
             formData.append('categoryId', documents[i].category);
-            await apiClient.post('/documents/upload', formData);
+            await uploadFile('/documents/upload', formData);
           } catch {
             failed++;
           }

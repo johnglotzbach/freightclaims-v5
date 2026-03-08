@@ -63,6 +63,9 @@ app.use(
       ? [env.NEXT_PUBLIC_APP_URL, 'https://freightclaims.com', 'https://freightclaims.ai']
       : true,
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Corporate-Id', 'X-Request-ID'],
+    exposedHeaders: ['Content-Disposition'],
+    maxAge: 86400,
   }),
 );
 
