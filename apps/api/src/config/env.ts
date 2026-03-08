@@ -51,7 +51,7 @@ const envSchema = z.object({
 
   // AI / LLM (Google Gemini)
   GEMINI_API_KEY: z.string().default(''),
-  AI_MODEL: z.string().default('gemini-2.0-flash'),
+  AI_MODEL: z.string().default('gemini-2.5-flash'),
 
   // ConvertAPI (document conversion — PDF, Word, images, etc.)
   CONVERT_API_SECRET: z.string().default(''),

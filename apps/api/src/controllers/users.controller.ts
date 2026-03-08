@@ -110,6 +110,11 @@ export const usersController = {
     res.json(role);
   }),
 
+  deleteRole: asyncHandler(async (req, res) => {
+    await usersService.deleteRole(req.params.id as string);
+    res.status(204).send();
+  }),
+
   getPermissions: asyncHandler(async (_req, res) => {
     const perms = await usersService.getPermissions();
     res.json(perms);

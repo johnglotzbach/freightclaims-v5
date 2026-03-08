@@ -59,7 +59,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-2.5-flash
       # --- SendGrid SMTP ---
       - key: SMTP_HOST
         value: smtp.sendgrid.net
@@ -124,7 +124,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-2.5-flash
 
   # --- Redis Cache ---
   - type: redis

@@ -230,6 +230,7 @@ export const usersService = {
   async getRoles() { return usersRepository.getRoles(); },
   async createRole(data: Record<string, unknown>) { return usersRepository.createRole(data); },
   async updateRole(id: string, data: Record<string, unknown>) { return usersRepository.updateRole(id, data); },
+  async deleteRole(id: string) { return usersRepository.deleteRole(id); },
   async getPermissions() { return usersRepository.getPermissions(); },
   async updatePermission(id: string, data: Record<string, unknown>) { return usersRepository.updatePermission(id, data); },
   async getEmailTemplates() { return usersRepository.getEmailTemplates(); },

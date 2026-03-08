@@ -65,9 +65,68 @@ export const usersRepository = {
   },
   async getPreferences(userId: string) { return prisma.userPreference.findUnique({ where: { userId } }); },
   async updatePreferences(userId: string, data: Record<string, unknown>) { return prisma.userPreference.upsert({ where: { userId }, update: data as any, create: { userId, ...data } as any }); },
-  async getRoles() { return prisma.role.findMany(); },
-  async createRole(data: Record<string, unknown>) { return prisma.role.create({ data: data as any }); },
-  async updateRole(id: string, data: Record<string, unknown>) { return prisma.role.update({ where: { id }, data: data as any }); },
+  async getRoles() {
+    const roles = await prisma.role.findMany({
+      include: {
+        permissions: { include: { permission: { select: { name: true } } } },
+        _count: { select: { users: true } },
+      },
+    });
+    return roles.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description || '',
+      isSystem: r.name === 'Super Admin' || r.name === 'Admin',
+      userCount: r._count?.users || 0,
+      permissions: r.permissions?.map((rp: any) => rp.permission?.name).filter(Boolean) || [],
+    }));
+  },
+  async createRole(data: Record<string, unknown>) {
+    const permissions = Array.isArray(data.permissions) ? data.permissions as string[] : [];
+    const role = await prisma.role.create({
+      data: {
+        name: data.name as string,
+        description: (data.description as string) || '',
+      },
+    });
+    if (permissions.length > 0) {
+      const permRecords = await prisma.permission.findMany({ where: { name: { in: permissions } } });
+      if (permRecords.length > 0) {
+        await prisma.rolePermission.createMany({
+          data: permRecords.map((p: any) => ({ roleId: role.id, permissionId: p.id })),
+          skipDuplicates: true,
+        });
+      }
+    }
+    return role;
+  },
+  async updateRole(id: string, data: Record<string, unknown>) {
+    const permissions = Array.isArray(data.permissions) ? data.permissions as string[] : undefined;
+    const updateData: Record<string, unknown> = {};
+    if (data.name) updateData.name = String(data.name);
+    if (data.description !== undefined) updateData.description = String(data.description);
+    const role = await prisma.role.update({
+      where: { id },
+      data: updateData as any,
+    });
+    if (permissions !== undefined) {
+      await prisma.rolePermission.deleteMany({ where: { roleId: id } });
+      if (permissions.length > 0) {
+        const permRecords = await prisma.permission.findMany({ where: { name: { in: permissions } } });
+        if (permRecords.length > 0) {
+          await prisma.rolePermission.createMany({
+            data: permRecords.map((p: any) => ({ roleId: id, permissionId: p.id })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    }
+    return role;
+  },
+  async deleteRole(id: string) {
+    await prisma.rolePermission.deleteMany({ where: { roleId: id } });
+    return prisma.role.delete({ where: { id } });
+  },
   async getPermissions() { return prisma.permission.findMany(); },
   async updatePermission(id: string, data: Record<string, unknown>) { return prisma.permission.update({ where: { id }, data: data as any }); },
   async getEmailTemplates() { return prisma.emailTemplate.findMany(); },

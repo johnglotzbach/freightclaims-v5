@@ -37,6 +37,7 @@ usersRouter.put('/me/preferences', usersController.updatePreferences);
 usersRouter.get('/roles/all', authorize(['admin']), usersController.getRoles);
 usersRouter.post('/roles', authorize(['admin']), usersController.createRole);
 usersRouter.put('/roles/:id', authorize(['admin']), usersController.updateRole);
+usersRouter.delete('/roles/:id', authorize(['admin']), usersController.deleteRole);
 
 // Permissions (must be before /:id)
 usersRouter.get('/permissions/all', authorize(['admin']), usersController.getPermissions);
