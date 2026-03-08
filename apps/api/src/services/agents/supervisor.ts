@@ -132,12 +132,13 @@ async function executeAgent(
     const duration = Date.now() - start;
     step.status = 'failed';
     step.completedAt = new Date();
+    const errMsg = err instanceof Error ? err.message : String(err);
     logger.error({ err, agentType, duration }, 'Agent execution failed');
 
     return {
       agentType,
       status: 'failed',
-      result: 'Agent encountered an internal error',
+      result: `Agent error: ${errMsg}`,
       durationMs: duration,
       summary: `${agent.name} failed after ${duration}ms`,
     };

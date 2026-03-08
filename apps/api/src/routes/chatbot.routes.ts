@@ -26,15 +26,27 @@ chatbotRouter.use(chatLimiter);
 const CHATBOT_SYSTEM = `You are FreightClaims AI Assistant, a helpful chatbot for FreightClaims.com — the leading freight claims management platform.
 
 You help with:
-1. Answering questions about freight claims process
+1. Answering questions about freight claims process and the FreightClaims.com PLATFORM
 2. Explaining Carmack Amendment protections
-3. Guiding users through claim filing
-4. Providing status updates (when authenticated)
-5. Explaining document requirements for different claim types
-6. General freight industry questions
+3. Guiding users through platform features and navigation
+4. Explaining document requirements for different claim types
+5. General freight industry questions
+
+CRITICAL: Always answer the user's ACTUAL question. If they ask how to delete something, tell them how to delete. If they ask how to edit, tell them how to edit. Do NOT answer a different question.
+
+PLATFORM NAVIGATION:
+- Dashboard: /claims — overview of metrics and compliance alerts
+- Claims List: /claims/list — view, search, filter all claims. Create with "+ New Claim"
+- Delete a claim: Open the claim → click the three-dot/actions menu → select "Delete"
+- AI Entry: /ai-entry — create claims from documents or emails using AI
+- Companies: /companies — manage customers, carriers, suppliers
+- Shipments: /shipments — track shipments
+- Documents: /documents — view and upload documents
+- Reports: /reports/export — generate and export reports
+- Settings: /settings — profile, notifications, email configuration, security
+- User Management: /settings/users — manage users (admin only)
 
 Be helpful, concise, and professional. If you don't know something, say so.
-When discussing claims process, reference the Carmack Amendment (49 USC 14706) where relevant.
 
 Document requirements by claim type:
 - Damage: BOL, POD with damage noted, photos, product invoice, repair estimate
@@ -42,7 +54,7 @@ Document requirements by claim type:
 - Loss: BOL, product invoice, proof of non-delivery
 - Concealed damage: BOL, POD, photos, product invoice, inspection report (within 15 days)
 
-Key deadlines:
+Key deadlines (Carmack Amendment, 49 USC 14706):
 - File claim within 9 months of delivery
 - Carrier must acknowledge within 30 days
 - Carrier must provide disposition within 120 days`;
@@ -57,18 +69,29 @@ const FAQ: Record<string, string> = {
 
 function getFallbackResponse(msg: string): string {
   const lower = msg.toLowerCase().trim();
+
+  // Exact FAQ matches first
   for (const [key, val] of Object.entries(FAQ)) {
-    if (lower.includes(key)) return val;
+    if (lower === key || lower === key + '?') return val;
   }
-  if (lower.includes('file') || lower.includes('claim') || lower.includes('submit')) return FAQ['how do i file a claim'];
+
+  // Platform action questions — check these BEFORE generic keyword matching
+  if (lower.includes('delete') && lower.includes('claim')) return 'To delete a claim, open the claim detail page, click the three-dot menu or actions dropdown, and select "Delete Claim." Note: only admins and managers can delete claims. Deleted claims cannot be recovered.';
+  if (lower.includes('edit') && lower.includes('claim')) return 'To edit a claim, go to the Claims List (/claims/list), click on the claim you want to modify, then click the "Edit" button or pencil icon to update its details.';
+  if (lower.includes('export')) return 'To export claims data, go to Reports (/reports/export). You can filter by date range, status, and claim type, then export to CSV or PDF.';
+  if (lower.includes('upload') && lower.includes('document')) return 'To upload documents, open the claim, go to the Documents tab, and click "Upload." You can also use Mass Upload (/mass-upload) to upload documents for multiple claims at once.';
+  if (lower.includes('user') && (lower.includes('add') || lower.includes('invite') || lower.includes('create'))) return 'To add a user, go to User Management (/settings/users) and click "Invite User." Enter their email, name, and role. They\'ll receive an invitation email.';
+
+  // Topic-specific matches
+  if (lower.includes('file') && (lower.includes('claim') || lower.includes('submit'))) return FAQ['how do i file a claim'];
   if (lower.includes('document') || lower.includes('photo') || lower.includes('bol') || lower.includes('pod')) return FAQ['document requirements'];
   if (lower.includes('carmack') || lower.includes('law') || lower.includes('deadline') || lower.includes('liability')) return FAQ['carmack amendment'];
   if (lower.includes('damage')) return 'For damage claims, you\'ll need: Bill of Lading, Proof of Delivery with damage noted, damage photos, product invoice, and a repair estimate if applicable. File within 9 months of delivery. Go to "+ New Claim" to get started.';
   if (lower.includes('shortage') || lower.includes('short')) return 'For shortage claims, you\'ll need: Bill of Lading, Proof of Delivery with shortage noted, product invoice, and packing list. Note the shortage on the delivery receipt at the time of delivery.';
   if (lower.includes('loss') || lower.includes('lost') || lower.includes('missing')) return 'For loss claims, you\'ll need: Bill of Lading, product invoice, and proof of non-delivery. The carrier has the burden to prove delivery was made.';
   if (lower.includes('status') || lower.includes('update')) return 'You can check your claim status on the Claims List page. Claims go through these stages: Draft → Pending → In Review → Approved/Denied → Settlement → Closed. Click on any claim to see its full history and timeline.';
-  if (lower.includes('help') || lower.includes('support')) return 'I can help with:\n• Filing claims\n• Document requirements\n• Carmack Amendment questions\n• Claim status inquiries\n• General freight claims guidance\n\nFor account-specific issues, visit Settings or contact support@freightclaims.com.';
-  return 'I can help you with freight claims questions! Try asking about:\n• How to file a claim\n• Document requirements\n• Carmack Amendment protections\n• Claim deadlines\n• Damage, shortage, or loss claims\n\nOr click "+ New Claim" to get started filing a claim right away.';
+  if (lower.includes('help') || lower.includes('support')) return 'I can help with:\n• Filing claims\n• Document requirements\n• Carmack Amendment questions\n• Platform navigation\n• General freight claims guidance\n\nFor account-specific issues, visit Settings or contact support@freightclaims.com.';
+  return 'I can help you with freight claims questions! Try asking about:\n• How to file a claim\n• How to delete or edit a claim\n• Document requirements\n• Carmack Amendment protections\n• Claim deadlines\n• Platform navigation\n\nOr click "+ New Claim" to get started filing a claim right away.';
 }
 
 chatbotRouter.post('/message', async (req, res, next) => {
@@ -114,8 +137,9 @@ chatbotRouter.post('/message', async (req, res, next) => {
           systemInstruction: CHATBOT_SYSTEM,
           config: { temperature: 0.7, maxOutputTokens: 1024 },
         });
-      } catch (geminiErr) {
-        logger.error({ err: geminiErr, keyLen: env.GEMINI_API_KEY?.length }, 'Gemini chat call failed — using fallback');
+      } catch (geminiErr: any) {
+        const errDetail = geminiErr?.message || String(geminiErr);
+        logger.error({ err: geminiErr, errDetail, keyLen: env.GEMINI_API_KEY?.length }, 'Gemini chat call failed — using fallback');
         response = getFallbackResponse(message.trim());
       }
     } else {

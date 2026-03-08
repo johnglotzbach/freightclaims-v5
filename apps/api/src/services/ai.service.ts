@@ -69,8 +69,10 @@ export const aiService = {
     );
 
     if (result.status === 'failed') {
+      const detail = typeof result.result === 'string' ? result.result : '';
+      logger.error({ detail, userId: user.userId }, 'AI copilot chat failed');
       return {
-        response: 'I encountered an issue processing your request. This may be due to AI service configuration. Please check that GEMINI_API_KEY is set correctly, or try again in a moment.',
+        response: `AI error: ${detail || 'Unknown failure. Check server logs for details.'}`,
         conversationId: input.conversationId,
       };
     }

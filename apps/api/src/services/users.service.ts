@@ -222,7 +222,9 @@ export const usersService = {
     return usersRepository.update(userId, { passwordHash });
   },
 
-  async list(query: Record<string, unknown>) { return usersRepository.findMany(query); },
+  async list(query: Record<string, unknown>, user?: { corporateId?: string | null; isSuperAdmin?: boolean }) {
+    return usersRepository.findMany(query, user?.corporateId, user?.isSuperAdmin);
+  },
   async getPreferences(userId: string) { return usersRepository.getPreferences(userId); },
   async updatePreferences(userId: string, data: Record<string, unknown>) { return usersRepository.updatePreferences(userId, data); },
   async getRoles() { return usersRepository.getRoles(); },
@@ -236,4 +238,23 @@ export const usersService = {
   async getLetterTemplates() { return usersRepository.getLetterTemplates(); },
   async createLetterTemplate(data: Record<string, unknown>) { return usersRepository.createLetterTemplate(data); },
   async updateLetterTemplate(id: string, data: Record<string, unknown>) { return usersRepository.updateLetterTemplate(id, data); },
+
+  async adminResetPassword(userId: string) {
+    const user = await usersRepository.findById(userId);
+    if (!user) throw new NotFoundError(`User ${userId} not found`);
+    const tempPassword = `Reset${Date.now().toString(36).slice(-6)}!`;
+    const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+    await usersRepository.update(userId, { passwordHash });
+    logger.info({ userId, email: user.email }, 'Admin reset password for user');
+    try {
+      await smtpService.sendEmail({
+        to: user.email,
+        subject: 'Your password has been reset - FreightClaims',
+        html: `<p>Your password has been reset by an administrator.</p><p>Temporary password: <strong>${tempPassword}</strong></p><p>Please change your password after logging in.</p>`,
+      });
+    } catch {
+      logger.warn({ userId }, 'Failed to send reset email, password was still changed');
+    }
+    return { message: 'Password reset successfully' };
+  },
 };

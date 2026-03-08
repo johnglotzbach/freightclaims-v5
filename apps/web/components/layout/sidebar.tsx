@@ -48,13 +48,16 @@ const aiSubItems = [
   { label: 'Root Cause Analysis', href: '/ai/rootcause' },
 ];
 
+const adminItems = [
+  { label: 'User Management', href: '/settings/users', icon: Users },
+  { label: 'Roles & Permissions', href: '/settings/roles', icon: Shield },
+];
+
 const settingsSubItems = [
-  { label: 'General', href: '/settings', adminOnly: false },
-  { label: 'Users', href: '/settings/users', adminOnly: true },
-  { label: 'Roles', href: '/settings/roles', adminOnly: true },
-  { label: 'Templates', href: '/settings/templates', adminOnly: false },
-  { label: 'API & Integrations', href: '/settings/api-setup', adminOnly: false },
-  { label: 'Profile', href: '/settings/profile', adminOnly: false },
+  { label: 'General', href: '/settings' },
+  { label: 'Templates', href: '/settings/templates' },
+  { label: 'API & Integrations', href: '/settings/api-setup' },
+  { label: 'Profile', href: '/settings/profile' },
 ];
 
 const bottomItems = [
@@ -162,6 +165,59 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Admin Panel</span>
           </div>
           <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Viewing all account data</p>
+        </div>
+      )}
+
+      {/* Admin Top-Level Items */}
+      {isAdmin && showFull && (
+        <div className="px-2 pt-3 space-y-0.5">
+          <div className="px-3 pb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Administration</p>
+          </div>
+          {adminItems.map((item) => {
+            const active = isActive(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onMobileClose}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
+                  'active:scale-[0.98] touch-manipulation',
+                  active
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
+                )}
+              >
+                <Icon className={cn('w-5 h-5 flex-shrink-0', active && 'text-primary-500')} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+      {isAdmin && !showFull && (
+        <div className="px-2 pt-2 space-y-0.5">
+          {adminItems.map((item) => {
+            const active = isActive(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex items-center justify-center px-3 py-2.5 rounded-xl transition-all',
+                  active
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50',
+                )}
+                title={item.label}
+              >
+                <Icon className={cn('w-5 h-5', active && 'text-primary-500')} />
+              </Link>
+            );
+          })}
         </div>
       )}
 
@@ -273,7 +329,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               {/* Settings Sub-Nav */}
               {isSettings && showFull && settingsExpanded && (
                 <div className="ml-8 mt-0.5 space-y-0.5">
-                  {settingsSubItems.filter(sub => !sub.adminOnly || isAdmin).map(sub => (
+                  {settingsSubItems.map(sub => (
                     <Link
                       key={sub.href}
                       href={sub.href}

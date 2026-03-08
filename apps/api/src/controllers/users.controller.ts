@@ -70,7 +70,8 @@ export const usersController = {
   }),
 
   list: asyncHandler(async (req, res) => {
-    const result = await usersService.list(req.query);
+    const user = getUser(req);
+    const result = await usersService.list(req.query, user);
     res.json(result);
   }),
 
@@ -147,5 +148,10 @@ export const usersController = {
   updateLetterTemplate: asyncHandler(async (req, res) => {
     const template = await usersService.updateLetterTemplate(req.params.id as string, req.body);
     res.json(template);
+  }),
+
+  adminResetPassword: asyncHandler(async (req, res) => {
+    await usersService.adminResetPassword(req.params.id as string);
+    res.json({ message: 'Password has been reset. A temporary password has been generated.' });
   }),
 };

@@ -100,7 +100,7 @@ function ProfileSection({ user }: { user: any }) {
 
   const saveMutation = useMutation({
     mutationFn: (data: { firstName: string; lastName: string; email: string; phone?: string }) =>
-      put('/users/profile', data),
+      put('/users/me', data),
     onSuccess: () => {
       loadUser();
       toast.success('Profile updated');
@@ -416,7 +416,7 @@ function SecuritySection() {
 
   const passwordMutation = useMutation({
     mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      put('/users/password', data),
+      put('/users/me/password', data),
     onSuccess: () => {
       toast.success('Password updated');
       setCurrentPassword('');

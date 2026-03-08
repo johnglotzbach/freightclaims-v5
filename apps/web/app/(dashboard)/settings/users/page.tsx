@@ -147,7 +147,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><Users className="w-6 h-6 text-primary-500" /> User Management</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{users.length} users &middot; {users.filter(u => u.isActive).length} active{currentUser?.isSuperAdmin && ' &middot; Viewing all accounts'}</p>
+          <p className="text-sm text-slate-500 mt-0.5">{users.length} users · {users.filter(u => u.isActive).length} active{currentUser?.isSuperAdmin && ' · Viewing all accounts'}</p>
         </div>
         <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
           <UserPlus className="w-4 h-4" /> Invite User

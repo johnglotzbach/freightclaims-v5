@@ -12,8 +12,47 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { aiController } from '../controllers/ai.controller';
+import { env } from '../config/env';
+import { generateContent } from '../services/agents/gemini-client';
+import { logger } from '../utils/logger';
 
 export const aiRouter: Router = Router();
+
+// Diagnostic endpoint — test Gemini connectivity without auth
+aiRouter.get('/health', async (_req, res) => {
+  const keyPresent = !!(env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim().length > 0);
+  const keyPrefix = keyPresent ? env.GEMINI_API_KEY.slice(0, 8) + '...' : '(empty)';
+
+  if (!keyPresent) {
+    return res.json({
+      status: 'misconfigured',
+      geminiKey: keyPrefix,
+      model: env.AI_MODEL,
+      error: 'GEMINI_API_KEY is empty or not set',
+    });
+  }
+
+  try {
+    const result = await generateContent('Reply with exactly: OK', {
+      config: { maxOutputTokens: 10, temperature: 0 },
+    });
+    res.json({
+      status: 'ok',
+      geminiKey: keyPrefix,
+      model: env.AI_MODEL,
+      testResponse: result.text.trim(),
+      tokenUsage: result.tokenUsage,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'AI health check failed');
+    res.json({
+      status: 'error',
+      geminiKey: keyPrefix,
+      model: env.AI_MODEL,
+      error: err.message || String(err),
+    });
+  }
+});
 
 aiRouter.use(authenticate);
 
