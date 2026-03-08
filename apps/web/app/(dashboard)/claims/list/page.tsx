@@ -44,15 +44,6 @@ function buildSidebarSections(stats: DashboardStats | undefined): ClaimSidebarSe
         { key: 'all', label: 'All Claims', count: all },
       ],
     },
-    {
-      label: 'ABC Logistics',
-      categories: [
-        { key: 'not_filed', label: 'Not Filed', count: notFiled },
-        { key: 'filed', label: 'Filed', count: filed },
-        { key: 'closed', label: 'Closed', count: closed },
-        { key: 'all', label: 'All Claims', count: all },
-      ],
-    },
   ];
 }
 

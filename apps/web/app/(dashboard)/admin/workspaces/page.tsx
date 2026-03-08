@@ -43,7 +43,23 @@ export default function AdminWorkspacesPage() {
   const router = useRouter();
   const [search, setSearch] = useState('');
 
-  if (!user?.isSuperAdmin) {
+  const isSA = !!user?.isSuperAdmin;
+
+  const { data: rawWorkspaces, isLoading } = useQuery({
+    queryKey: ['admin-workspaces'],
+    queryFn: () => get<unknown>('/customers?type=corporate'),
+    enabled: isSA,
+  });
+
+  const workspaces = extractItems(rawWorkspaces);
+  const filtered = workspaces.filter(w =>
+    !search || w.name.toLowerCase().includes(search.toLowerCase()) || w.code?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalUsers = workspaces.reduce((sum, w) => sum + (w._count?.corporateUsers || w.corporateUsers?.length || 0), 0);
+  const activeWorkspaces = workspaces.filter(w => w.isActive).length;
+
+  if (!isSA) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
@@ -54,19 +70,6 @@ export default function AdminWorkspacesPage() {
       </div>
     );
   }
-
-  const { data: rawWorkspaces, isLoading } = useQuery({
-    queryKey: ['admin-workspaces'],
-    queryFn: () => get<unknown>('/customers?type=corporate'),
-  });
-
-  const workspaces = extractItems(rawWorkspaces);
-  const filtered = workspaces.filter(w =>
-    !search || w.name.toLowerCase().includes(search.toLowerCase()) || w.code?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const totalUsers = workspaces.reduce((sum, w) => sum + (w._count?.corporateUsers || w.corporateUsers?.length || 0), 0);
-  const activeWorkspaces = workspaces.filter(w => w.isActive).length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">

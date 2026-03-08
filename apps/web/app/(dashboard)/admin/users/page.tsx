@@ -48,26 +48,35 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
-  if (!user?.isSuperAdmin) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <Crown className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Super Admin Access Required</h2>
-          <p className="text-slate-500 mt-2">This page is only accessible to platform administrators.</p>
-        </div>
-      </div>
-    );
-  }
+  const isSA = !!user?.isSuperAdmin;
 
   const { data: rawUsers, isLoading } = useQuery({
     queryKey: ['admin-all-users'],
     queryFn: () => get<unknown>('/users'),
+    enabled: isSA,
   });
 
   const { data: rawWorkspaces } = useQuery({
     queryKey: ['admin-workspaces-list'],
     queryFn: () => get<unknown>('/customers?type=corporate'),
+    enabled: isSA,
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) => put(`/users/${userId}/reset-password`, {}),
+    onSuccess: () => { toast.success('Password reset email sent'); setMenuOpen(null); },
+    onError: () => toast.error('Failed to reset password'),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+      put(`/users/${userId}`, { isActive }),
+    onSuccess: () => {
+      toast.success('User updated');
+      queryClient.invalidateQueries({ queryKey: ['admin-all-users'] });
+      setMenuOpen(null);
+    },
+    onError: () => toast.error('Failed to update user'),
   });
 
   const allUsers: User[] = extractItems(rawUsers);
@@ -92,22 +101,17 @@ export default function AdminUsersPage() {
     });
   }, [allUsers, search, wsFilter, statusFilter]);
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: (userId: string) => put(`/users/${userId}/reset-password`, {}),
-    onSuccess: () => { toast.success('Password reset email sent'); setMenuOpen(null); },
-    onError: () => toast.error('Failed to reset password'),
-  });
-
-  const toggleActiveMutation = useMutation({
-    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
-      put(`/users/${userId}`, { isActive }),
-    onSuccess: () => {
-      toast.success('User updated');
-      queryClient.invalidateQueries({ queryKey: ['admin-all-users'] });
-      setMenuOpen(null);
-    },
-    onError: () => toast.error('Failed to update user'),
-  });
+  if (!isSA) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Crown className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Super Admin Access Required</h2>
+          <p className="text-slate-500 mt-2">This page is only accessible to platform administrators.</p>
+        </div>
+      </div>
+    );
+  }
 
   const activeCount = allUsers.filter(u => u.isActive).length;
   const superAdminCount = allUsers.filter(u => u.isSuperAdmin).length;

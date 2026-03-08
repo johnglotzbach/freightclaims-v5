@@ -76,21 +76,12 @@ export default function AdminUserDetailPage() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 
-  if (!currentUser?.isSuperAdmin) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <Crown className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Super Admin Access Required</h2>
-        </div>
-      </div>
-    );
-  }
+  const isSA = !!currentUser?.isSuperAdmin;
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['admin-user', id],
     queryFn: () => get<UserDetail>(`/users/${id}`),
-    enabled: !!id,
+    enabled: isSA && !!id,
   });
 
   const targetUser = userData as UserDetail | undefined;
@@ -98,11 +89,8 @@ export default function AdminUserDetailPage() {
   const { data: rawWsUsers } = useQuery({
     queryKey: ['admin-ws-users', targetUser?.corporateId],
     queryFn: () => get<unknown>('/users'),
-    enabled: !!targetUser?.corporateId,
+    enabled: isSA && !!targetUser?.corporateId,
   });
-
-  const wsUsers: WorkspaceUser[] = extractItems<WorkspaceUser>(rawWsUsers)
-    .filter((u) => (u as any).corporateId === targetUser?.corporateId && u.id !== targetUser?.id);
 
   const resetPasswordMutation = useMutation({
     mutationFn: () => put(`/users/${id}/reset-password`, {}),
@@ -118,6 +106,20 @@ export default function AdminUserDetailPage() {
     },
     onError: () => toast.error('Failed to update'),
   });
+
+  const wsUsers: WorkspaceUser[] = extractItems<WorkspaceUser>(rawWsUsers)
+    .filter((u) => (u as any).corporateId === targetUser?.corporateId && u.id !== targetUser?.id);
+
+  if (!isSA) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Crown className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Super Admin Access Required</h2>
+        </div>
+      </div>
+    );
+  }
 
   if (loadingUser) {
     return (

@@ -181,29 +181,11 @@ export default function ReportsPage() {
   );
 }
 
-const DEFAULT_MONTHLY = [
-  { month: 'Sep', filed: 18, settled: 12, denied: 3 },
-  { month: 'Oct', filed: 22, settled: 15, denied: 4 },
-  { month: 'Nov', filed: 15, settled: 11, denied: 2 },
-  { month: 'Dec', filed: 20, settled: 14, denied: 5 },
-  { month: 'Jan', filed: 25, settled: 18, denied: 3 },
-  { month: 'Feb', filed: 19, settled: 13, denied: 2 },
-];
+const EMPTY_MONTHLY: { month: string; filed: number; settled: number; denied: number }[] = [];
 
-const DEFAULT_STATUS = [
-  { label: 'Not Filed', count: 4, total: 23, color: 'bg-slate-400' },
-  { label: 'Filed', count: 6, total: 23, color: 'bg-blue-400' },
-  { label: 'In Progress', count: 5, total: 23, color: 'bg-amber-400' },
-  { label: 'Settled', count: 5, total: 23, color: 'bg-emerald-400' },
-  { label: 'Closed', count: 3, total: 23, color: 'bg-slate-600' },
-];
+const EMPTY_STATUS: { label: string; count: number; total: number; color: string }[] = [];
 
-const DEFAULT_TYPE = [
-  { label: 'Loss', count: 8, total: 23, color: 'bg-red-400' },
-  { label: 'Damage', count: 10, total: 23, color: 'bg-orange-400' },
-  { label: 'Shortage', count: 3, total: 23, color: 'bg-amber-400' },
-  { label: 'Concealed Damage', count: 2, total: 23, color: 'bg-violet-400' },
-];
+const EMPTY_TYPE: { label: string; count: number; total: number; color: string }[] = [];
 
 function OverviewTab({ dashboard }: { dashboard?: Record<string, unknown> }) {
   const monthlyRaw = (dashboard?.monthlyData ?? dashboard?.monthly) as Array<Record<string, unknown>> | undefined;
@@ -214,7 +196,7 @@ function OverviewTab({ dashboard }: { dashboard?: Record<string, unknown> }) {
         settled: Number(d.settled ?? 0),
         denied: Number(d.denied ?? 0),
       }))
-    : DEFAULT_MONTHLY;
+    : EMPTY_MONTHLY;
 
   const STATUS_COLORS = ['bg-slate-400', 'bg-blue-400', 'bg-amber-400', 'bg-emerald-400', 'bg-slate-600'];
   const TYPE_COLORS = ['bg-red-400', 'bg-orange-400', 'bg-amber-400', 'bg-violet-400'];
@@ -227,7 +209,7 @@ function OverviewTab({ dashboard }: { dashboard?: Record<string, unknown> }) {
         total: statusRaw.reduce((t, x) => t + Number(x.count ?? 0), 0) || 1,
         color: STATUS_COLORS[i % STATUS_COLORS.length],
       }))
-    : DEFAULT_STATUS;
+    : EMPTY_STATUS;
   const statusTotal = statusData.reduce((t, x) => t + (x.count ?? 0), 0) || 1;
 
   const typeRaw = (dashboard?.claimsByType ?? dashboard?.byType) as Array<{ label?: string; name?: string; count?: number }> | undefined;
@@ -238,7 +220,7 @@ function OverviewTab({ dashboard }: { dashboard?: Record<string, unknown> }) {
         total: typeRaw.reduce((s, x) => s + Number(x.count ?? 0), 0) || 1,
         color: TYPE_COLORS[i % TYPE_COLORS.length],
       }))
-    : DEFAULT_TYPE;
+    : EMPTY_TYPE;
   const typeTotal = typeData.reduce((t, x) => t + (x.count ?? 0), 0) || 1;
 
   const max = Math.max(1, ...monthlyData.map(d => d.filed));
@@ -248,61 +230,75 @@ function OverviewTab({ dashboard }: { dashboard?: Record<string, unknown> }) {
       {/* Monthly Trend Chart */}
       <div className="card p-6">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">Claims by Month</h3>
-        <div className="flex items-end gap-3 h-48">
-          {monthlyData.map(d => (
-            <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full flex flex-col gap-0.5" style={{ height: '160px' }}>
-                <div className="flex-1 flex flex-col justify-end gap-0.5">
-                  <div className="bg-red-400 rounded-t" style={{ height: `${(d.denied / max) * 100}%` }} />
-                  <div className="bg-emerald-400" style={{ height: `${(d.settled / max) * 100}%` }} />
-                  <div className="bg-primary-400 rounded-b" style={{ height: `${((d.filed - d.settled - d.denied) / max) * 100}%` }} />
+        {monthlyData.length > 0 ? (
+          <>
+            <div className="flex items-end gap-3 h-48">
+              {monthlyData.map(d => (
+                <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full flex flex-col gap-0.5" style={{ height: '160px' }}>
+                    <div className="flex-1 flex flex-col justify-end gap-0.5">
+                      <div className="bg-red-400 rounded-t" style={{ height: `${(d.denied / max) * 100}%` }} />
+                      <div className="bg-emerald-400" style={{ height: `${(d.settled / max) * 100}%` }} />
+                      <div className="bg-primary-400 rounded-b" style={{ height: `${((d.filed - d.settled - d.denied) / max) * 100}%` }} />
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-500">{d.month}</span>
                 </div>
-              </div>
-              <span className="text-xs text-slate-500">{d.month}</span>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-primary-400" /> Open</span>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-emerald-400" /> Settled</span>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-red-400" /> Denied</span>
-        </div>
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+              <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-primary-400" /> Open</span>
+              <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-emerald-400" /> Settled</span>
+              <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded bg-red-400" /> Denied</span>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-48 text-sm text-slate-400">No claim data available yet. File claims to see monthly trends.</div>
+        )}
       </div>
 
-      {/* Claims by Status */}
+      {/* Claims by Status & Type */}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Claims by Status</h3>
-          <div className="space-y-3">
-            {statusData.map(item => (
-              <div key={item.label}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
-                  <span className="font-medium text-slate-900 dark:text-white">{item.count}</span>
+          {statusData.length > 0 ? (
+            <div className="space-y-3">
+              {statusData.map(item => (
+                <div key={item.label}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
+                    <span className="font-medium text-slate-900 dark:text-white">{item.count}</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full', item.color)} style={{ width: `${((item.count ?? 0) / statusTotal) * 100}%` }} />
+                  </div>
                 </div>
-                <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full', item.color)} style={{ width: `${((item.count ?? 0) / statusTotal) * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 py-4 text-center">No status data available</p>
+          )}
         </div>
 
         <div className="card p-6">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Claims by Type</h3>
-          <div className="space-y-3">
-            {typeData.map(item => (
-              <div key={item.label}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
-                  <span className="font-medium text-slate-900 dark:text-white">{item.count}</span>
+          {typeData.length > 0 ? (
+            <div className="space-y-3">
+              {typeData.map(item => (
+                <div key={item.label}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
+                    <span className="font-medium text-slate-900 dark:text-white">{item.count}</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full', item.color)} style={{ width: `${((item.count ?? 0) / typeTotal) * 100}%` }} />
+                  </div>
                 </div>
-                <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full', item.color)} style={{ width: `${((item.count ?? 0) / typeTotal) * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 py-4 text-center">No type data available</p>
+          )}
         </div>
       </div>
     </div>
@@ -429,20 +425,20 @@ function CarriersTab({ data }: { data: Array<Record<string, unknown>> }) {
 function CollectionTab({ dashboard, topCarriers }: { dashboard?: Record<string, unknown>; topCarriers: Array<Record<string, unknown>> }) {
   const coll = dashboard?.collection ?? dashboard;
   const totalCollected = coll && typeof coll === 'object' && 'totalCollected' in coll
-    ? (coll as Record<string, unknown>).totalCollected
-    : coll && typeof coll === 'object' && 'collected' in coll
-      ? (coll as Record<string, unknown>).collected
-      : '$193,900';
+      ? (coll as Record<string, unknown>).totalCollected
+      : coll && typeof coll === 'object' && 'collected' in coll
+        ? (coll as Record<string, unknown>).collected
+        : null;
   const pendingCollection = coll && typeof coll === 'object' && 'pendingCollection' in coll
-    ? (coll as Record<string, unknown>).pendingCollection
-    : coll && typeof coll === 'object' && 'pending' in coll
-      ? (coll as Record<string, unknown>).pending
-      : '$68,400';
+      ? (coll as Record<string, unknown>).pendingCollection
+      : coll && typeof coll === 'object' && 'pending' in coll
+        ? (coll as Record<string, unknown>).pending
+        : null;
   const writtenOff = coll && typeof coll === 'object' && 'writtenOff' in coll
-    ? (coll as Record<string, unknown>).writtenOff
-    : coll && typeof coll === 'object' && 'writeOff' in coll
-      ? (coll as Record<string, unknown>).writeOff
-      : '$22,200';
+      ? (coll as Record<string, unknown>).writtenOff
+      : coll && typeof coll === 'object' && 'writeOff' in coll
+        ? (coll as Record<string, unknown>).writeOff
+        : null;
 
   const formatAmount = (v: unknown) => {
     if (v == null) return '—';
