@@ -24,13 +24,34 @@ export const documentsController = {
   getById: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.getById(req.params.id as string, user)); }),
   upload: async (req: Request, res: Response) => {
     try {
+      const filesArr = (req as any).files as any[] | undefined;
+      const singleFile = (req as any).file as any | undefined;
+      const contentType = req.headers['content-type'] || '(none)';
+      const fileCount = filesArr?.length || (singleFile ? 1 : 0);
+
+      logger.info({
+        contentType: contentType.substring(0, 80),
+        fileCount,
+        bodyKeys: req.body ? Object.keys(req.body) : [],
+        hasAuth: !!req.headers.authorization,
+      }, 'Upload request received');
+
+      if (fileCount === 0) {
+        logger.warn({ contentType, method: req.method }, 'Upload: multer found 0 files');
+        res.status(400).json({
+          success: false,
+          error: 'No files received. Make sure the form sends files as multipart/form-data.',
+        });
+        return;
+      }
+
       const result = await documentsService.upload(req);
       const uploaded = Array.isArray(result) ? result : [result];
       res.status(201).json({ success: true, data: { uploaded }, uploaded });
     } catch (err: any) {
       const msg = err?.message || 'Upload failed';
       logger.error({ err, path: req.path }, `Upload error: ${msg}`);
-      const isClientError = msg.includes('No files') || msg.includes('not allowed') || msg.includes('Authentication');
+      const isClientError = msg.includes('No files') || msg.includes('not allowed') || msg.includes('No user');
       res.status(isClientError ? 400 : 500).json({ success: false, error: msg });
     }
   },

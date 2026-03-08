@@ -20,8 +20,8 @@ client.interceptors.request.use((config) => {
       config.headers['X-Corporate-Id'] = corpId;
     }
   }
-  if (config.data instanceof FormData) {
-    delete config.headers['Content-Type'];
+  if (typeof window !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type');
     config.timeout = 120_000;
   }
   return config;

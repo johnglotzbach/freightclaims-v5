@@ -26,6 +26,12 @@ export const customersRepository = {
     let customers: any[];
     let total: number;
 
+    const coreSelect = {
+      id: true, name: true, code: true, email: true, phone: true, website: true,
+      industry: true, corporateId: true, parentId: true, isCorporate: true, isActive: true,
+      createdAt: true, updatedAt: true, deletedAt: true,
+    };
+
     try {
       [customers, total] = await Promise.all([
         prisma.customer.findMany({
@@ -57,6 +63,15 @@ export const customersRepository = {
           skip: (page - 1) * limit,
           take: limit,
           orderBy: { name: 'asc' },
+          select: isCorporateQuery ? {
+            ...coreSelect,
+            _count: { select: { corporateUsers: true, claims: true } },
+            corporateUsers: {
+              where: { isSuperAdmin: false },
+              select: { id: true, firstName: true, lastName: true, email: true, isSuperAdmin: true, isActive: true, lastLoginAt: true, role: { select: { name: true } } },
+              orderBy: { createdAt: 'asc' as const },
+            },
+          } : coreSelect,
         }),
         prisma.customer.count({ where: fallbackWhere as any }),
       ]);

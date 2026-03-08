@@ -35,6 +35,43 @@ async function verifyDocumentAccess(id: string, user: JwtPayload) {
   return doc;
 }
 
+async function quickRelevanceCheck(file: Express.Multer.File): Promise<{ relevant: boolean; reason?: string }> {
+  if (!env.GEMINI_API_KEY?.trim()) return { relevant: true };
+
+  try {
+    const isImage = file.mimetype.startsWith('image/');
+    const isPdf = file.mimetype === 'application/pdf' || file.mimetype.includes('pdf');
+
+    if (isImage) {
+      const result = await generateMultimodalJSON<{ relevant: boolean; reason: string }>(
+        [
+          { inline_data: { mime_type: file.mimetype, data: file.buffer.toString('base64') } },
+          { text: `Is this image related to freight, shipping, logistics, transportation, cargo, claims, damage documentation, invoices, bills of lading, proof of delivery, or any business document that could be part of a freight claim? Answer JSON: {"relevant": true/false, "reason": "brief explanation"}. Be lenient — any business document, receipt, invoice, photo of goods/damage, or shipping paperwork counts as relevant.` },
+        ],
+        { systemInstruction: 'You are a freight document relevance checker. Respond only with JSON.' },
+      );
+      return result;
+    }
+
+    if (isPdf || file.mimetype.includes('text') || file.mimetype.includes('csv') || file.mimetype.includes('word') || file.mimetype.includes('sheet') || file.mimetype.includes('excel')) {
+      const textSample = isPdf
+        ? `[PDF file named: ${file.originalname}]`
+        : file.buffer.toString('utf-8', 0, Math.min(file.buffer.length, 2000));
+
+      const result = await generateJSON<{ relevant: boolean; reason: string }>(
+        `Is this document related to freight, shipping, logistics, transportation, cargo, claims, damage, invoices, bills of lading, proof of delivery, or any business document?\n\nFilename: ${file.originalname}\nContent preview:\n${textSample}\n\nAnswer JSON: {"relevant": true/false, "reason": "brief explanation"}. Be lenient — any business document, receipt, invoice, or shipping paperwork counts as relevant.`,
+        { systemInstruction: 'You are a freight document relevance checker. Respond only with JSON.' },
+      );
+      return result;
+    }
+
+    return { relevant: true };
+  } catch (err) {
+    logger.warn({ err, filename: file.originalname }, 'Relevance check failed — allowing upload');
+    return { relevant: true };
+  }
+}
+
 export const documentsService = {
   async list(query: Record<string, unknown>, user: JwtPayload) {
     return documentsRepository.findMany(query, user);
@@ -74,6 +111,12 @@ export const documentsService = {
       try {
         if (!ALLOWED_TYPES.has(file.mimetype)) {
           errors.push(`${file.originalname}: File type ${file.mimetype} not allowed`);
+          continue;
+        }
+
+        const relevance = await quickRelevanceCheck(file);
+        if (!relevance.relevant) {
+          errors.push(`${file.originalname}: This file doesn't appear to be freight/shipping related. ${relevance.reason || 'Please upload documents related to your freight claims.'}`);
           continue;
         }
 
