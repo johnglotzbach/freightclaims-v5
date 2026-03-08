@@ -45,6 +45,10 @@ import { newsRouter } from './routes/news.routes';
 
 const app: express.Application = express();
 
+// Behind Render's load balancer + Cloudflare — trust the first proxy
+// so req.ip returns the real client IP and rate-limiter works correctly.
+app.set('trust proxy', 1);
+
 // ---------------------------------------------------------------------------
 // Global middleware (order matters)
 // ---------------------------------------------------------------------------
