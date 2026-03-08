@@ -51,7 +51,10 @@ export const documentsService = {
     if (allFiles.length === 0) throw new Error('No files provided');
 
     const user = (req as any).user;
-    if (!user?.userId) throw new Error('Authentication required for upload');
+    if (!user?.userId) {
+      logger.error({ hasUser: !!user, headers: Object.keys(req.headers) }, 'Upload: no user context after auth middleware');
+      throw new Error('No user context — re-login and try again');
+    }
 
     const ALLOWED_TYPES = new Set([
       'application/pdf',
