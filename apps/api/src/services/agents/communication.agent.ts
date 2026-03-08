@@ -44,10 +44,12 @@ export const communicationAgent: BaseAgent = {
     const ackDeadline = filingDate ? new Date(filingDate.getTime() + 30 * 86400000) : null;
     const dispositionDeadline = filingDate ? new Date(filingDate.getTime() + 120 * 86400000) : null;
 
-    // Get recent email history for this claim
+    const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { claim: { corporateId: ctx.corporateId } } : {};
+
+    // Get recent email history for this claim (tenant-scoped)
     const emailHistory = ctx.claimId
       ? await prisma.emailLog.findMany({
-          where: { claimId: ctx.claimId },
+          where: { claimId: ctx.claimId, ...corpFilter },
           select: { subject: true, direction: true, createdAt: true, status: true },
           orderBy: { createdAt: 'desc' },
           take: 20,

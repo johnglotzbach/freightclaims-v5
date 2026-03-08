@@ -50,9 +50,12 @@ export const riskAgent: BaseAgent = {
       };
     }
 
-    // Fetch all claims involving this carrier
+    const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { createdById: ctx.userId };
+
+    // Fetch claims involving this carrier scoped to tenant
     const claims = await prisma.claim.findMany({
       where: {
+        ...corpFilter,
         parties: { some: { scacCode: carrier.scacCode, type: 'carrier' } },
       },
       select: {

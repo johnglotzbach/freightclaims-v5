@@ -185,7 +185,7 @@ async function autoCreateClaim(
       deliveryDate: extraction.deliveryDate ? new Date(extraction.deliveryDate) : undefined,
       customerId: ctx.customerId,
       createdById: ctx.userId,
-      corporateId: (ctx.input.corporateId as string) || undefined,
+      corporateId: ctx.corporateId || (ctx.input.corporateId as string) || undefined,
     },
   });
 

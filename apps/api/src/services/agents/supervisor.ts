@@ -154,7 +154,7 @@ async function executeAgent(
 export async function runWorkflow(
   input: Record<string, unknown>,
   userId: string,
-  options: { agentType?: AgentType; claimId?: string; conversationId?: string } = {},
+  options: { agentType?: AgentType; claimId?: string; conversationId?: string; corporateId?: string | null; isSuperAdmin?: boolean } = {},
 ): Promise<{ workflow: WorkflowState; result: AgentResult }> {
   const workflow: WorkflowState = {
     id: uuid(),
@@ -170,6 +170,8 @@ export async function runWorkflow(
     userId,
     claimId: options.claimId,
     conversationId: options.conversationId,
+    corporateId: options.corporateId,
+    isSuperAdmin: options.isSuperAdmin ?? false,
     input,
     memory: workflow.memory,
   };
@@ -201,10 +203,13 @@ export async function runAgent(
   agentType: AgentType,
   input: Record<string, unknown>,
   userId: string,
+  userContext?: { corporateId?: string | null; isSuperAdmin?: boolean },
 ): Promise<AgentResult> {
   const { result } = await runWorkflow(input, userId, {
     agentType,
     claimId: input.claimId as string | undefined,
+    corporateId: userContext?.corporateId,
+    isSuperAdmin: userContext?.isSuperAdmin,
   });
   return result;
 }

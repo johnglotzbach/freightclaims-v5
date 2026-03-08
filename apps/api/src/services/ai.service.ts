@@ -33,7 +33,10 @@ export const aiService = {
       };
     }
 
-    const result = await runAgent(agentType as AgentType, input, user.userId);
+    const result = await runAgent(agentType as AgentType, input, user.userId, {
+      corporateId: user.corporateId,
+      isSuperAdmin: user.isSuperAdmin,
+    });
     return {
       agentType: result.agentType,
       status: result.status,
@@ -65,6 +68,8 @@ export const aiService = {
       {
         agentType: 'copilot',
         conversationId: input.conversationId,
+        corporateId: user.corporateId,
+        isSuperAdmin: user.isSuperAdmin,
       },
     );
 

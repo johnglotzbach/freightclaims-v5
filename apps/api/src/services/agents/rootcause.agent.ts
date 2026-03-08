@@ -35,9 +35,11 @@ export const rootcauseAgent: BaseAgent = {
     const days = parseInt(timeRange) || 90;
     const since = new Date(Date.now() - days * 86400000);
 
-    const corporateFilter = ctx.input.corporateId
-      ? { corporateId: ctx.input.corporateId as string }
-      : {};
+    const corporateFilter = ctx.isSuperAdmin
+      ? {}
+      : ctx.corporateId
+        ? { corporateId: ctx.corporateId }
+        : { createdById: ctx.userId };
 
     // Aggregate claim data for analysis
     const claims = await prisma.claim.findMany({

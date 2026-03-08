@@ -11,14 +11,21 @@ import { prisma } from '../../config/database';
 import { logger } from '../../utils/logger';
 import type { AgentTool, AgentContext } from './types';
 
+/** Build a corporateId where-clause: super admins see all, others scoped to their tenant */
+function tenantFilter(ctx: AgentContext): Record<string, unknown> {
+  if (ctx.isSuperAdmin) return {};
+  if (ctx.corporateId) return { corporateId: ctx.corporateId };
+  return { createdById: ctx.userId };
+}
+
 /** Fetch a claim and all related data by ID */
 const getClaimTool: AgentTool = {
   name: 'getClaim',
   description: 'Retrieves a claim with all related parties, products, documents, timeline, and payments',
-  async execute(params, _ctx) {
+  async execute(params, ctx) {
     const id = params.claimId as string;
-    return prisma.claim.findUnique({
-      where: { id },
+    return prisma.claim.findFirst({
+      where: { id, ...tenantFilter(ctx) },
       include: {
         customer: true,
         parties: true,
@@ -37,8 +44,8 @@ const getClaimTool: AgentTool = {
 const searchClaimsTool: AgentTool = {
   name: 'searchClaims',
   description: 'Search claims by status, customer, carrier SCAC, date range, or claim type',
-  async execute(params, _ctx) {
-    const where: Record<string, unknown> = {};
+  async execute(params, ctx) {
+    const where: Record<string, unknown> = { ...tenantFilter(ctx) };
     if (params.status) where.status = params.status;
     if (params.customerId) where.customerId = params.customerId;
     if (params.claimType) where.claimType = params.claimType;
@@ -185,10 +192,11 @@ const updateClaimStatusTool: AgentTool = {
 const getClaimHistoryTool: AgentTool = {
   name: 'getClaimHistory',
   description: 'Gets historical settlement data for similar claims (by carrier, type, commodity)',
-  async execute(params) {
+  async execute(params, ctx) {
     const where: Record<string, unknown> = {
       status: { in: ['settled', 'closed'] },
       settledAmount: { not: null },
+      ...tenantFilter(ctx),
     };
     if (params.claimType) where.claimType = params.claimType;
 

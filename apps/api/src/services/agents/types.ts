@@ -33,6 +33,8 @@ export interface AgentContext {
   claimId?: string;
   customerId?: string;
   conversationId?: string;
+  corporateId?: string | null;
+  isSuperAdmin?: boolean;
   /** Raw input from the API request */
   input: Record<string, unknown>;
   /** Accumulated memory across steps in a multi-step workflow */

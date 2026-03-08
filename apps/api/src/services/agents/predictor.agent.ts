@@ -56,10 +56,13 @@ export const predictorAgent: BaseAgent = {
     const carrierScac = claimData?.parties?.find((p: any) => p.type === 'carrier')?.scacCode
       || ctx.input.carrierScac;
 
+    const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { createdById: ctx.userId };
+
     let carrierHistory = null;
     if (carrierScac) {
       const carrierClaims = await prisma.claim.findMany({
         where: {
+          ...corpFilter,
           parties: { some: { scacCode: carrierScac as string, type: 'carrier' } },
           status: { in: ['settled', 'closed', 'denied', 'approved'] },
         },

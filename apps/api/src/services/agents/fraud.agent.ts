@@ -51,9 +51,12 @@ export const fraudAgent: BaseAgent = {
       };
     }
 
-    // Check for duplicate claims (same PRO, BOL, or similar details)
+    const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { createdById: ctx.userId };
+
+    // Check for duplicate claims (same PRO, BOL, or similar details) scoped to tenant
     const potentialDuplicates = await prisma.claim.findMany({
       where: {
+        ...corpFilter,
         id: { not: claimData.id },
         OR: [
           { proNumber: claimData.proNumber },
@@ -70,9 +73,9 @@ export const fraudAgent: BaseAgent = {
       take: 10,
     });
 
-    // Get historical claim amounts for this claim type to detect outliers
+    // Get historical claim amounts for this claim type to detect outliers (tenant-scoped)
     const historicalAmounts = await prisma.claim.findMany({
-      where: { claimType: claimData.claimType, id: { not: claimData.id } },
+      where: { ...corpFilter, claimType: claimData.claimType, id: { not: claimData.id } },
       select: { claimAmount: true },
       orderBy: { claimAmount: 'asc' },
       take: 500,
