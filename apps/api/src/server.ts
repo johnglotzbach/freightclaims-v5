@@ -198,6 +198,26 @@ app.use(errorHandler);
 // Initialize cache layer (connects to Redis if available)
 initCache().catch((err) => logger.warn({ err }, 'Cache init failed — memory-only mode'));
 
+async function ensureSchemaSync() {
+  const fixes: string[] = [];
+  const run = async (sql: string, label: string) => {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+      fixes.push(label);
+    } catch (_) { /* already applied or not needed */ }
+  };
+
+  await run(`ALTER TABLE claim_documents ALTER COLUMN claim_id DROP NOT NULL`, 'claim_documents.claim_id nullable');
+  await run(`ALTER TABLE claim_documents ALTER COLUMN category_id DROP NOT NULL`, 'claim_documents.category_id nullable');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS plan_type TEXT`, 'customers.plan_type added');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS max_users INT DEFAULT 1`, 'customers.max_users added');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_email TEXT`, 'customers.billing_email added');
+
+  if (fixes.length > 0) {
+    logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
+  }
+}
+
 const server = app.listen(env.PORT, () => {
   logger.info(`FreightClaims API v5.0.0 running on port ${env.PORT} [${env.NODE_ENV}]`);
   logger.info({
@@ -206,6 +226,8 @@ const server = app.listen(env.PORT, () => {
     smtp: env.SMTP_HOST ? `${env.SMTP_HOST}:${env.SMTP_PORT}` : 'NOT SET',
     storage: env.STORAGE_MODE || 'local',
   }, 'Service configuration');
+
+  ensureSchemaSync().catch(() => {});
 });
 
 /** Graceful shutdown -- drain connections before exiting */
