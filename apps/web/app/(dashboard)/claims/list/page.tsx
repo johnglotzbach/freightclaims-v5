@@ -175,11 +175,23 @@ export default function ClaimsListPage() {
           <div>
             <p className="text-sm text-slate-500">Claim Count</p>
             <p className="text-3xl font-bold text-slate-900 dark:text-white">{categoryData?.count || 0}</p>
-            <p className="text-xs text-slate-400">0 Past 7 days</p>
+            <p className="text-xs text-slate-400">
+              {data?.data
+                ? `${data.data.filter(c => c.createdAt && (Date.now() - new Date(c.createdAt).getTime()) < 7 * 86400000).length} past 7 days`
+                : '—'}
+            </p>
           </div>
           <div>
             <p className="text-sm text-slate-500">Average Claim Age</p>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">188 <span className="text-lg font-normal text-slate-500">days</span></p>
+            {data?.data?.length ? (() => {
+              const ages = data.data
+                .filter(c => c.createdAt)
+                .map(c => Math.floor((Date.now() - new Date(c.createdAt!).getTime()) / 86400000));
+              const avg = ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
+              return <p className="text-3xl font-bold text-slate-900 dark:text-white">{avg} <span className="text-lg font-normal text-slate-500">days</span></p>;
+            })() : (
+              <p className="text-3xl font-bold text-slate-900 dark:text-white">— <span className="text-lg font-normal text-slate-500">days</span></p>
+            )}
           </div>
         </div>
 
@@ -363,10 +375,10 @@ export default function ClaimsListPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-sm text-slate-700 dark:text-slate-300">
-                        {(claim as any).customerName || 'N/A'}
+                        {(claim as any).customerName || '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                        {(claim as any).carrierName || 'N/A'}
+                        {(claim as any).carrierName || '—'}
                       </td>
                     </tr>
                   ))

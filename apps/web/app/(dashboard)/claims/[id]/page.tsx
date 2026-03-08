@@ -267,7 +267,7 @@ function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
   const [saving, setSaving] = useState(false);
 
   const updateMutation = useMutation({
-    mutationFn: (data: { acknowledgmentDate?: string; referenceNumber?: string }) => put(`/claims/${claimId}`, data),
+    mutationFn: (data: { acknowledgmentDate?: string }) => put(`/claims/${claimId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
       toast.success('Claim updated');
@@ -279,11 +279,29 @@ function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
     },
   });
 
+  const refMutation = useMutation({
+    mutationFn: (value: string) => post(`/claims/${claimId}/identifiers`, { type: 'ref', value }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      toast.success('Reference number updated');
+      setSaving(false);
+    },
+    onError: () => {
+      toast.error('Failed to update reference number');
+      setSaving(false);
+    },
+  });
+
   function handleSaveAck() {
     setSaving(true);
     updateMutation.mutate({
       acknowledgmentDate: ackDate ? `${ackDate}T00:00:00.000Z` : undefined,
     });
+  }
+
+  function handleSaveRef() {
+    setSaving(true);
+    refMutation.mutate(refNo);
   }
 
   const carrierParties: CarrierParty[] = (claim.parties || [])
@@ -373,13 +391,13 @@ function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
             type="text"
             value={refNo}
             onChange={(e) => setRefNo(e.target.value)}
-            onBlur={handleSaveAck}
+            onBlur={handleSaveRef}
             placeholder="Enter reference number..."
             className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600"
           />
         </div>
       </div>
-      {(saving || updateMutation.isPending) && (
+      {(saving || updateMutation.isPending || refMutation.isPending) && (
         <p className="text-xs text-slate-500">Saving...</p>
       )}
     </div>
@@ -387,13 +405,14 @@ function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
 }
 
 function TransportationTab({ claim }: { claim: Claim }) {
+  const bolNumber = claim.identifiers?.find((i: any) => i.type === 'bol')?.value || '';
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card p-6 space-y-4">
         <h3 className="font-semibold text-slate-900 dark:text-white">Shipment Details</h3>
         <dl className="space-y-3 text-sm">
           <DetailRow label="PRO Number" value={claim.proNumber || 'N/A'} mono />
-          <DetailRow label="BOL Number" value={(claim as any).bolNumber || 'N/A'} mono />
+          <DetailRow label="BOL Number" value={bolNumber || 'N/A'} mono />
           <DetailRow label="Ship Date" value={claim.shipDate ? formatDate(claim.shipDate) : 'N/A'} />
           <DetailRow label="Delivery Date" value={claim.deliveryDate ? formatDate(claim.deliveryDate) : 'N/A'} />
           <DetailRow label="Origin" value={(claim as any).originCity ? `${(claim as any).originCity}, ${(claim as any).originState}` : 'N/A'} />
@@ -920,9 +939,9 @@ function AdditionalInfoTab({ claim }: { claim: Claim }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'PRO Number', value: claim.proNumber },
-            { label: 'BOL Number', value: (claim as any).bolNumber },
-            { label: 'PO Number', value: (claim as any).poNumber },
-            { label: 'Reference', value: (claim as any).referenceNumber },
+            { label: 'BOL Number', value: claim.identifiers?.find((i: any) => i.type === 'bol')?.value },
+            { label: 'PO Number', value: claim.identifiers?.find((i: any) => i.type === 'po')?.value },
+            { label: 'Reference', value: claim.identifiers?.find((i: any) => i.type === 'ref')?.value },
           ].map(item => (
             <div key={item.label} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
               <p className="text-xs text-slate-500 mb-1">{item.label}</p>

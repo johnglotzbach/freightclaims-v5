@@ -67,7 +67,10 @@ export const claimsRepository = {
         skip: pagination.offset,
         take: pagination.limit,
         orderBy: { createdAt: 'desc' },
-        include: { parties: true },
+        include: {
+          parties: true,
+          customer: { select: { name: true } },
+        },
       }),
       prisma.claim.count({ where: where as any }),
     ]);
@@ -86,6 +89,7 @@ export const claimsRepository = {
         timeline: { orderBy: { createdAt: 'desc' } },
         tasks: true,
         payments: true,
+        identifiers: true,
       },
     });
   },
@@ -121,7 +125,7 @@ export const claimsRepository = {
   async updateProduct(_claimId: string, productId: string, data: Record<string, unknown>) { return prisma.claimProduct.update({ where: { id: productId }, data: data as any }); },
   async removeProduct(_claimId: string, productId: string) { return prisma.claimProduct.delete({ where: { id: productId } }); },
 
-  // Comments
+  // Comments 
   async getComments(claimId: string) { return prisma.claimComment.findMany({ where: { claimId }, orderBy: { createdAt: 'desc' } }); },
   async addComment(claimId: string, data: Record<string, unknown>) { return prisma.claimComment.create({ data: { ...data, claimId } as any }); },
 

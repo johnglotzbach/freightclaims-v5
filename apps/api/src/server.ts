@@ -135,7 +135,7 @@ app.get('/ai-health', async (_req, res) => {
 // ---------------------------------------------------------------------------
 
 import { storageService } from './services/storage.service';
-import { authenticate } from './middleware/auth.middleware';
+import { authenticate, softAuthenticate } from './middleware/auth.middleware';
 
 app.get('/api/v1/files/*', authenticate, async (req, res) => {
   try {
@@ -160,8 +160,10 @@ app.get('/api/v1/files/*', authenticate, async (req, res) => {
 
 const v1: express.Router = express.Router();
 
-// Tenant isolation runs AFTER authenticate (inside each router),
-// so req.user is available when tenantIsolation reads corporateId.
+// softAuthenticate extracts req.user from the JWT (if present) without
+// rejecting unauthenticated requests. This ensures tenantIsolation and
+// auditLog can read user context. Per-route `authenticate` still enforces auth.
+v1.use(softAuthenticate);
 v1.use(tenantIsolation);
 v1.use(auditLog);
 

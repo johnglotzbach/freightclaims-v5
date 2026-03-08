@@ -54,8 +54,17 @@ export const claimsService = {
 
     const [claims, total] = await claimsRepository.findMany(filters, { limit, offset });
 
+    const mapped = claims.map((c: any) => {
+      const carrierParty = c.parties?.find((p: any) => p.type === 'carrier');
+      return {
+        ...c,
+        customerName: c.customer?.name ?? null,
+        carrierName: carrierParty?.name ?? null,
+      };
+    });
+
     return {
-      data: claims,
+      data: mapped,
       pagination: {
         page,
         limit,
@@ -131,7 +140,7 @@ export const claimsService = {
     const identifiers: { type: string; value: string }[] = [];
     if (data.bolNumber) identifiers.push({ type: 'bol', value: data.bolNumber as string });
     if (data.poNumber) identifiers.push({ type: 'po', value: data.poNumber as string });
-    if (data.referenceNumber) identifiers.push({ type: 'reference', value: data.referenceNumber as string });
+    if (data.referenceNumber) identifiers.push({ type: 'ref', value: data.referenceNumber as string });
 
     const promises: Promise<unknown>[] = [];
 
@@ -267,6 +276,9 @@ export const claimsService = {
     });
   },
   async createGlobalTask(data: Record<string, unknown>, user: JwtPayload) {
+    if (data.claimId) {
+      await this.getById(data.claimId as string, user);
+    }
     return prisma.claimTask.create({
       data: {
         claimId: data.claimId as string,

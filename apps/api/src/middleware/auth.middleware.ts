@@ -26,6 +26,25 @@ export interface JwtPayload {
 }
 
 /**
+ * Non-blocking JWT extraction. Decodes the token and sets req.user if valid,
+ * but never rejects the request — unauthenticated requests pass through so
+ * downstream middleware (tenantIsolation, auditLog) can still read the user
+ * context when it exists. Per-route `authenticate` still enforces auth.
+ */
+export function softAuthenticate(req: Request, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      (req as any).user = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    } catch {
+      // Invalid/expired token — leave req.user unset; authenticate() will reject later
+    }
+  }
+  next();
+}
+
+/**
  * Verifies JWT from Authorization header and injects user data into the request.
  * Returns 401 if the token is missing, expired, or invalid.
  */
