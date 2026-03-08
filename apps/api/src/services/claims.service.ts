@@ -81,14 +81,84 @@ export const claimsService = {
     return claim;
   },
 
-  /** Creates a new claim and logs the creation in the timeline */
+  /** Creates a new claim with parties, products, and identifiers */
   async create(data: Record<string, unknown>, user: JwtPayload) {
     logger.info({ userId: user.userId }, 'Creating new claim');
-    const claim = await claimsRepository.create({
-      ...data,
+
+    const parties = Array.isArray(data.parties) ? data.parties as Record<string, unknown>[] : [];
+    const products = Array.isArray(data.products) ? data.products as Record<string, unknown>[] : [];
+
+    const claimNumber = (data.claimNumber as string) ||
+      `FC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+    let proNumber = data.proNumber as string || '';
+    if (!proNumber && data.primaryIdentifier) {
+      proNumber = data.primaryIdentifier as string;
+    }
+    if (!proNumber) proNumber = claimNumber;
+
+    const parseDate = (v: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const d = new Date(v as string);
+      return isNaN(d.getTime()) ? undefined : d;
+    };
+
+    const claimFields: Record<string, unknown> = {
+      claimNumber,
+      proNumber,
+      status: (data.status as string) || 'draft',
+      claimType: data.claimType as string,
+      claimAmount: Number(data.claimAmount) || 0,
+      description: data.description || data.note || null,
+      shipDate: parseDate(data.shipDate),
+      deliveryDate: parseDate(data.deliveryDate),
+      filingDate: parseDate(data.filingDate),
+      corporateId: user.corporateId || null,
+      customerId: user.customerId || user.userId,
       createdById: user.userId,
-      customerId: user.customerId,
-    });
+    };
+
+    const claim = await claimsRepository.create(claimFields);
+
+    const identifiers: { type: string; value: string }[] = [];
+    if (data.bolNumber) identifiers.push({ type: 'bol', value: data.bolNumber as string });
+    if (data.poNumber) identifiers.push({ type: 'po', value: data.poNumber as string });
+    if (data.referenceNumber) identifiers.push({ type: 'reference', value: data.referenceNumber as string });
+
+    const promises: Promise<unknown>[] = [];
+
+    for (const party of parties) {
+      promises.push(claimsRepository.addParty(claim.id, {
+        type: party.type || 'carrier',
+        name: party.name || '',
+        email: party.email || null,
+        phone: party.phone || null,
+        address: party.address || null,
+        city: party.city || null,
+        state: party.state || null,
+        zipCode: party.zipCode || null,
+        scacCode: party.scacCode || null,
+      }));
+    }
+
+    for (const product of products) {
+      promises.push(claimsRepository.addProduct(claim.id, {
+        description: product.description || product.productName || 'Item',
+        quantity: Number(product.quantity) || 1,
+        weight: product.weight ? Number(product.weight) : null,
+        value: product.value || product.cost ? Number(product.value || product.cost) : null,
+        damageType: product.damageType || product.claimCondition || null,
+      }));
+    }
+
+    for (const ident of identifiers) {
+      promises.push(claimsRepository.addIdentifier(claim.id, ident));
+    }
+
+    promises.push(claimsRepository.addTimeline(claim.id, 'draft', user.userId, 'Claim created'));
+
+    await Promise.allSettled(promises);
+
     return claim;
   },
 

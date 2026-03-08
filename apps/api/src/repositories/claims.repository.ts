@@ -140,6 +140,11 @@ export const claimsRepository = {
   async getIdentifiers(claimId: string) { return prisma.claimIdentifier.findMany({ where: { claimId } }); },
   async addIdentifier(claimId: string, data: Record<string, unknown>) { return prisma.claimIdentifier.create({ data: { ...data, claimId } as any }); },
 
+  // Timeline
+  async addTimeline(claimId: string, status: string, changedById: string, description?: string) {
+    return prisma.claimTimeline.create({ data: { claimId, status, changedById, description } });
+  },
+
   // Dashboard
   async getDashboardStats(customerId?: string, corporateId?: string | null) {
     const where: Record<string, unknown> = { deletedAt: null };

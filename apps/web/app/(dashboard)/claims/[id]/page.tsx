@@ -144,6 +144,20 @@ export default function ClaimDetailPage() {
             <div className="flex flex-wrap gap-4 text-sm text-slate-500">
               <span>Assigned to: <span className="font-medium text-slate-700 dark:text-slate-300">{(claim as any).assignedTo || 'Unassigned'}</span></span>
             </div>
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-slate-400">Claim Email:</span>
+              <button
+                onClick={() => {
+                  const email = `claim-${(claim.claimNumber || '').toLowerCase().replace(/[^a-z0-9-]/g, '')}@inbound.freightclaims.com`;
+                  navigator.clipboard.writeText(email);
+                  toast.success('Claim email copied');
+                }}
+                className="font-mono text-primary-500 hover:text-primary-600 hover:underline"
+              >
+                claim-{(claim.claimNumber || '').toLowerCase().replace(/[^a-z0-9-]/g, '')}@inbound.freightclaims.com
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">

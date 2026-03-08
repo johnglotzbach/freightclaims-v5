@@ -63,9 +63,7 @@ export default function DocumentsPage() {
     mutationFn: async (files: FileList) => {
       const formData = new FormData();
       Array.from(files).forEach(f => formData.append('files', f));
-      return apiClient.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      return apiClient.post('/documents/upload', formData);
     },
     onSuccess: () => {
       toast.success('Documents uploaded successfully');

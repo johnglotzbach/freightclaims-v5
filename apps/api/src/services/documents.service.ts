@@ -74,16 +74,18 @@ export const documentsService = {
         logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
       }
 
-      const doc = await documentsRepository.create({
-        documentName: file.originalname,
+      const createPayload: Record<string, unknown> = {
+        documentName: req.body.documentName || file.originalname,
         mimeType: file.mimetype,
         fileSize: size,
         s3Key: key,
-        pdfKey: pdfKey,
-        claimId: req.body.claimId,
-      categoryId: req.body.categoryId || null,
-      uploadedBy: user.userId,
-    });
+        uploadedBy: user.userId,
+        categoryId: req.body.categoryId || null,
+      };
+      if (req.body.claimId) {
+        createPayload.claimId = req.body.claimId;
+      }
+      const doc = await documentsRepository.create(createPayload);
 
       logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
       results.push(doc);
