@@ -50,45 +50,63 @@ export const documentsService = {
     if (allFiles.length === 0) throw new Error('No files provided');
 
     const user = (req as any).user;
-    const claimId = req.body.claimId || 'unlinked';
-    const category = req.body.categoryId || 'general';
+    if (!user?.userId) throw new Error('Authentication required for upload');
+
+    const storageClaimId = req.body.claimId || 'unlinked';
+    const storageCategory = req.body.categoryId || 'general';
     const results = [];
+    const errors: string[] = [];
 
     for (const file of allFiles) {
-      const filename = `${randomUUID()}-${file.originalname}`;
+      try {
+        const filename = `${randomUUID()}-${file.originalname}`;
 
-      const { key, size } = await storageService.uploadDocument(
-        claimId,
-        category,
-        filename,
-        file.buffer,
-        file.mimetype,
-      );
+        const { key, size } = await storageService.uploadDocument(
+          storageClaimId,
+          storageCategory,
+          filename,
+          file.buffer,
+          file.mimetype,
+        );
 
-      let pdfKey: string | null = null;
-      const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
-      if (pdfConversion) {
-        const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
-        const pdfResult = await storageService.uploadDocument(claimId, category, pdfFilename, pdfConversion.buffer, 'application/pdf');
-        pdfKey = pdfResult.key;
-        logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
+        let pdfKey: string | null = null;
+        const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
+        if (pdfConversion) {
+          const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
+          const pdfResult = await storageService.uploadDocument(storageClaimId, storageCategory, pdfFilename, pdfConversion.buffer, 'application/pdf');
+          pdfKey = pdfResult.key;
+          logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
+        }
+
+        const createPayload: Record<string, unknown> = {
+          documentName: req.body.documentName || file.originalname,
+          mimeType: file.mimetype,
+          fileSize: size,
+          s3Key: key,
+          uploadedBy: user.userId,
+        };
+
+        // Only set categoryId if it looks like a valid UUID
+        const catId = req.body.categoryId;
+        if (catId && typeof catId === 'string' && catId.length > 10) {
+          createPayload.categoryId = catId;
+        }
+
+        if (req.body.claimId) {
+          createPayload.claimId = req.body.claimId;
+        }
+
+        const doc = await documentsRepository.create(createPayload);
+        logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
+        results.push(doc);
+      } catch (fileErr: any) {
+        logger.error({ err: fileErr, fileName: file.originalname }, 'Failed to process uploaded file');
+        errors.push(`${file.originalname}: ${fileErr.message}`);
       }
+    }
 
-      const createPayload: Record<string, unknown> = {
-        documentName: req.body.documentName || file.originalname,
-        mimeType: file.mimetype,
-        fileSize: size,
-        s3Key: key,
-        uploadedBy: user.userId,
-        categoryId: req.body.categoryId || null,
-      };
-      if (req.body.claimId) {
-        createPayload.claimId = req.body.claimId;
-      }
-      const doc = await documentsRepository.create(createPayload);
-
-      logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
-      results.push(doc);
+    if (results.length === 0 && errors.length > 0) {
+      throw new Error(`All uploads failed: ${errors.join('; ')}`);
     }
 
     return results.length === 1 ? results[0] : results;

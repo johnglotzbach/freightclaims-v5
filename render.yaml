@@ -31,7 +31,7 @@ services:
     runtime: node
     region: ohio
     plan: starter
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter database generate && pnpm --filter api build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter database generate && pnpm --filter database push && pnpm --filter api build
     startCommand: pnpm --filter api start
     healthCheckPath: /health
     envVars:

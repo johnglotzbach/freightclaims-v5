@@ -22,25 +22,46 @@ export const customersRepository = {
     }
 
     const isCorporateQuery = query.type === 'corporate';
-    const [customers, total] = await Promise.all([
-      prisma.customer.findMany({
-        where: where as any,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { name: 'asc' },
-        ...(isCorporateQuery ? {
-          include: {
-            _count: { select: { corporateUsers: true, claims: true } },
-            corporateUsers: {
-              where: { isSuperAdmin: false },
-              select: { id: true, firstName: true, lastName: true, email: true, isSuperAdmin: true, isActive: true, lastLoginAt: true, role: { select: { name: true } } },
-              orderBy: { createdAt: 'asc' as const },
+
+    let customers: any[];
+    let total: number;
+
+    try {
+      [customers, total] = await Promise.all([
+        prisma.customer.findMany({
+          where: where as any,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { name: 'asc' },
+          ...(isCorporateQuery ? {
+            include: {
+              _count: { select: { corporateUsers: true, claims: true } },
+              corporateUsers: {
+                where: { isSuperAdmin: false },
+                select: { id: true, firstName: true, lastName: true, email: true, isSuperAdmin: true, isActive: true, lastLoginAt: true, role: { select: { name: true } } },
+                orderBy: { createdAt: 'asc' as const },
+              },
             },
-          },
-        } : {}),
-      }),
-      prisma.customer.count({ where: where as any }),
-    ]);
+          } : {}),
+        }),
+        prisma.customer.count({ where: where as any }),
+      ]);
+    } catch {
+      const fallbackWhere: Record<string, unknown> = { deletedAt: null };
+      if (corporateId) fallbackWhere.corporateId = corporateId;
+      else if (!isSuperAdmin) fallbackWhere.corporateId = corporateId;
+
+      [customers, total] = await Promise.all([
+        prisma.customer.findMany({
+          where: fallbackWhere as any,
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { name: 'asc' },
+        }),
+        prisma.customer.count({ where: fallbackWhere as any }),
+      ]);
+    }
+
     return { data: customers, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },
   async findById(id: string) { return prisma.customer.findUnique({ where: { id }, include: { contacts: true, addresses: true } }); },
