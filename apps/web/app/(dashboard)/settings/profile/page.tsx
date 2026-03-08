@@ -6,8 +6,7 @@ import { get, put } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  User, Bell, Lock, Palette, Save, Camera,
-  Mail, Phone, Shield, Clock, FileText, ToggleLeft, ToggleRight,
+  User, Bell, Palette, Save, Camera, FileText,
 } from 'lucide-react';
 
 type ProfileTab = 'general' | 'notifications' | 'signature' | 'dashboard';
@@ -130,7 +129,7 @@ function NotificationsTab() {
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, { email: boolean; push: boolean; inApp: boolean }>) =>
-      put('/users/preferences', data),
+      put('/users/me/preferences', data),
     onSuccess: () => toast.success('Notification preferences saved'),
     onError: (err: Error) => toast.error(err.message || 'Failed to save preferences'),
   });
@@ -204,7 +203,7 @@ function SignatureTab() {
   useEffect(() => { if (defaultSig && !signature) setSignature(defaultSig); }, [defaultSig]);
 
   const saveMutation = useMutation({
-    mutationFn: (data: { signature: string }) => put('/users/signature', data),
+    mutationFn: (data: { signature: string }) => put('/users/me/preferences', { emailSignature: data.signature }),
     onSuccess: () => toast.success('Signature saved'),
     onError: (err: Error) => toast.error(err.message || 'Failed to save signature'),
   });
@@ -233,7 +232,7 @@ function DashboardTab() {
 
   const saveMutation = useMutation({
     mutationFn: (data: { defaultView: string; claimsPerPage: number; defaultDateRange: string; columns: Record<string, boolean> }) =>
-      put('/users/dashboard-settings', data),
+      put('/users/me/preferences', { dashboardSettings: data }),
     onSuccess: () => toast.success('Dashboard settings saved'),
     onError: (err: Error) => toast.error(err.message || 'Failed to save settings'),
   });
