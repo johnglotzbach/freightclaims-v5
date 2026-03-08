@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
-import { get, put } from '@/lib/api-client';
+import { get, put, post } from '@/lib/api-client';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Crown, Building2, Mail, Phone, Calendar,
@@ -92,8 +92,16 @@ export default function AdminUserDetailPage() {
     enabled: isSA && !!targetUser?.corporateId,
   });
 
+  const { data: userStatsData } = useQuery({
+    queryKey: ['admin-user-stats-detail', id],
+    queryFn: () => get<{ data: { stats: { totalClaims: number; totalClaimValue: number; totalSettledValue: number } } }>(`/admin/user-stats/${id}`),
+    enabled: isSA && !!id && !!targetUser,
+  });
+
+  const userStats = userStatsData?.data?.stats;
+
   const resetPasswordMutation = useMutation({
-    mutationFn: () => put(`/users/${id}/reset-password`, {}),
+    mutationFn: () => post(`/users/${id}/reset-password`, {}),
     onSuccess: () => toast.success('Password reset email sent'),
     onError: () => toast.error('Failed to reset password'),
   });
@@ -140,7 +148,7 @@ export default function AdminUserDetailPage() {
     );
   }
 
-  const displayRole = targetUser.isSuperAdmin ? 'Super Admin' : (typeof targetUser.role === 'string' ? targetUser.role : targetUser.roleName) || 'User';
+  const displayRole = targetUser.isSuperAdmin ? 'Platform Owner' : (typeof targetUser.role === 'string' ? targetUser.role : targetUser.roleName) || 'User';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -348,7 +356,7 @@ export default function AdminUserDetailPage() {
             </div>
           </div>
 
-          {/* Quick Stats */}
+          {/* Activity & Claim Stats */}
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
             <h3 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-primary-500" />
@@ -356,7 +364,9 @@ export default function AdminUserDetailPage() {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'Claims', value: '—', icon: FileText },
+                { label: 'Claims Filed', value: userStats?.totalClaims ?? '—', icon: FileText },
+                { label: 'Claim Value', value: userStats ? `$${userStats.totalClaimValue.toLocaleString()}` : '—', icon: CreditCard },
+                { label: 'Settled', value: userStats ? `$${userStats.totalSettledValue.toLocaleString()}` : '—', icon: CheckCircle },
                 { label: 'Last Login', value: targetUser.lastLoginAt ? new Date(targetUser.lastLoginAt).toLocaleDateString() : 'Never', icon: Clock },
               ].map(s => (
                 <div key={s.label} className="text-center p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50">

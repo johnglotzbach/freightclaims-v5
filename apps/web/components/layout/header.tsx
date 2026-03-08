@@ -271,7 +271,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                         ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
                         : 'bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-400'
                     )}>
-                      {user?.isSuperAdmin ? 'Super Admin' : (user as any)?.roleName || 'User'}
+                      {user?.isSuperAdmin ? 'Platform Owner' : (user as any)?.roleName || 'User'}
                     </span>
                     {(user as any)?.corporateName && (
                       <span className="text-[10px] text-slate-400 truncate">{(user as any).corporateName}</span>

@@ -33,6 +33,7 @@ interface NavLinkProps {
 }
 
 function isActivePath(pathname: string, href: string): boolean {
+  if (href === '/admin') return pathname === '/admin';
   if (href === '/claims/list') return pathname === '/claims/list' || (pathname.startsWith('/claims/') && !pathname.startsWith('/claims/settings') && pathname !== '/claims');
   if (href === '/claims') return pathname === '/claims';
   if (href === '/reports') return pathname === '/reports';
@@ -148,7 +149,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   };
 
   const displayName = user?.corporateName || 'FreightClaims';
-  const roleBadge = isSuperAdmin ? 'Super Admin' : isWorkspaceAdmin ? 'Admin' : user?.roleName || 'User';
+  const roleBadge = isSuperAdmin ? 'Owner' : isWorkspaceAdmin ? 'Admin' : user?.roleName || 'User';
   const badgeColor = isSuperAdmin
     ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
     : isWorkspaceAdmin
@@ -197,8 +198,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {isSuperAdmin && (
           <>
             <SidebarSectionHeader label="Platform" showFull={showFull} />
-            <SidebarExpandable sectionKey="platform" icon={Globe} label="Platform Admin" amber expanded={expanded} onToggle={toggle} pathname={pathname} showFull={showFull}>
-              <SidebarNavLink href="/admin/workspaces" icon={Building2} label="All Workspaces" indent {...linkProps} />
+            <SidebarNavLink href="/admin" icon={Crown} label="Overview" amber {...linkProps} />
+            <SidebarExpandable sectionKey="platform" icon={Globe} label="Manage" amber expanded={expanded} onToggle={toggle} pathname={pathname} showFull={showFull}>
+              <SidebarNavLink href="/admin/workspaces" icon={Building2} label="Workspaces & Teams" indent {...linkProps} />
               <SidebarNavLink href="/admin/users" icon={Users} label="All Users" indent {...linkProps} />
               <SidebarNavLink href="/admin/billing" icon={CreditCard} label="Billing & Plans" indent {...linkProps} />
               <SidebarNavLink href="/admin/settings" icon={Settings} label="Platform Settings" indent {...linkProps} />
