@@ -15,6 +15,10 @@ export const registerSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
+  companyName: z.string().optional(),
+  jobTitle: z.string().optional(),
+  companySize: z.string().optional(),
+  phone: z.string().optional(),
   role: z.string().default('user'),
   customerId: z.string().optional(),
 });

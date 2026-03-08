@@ -17,6 +17,7 @@ export function PublicNavbar() {
 
         <div className="hidden lg:flex items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-400">
           <Link href="/features" className="hover:text-primary-500 transition-colors">Our Software</Link>
+          <Link href="/#pricing" className="hover:text-primary-500 transition-colors">Pricing</Link>
           <Link href="/about" className="hover:text-primary-500 transition-colors">About Us</Link>
           <div className="relative group">
             <button className="flex items-center gap-1 hover:text-primary-500 transition-colors">

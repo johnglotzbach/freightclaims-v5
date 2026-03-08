@@ -96,21 +96,50 @@ export const usersService = {
     return { accessToken, refreshToken, user: safeUser(user as unknown as Record<string, unknown>) };
   },
 
-  /** Registers a new user account with hashed password */
+  /** Registers a new user account with hashed password and auto-creates a workspace */
   async register(data: Record<string, unknown>) {
     const existing = await usersRepository.findByEmail(data.email as string);
     if (existing) throw new ConflictError('Email already registered');
 
     validatePasswordComplexity(data.password as string);
     const passwordHash = await bcrypt.hash(data.password as string, BCRYPT_ROUNDS);
-    const { password: _pw, ...rest } = data;
-    const user = await usersRepository.create({ ...rest, passwordHash });
+
+    let corporateId: string | null = null;
+    let roleId: string | null = null;
+
+    const companyName = data.companyName as string | undefined;
+    if (companyName) {
+      const code = `WS-${Date.now().toString(36).toUpperCase()}`;
+      const workspace = await prisma.customer.create({
+        data: {
+          name: companyName,
+          code,
+          email: data.email as string,
+          isCorporate: true,
+          isActive: true,
+        } as any,
+      });
+      corporateId = workspace.id;
+
+      const adminRole = await prisma.role.findFirst({ where: { name: 'Admin', corporateId: null } });
+      if (adminRole) roleId = adminRole.id;
+    }
+
+    const { password: _pw, companyName: _cn, jobTitle: _jt, companySize: _cs, ...rest } = data;
+    const user = await usersRepository.create({
+      ...rest,
+      passwordHash,
+      corporateId,
+      roleId,
+    });
 
     await smtpService.sendWelcome({
       to: data.email as string,
       userName: (data.firstName as string) || (data.email as string),
       loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
     }).catch((err) => logger.error({ err }, 'Failed to send welcome email'));
+
+    logger.info({ userId: (user as any).id, corporateId, companyName }, 'New user registered with workspace');
 
     return safeUser(user as unknown as Record<string, unknown>);
   },
