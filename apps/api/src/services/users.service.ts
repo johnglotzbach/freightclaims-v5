@@ -54,14 +54,16 @@ function buildJwtPayload(user: Record<string, unknown>): JwtPayload {
   };
 }
 
-/** Strips sensitive fields before returning user data to the client */
+/** Strips sensitive fields and Prisma relation objects before returning user data to the client */
 function safeUser(user: Record<string, unknown>) {
-  const { passwordHash: _pw, ...safe } = user;
-  const role = safe.role as Record<string, unknown> | null;
-  const corporate = safe.corporate as Record<string, unknown> | null;
+  const { passwordHash: _pw, role: rawRole, corporate: rawCorporate, ...safe } = user;
+  const role = rawRole as Record<string, unknown> | null;
+  const corporate = rawCorporate as Record<string, unknown> | null;
   return {
     ...safe,
-    roleName: role?.name || null,
+    role: (role?.name as string) || 'User',
+    roleId: safe.roleId ?? (role?.id as string) ?? null,
+    roleName: (role?.name as string) || null,
     corporateName: corporate?.name || null,
     corporateCode: corporate?.code || null,
     permissions: buildJwtPayload(user).permissions,
