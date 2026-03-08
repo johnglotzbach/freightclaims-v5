@@ -171,7 +171,10 @@ export default function NewClaimPage() {
       toast.success('Claim created successfully');
       router.push(`/claims/${result.id}`);
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to create claim'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to create claim';
+      toast.error(msg);
+    },
   });
 
   const isSubmitting = createClaim.isPending || uploadProgress !== null;

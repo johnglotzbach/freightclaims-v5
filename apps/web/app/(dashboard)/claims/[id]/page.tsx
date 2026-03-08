@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -481,30 +481,82 @@ function FormDataTab({ claim }: { claim: Claim }) {
 }
 
 function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; claimId: string }) {
-  if (!documents?.length) return <EmptyState message="No documents uploaded yet" action="Upload Document" />;
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      formData.append('claimId', claimId);
+      await apiClient.post('/documents/upload', formData);
+      toast.success(`${files.length} document(s) uploaded`);
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+
+      try {
+        await post(`/documents/${claimId}/process`, {});
+      } catch {}
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  }
 
   return (
-    <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-100 dark:border-slate-700">
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Document Name</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Type</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Size</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Uploaded</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-          {documents.map((doc) => (
-            <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-              <td className="px-4 py-3 font-medium text-primary-500">{doc.documentName}</td>
-              <td className="px-4 py-3 hidden sm:table-cell capitalize text-xs text-slate-500">{doc.mimeType || '-'}</td>
-              <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : '-'}</td>
-              <td className="px-4 py-3 text-xs text-slate-500">{formatDate(doc.createdAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{documents?.length || 0} document(s)</p>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+        >
+          {uploading ? 'Uploading...' : 'Upload Files'}
+        </button>
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleUpload} />
+      </div>
+      {!documents?.length ? (
+        <EmptyState message="No documents uploaded yet" action="Upload Document" />
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-700">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Document Name</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Type</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Size</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Uploaded</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">AI</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+              {documents.map((doc) => (
+                <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                  <td className="px-4 py-3 font-medium text-primary-500">{doc.documentName}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell capitalize text-xs text-slate-500">{doc.mimeType || '-'}</td>
+                  <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : '-'}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{formatDate(doc.createdAt)}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {(doc as any).aiProcessingStatus === 'completed' ? (
+                      <span className="text-emerald-500 font-medium">Processed</span>
+                    ) : (doc as any).aiProcessingStatus === 'processing' ? (
+                      <span className="text-amber-500 font-medium">Processing...</span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

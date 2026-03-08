@@ -5,6 +5,12 @@
  */
 import { prisma } from '../config/database';
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export const documentsRepository = {
   async findMany(query: Record<string, unknown>, user?: { corporateId: string | null; isSuperAdmin: boolean }) {
     const page = Number(query.page) || 1;
@@ -13,13 +19,46 @@ export const documentsRepository = {
     if (query.claimId) where.claimId = query.claimId;
     if (query.categoryId) where.categoryId = query.categoryId;
     if (user && !user.isSuperAdmin && user.corporateId) {
-      where.claim = { corporateId: user.corporateId };
+      where.OR = [
+        { claim: { corporateId: user.corporateId } },
+        { claimId: null, uploadedBy: (user as any).userId },
+      ];
     }
 
-    const [data, total] = await Promise.all([
-      prisma.claimDocument.findMany({ where: where as any, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),
+    const [rawDocs, total] = await Promise.all([
+      prisma.claimDocument.findMany({
+        where: where as any,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          claim: { select: { claimNumber: true } },
+          category: { select: { name: true } },
+        },
+      }),
       prisma.claimDocument.count({ where: where as any }),
     ]);
+
+    const data = rawDocs.map((doc: any) => ({
+      id: doc.id,
+      name: doc.documentName,
+      documentName: doc.documentName,
+      category: doc.category?.name || 'Other',
+      categoryId: doc.categoryId,
+      claimId: doc.claimId,
+      claimNumber: doc.claim?.claimNumber || '',
+      uploadedBy: doc.uploadedBy,
+      date: doc.createdAt,
+      size: doc.fileSize ? formatFileSize(doc.fileSize) : '—',
+      fileSize: doc.fileSize,
+      type: doc.mimeType?.startsWith('image/') ? 'image' : 'pdf',
+      mimeType: doc.mimeType,
+      s3Key: doc.s3Key,
+      aiProcessed: doc.aiProcessingStatus === 'completed',
+      aiProcessingStatus: doc.aiProcessingStatus,
+      confidence: null,
+    }));
+
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   },
 

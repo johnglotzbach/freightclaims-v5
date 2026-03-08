@@ -103,6 +103,11 @@ export const claimsService = {
       return isNaN(d.getTime()) ? undefined : d;
     };
 
+    const customerId = user.customerId || user.corporateId;
+    if (!customerId) {
+      throw new BadRequestError('Cannot create claim without a workspace context. Super admins must impersonate a workspace first.');
+    }
+
     const claimFields: Record<string, unknown> = {
       claimNumber,
       proNumber,
@@ -114,7 +119,7 @@ export const claimsService = {
       deliveryDate: parseDate(data.deliveryDate),
       filingDate: parseDate(data.filingDate),
       corporateId: user.corporateId || null,
-      customerId: user.customerId || user.userId,
+      customerId,
       createdById: user.userId,
     };
 

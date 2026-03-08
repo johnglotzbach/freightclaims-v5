@@ -20,6 +20,9 @@ client.interceptors.request.use((config) => {
       config.headers['X-Corporate-Id'] = corpId;
     }
   }
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

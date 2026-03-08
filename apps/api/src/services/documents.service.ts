@@ -28,7 +28,7 @@ async function verifyDocumentAccess(id: string, user: JwtPayload) {
     include: { claim: { select: { corporateId: true } } },
   });
   if (!doc) throw new NotFoundError(`Document ${id} not found`);
-  if (!user.isSuperAdmin && doc.claim?.corporateId && doc.claim.corporateId !== user.corporateId) {
+  if (!user.isSuperAdmin && doc.claim && doc.claim.corporateId && doc.claim.corporateId !== user.corporateId) {
     throw new NotFoundError(`Document ${id} not found`);
   }
   return doc;

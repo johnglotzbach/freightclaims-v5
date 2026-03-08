@@ -333,7 +333,7 @@ model ClaimComment {
 
 model ClaimDocument {
   id                 String   @id @default(uuid())
-  claimId            String   @map("claim_id")
+  claimId            String?  @map("claim_id")
   categoryId         String?  @map("category_id")
   documentName       String   @map("document_name")
   s3Key              String   @map("s3_key")
@@ -344,7 +344,7 @@ model ClaimDocument {
   aiProcessingStatus String?  @map("ai_processing_status") // null, processing, completed, failed
   createdAt          DateTime @default(now()) @map("created_at")
 
-  claim    Claim             @relation(fields: [claimId], references: [id])
+  claim    Claim?            @relation(fields: [claimId], references: [id])
   category DocumentCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([claimId])
