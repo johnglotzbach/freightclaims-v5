@@ -13,10 +13,12 @@ import { documentsRepository } from '../repositories/documents.repository';
 import { storageService } from './storage.service';
 import { convertService } from './convert.service';
 import { logger } from '../utils/logger';
-import { generateJSON } from './agents/gemini-client';
+import { generateJSON, generateMultimodalJSON } from './agents/gemini-client';
 import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
 import { NotFoundError } from '../utils/errors';
+import { env } from '../config/env';
+import { PDFParse } from 'pdf-parse';
 
 /**
  * Loads a document and verifies the requesting user has access via the
@@ -52,14 +54,29 @@ export const documentsService = {
     const user = (req as any).user;
     if (!user?.userId) throw new Error('Authentication required for upload');
 
+    const ALLOWED_TYPES = new Set([
+      'application/pdf',
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff', 'image/bmp',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv', 'text/plain',
+    ]);
+
     const storageClaimId = req.body.claimId || 'unlinked';
     const storageCategory = req.body.categoryId || 'general';
+    const corporateId = user.corporateId || undefined;
     const results = [];
     const errors: string[] = [];
 
     for (const file of allFiles) {
       try {
-        const filename = `${randomUUID()}-${file.originalname}`;
+        if (!ALLOWED_TYPES.has(file.mimetype)) {
+          errors.push(`${file.originalname}: File type ${file.mimetype} not allowed`);
+          continue;
+        }
+
+        const ext = file.originalname.split('.').pop()?.toLowerCase() || 'bin';
+        const filename = `${randomUUID()}.${ext}`;
 
         const { key, size } = await storageService.uploadDocument(
           storageClaimId,
@@ -67,15 +84,14 @@ export const documentsService = {
           filename,
           file.buffer,
           file.mimetype,
+          corporateId,
         );
 
-        let pdfKey: string | null = null;
         const pdfConversion = await convertService.autoConvertToPdf(file.buffer, file.originalname, file.mimetype);
         if (pdfConversion) {
-          const pdfFilename = `${randomUUID()}-${pdfConversion.fileName}`;
-          const pdfResult = await storageService.uploadDocument(storageClaimId, storageCategory, pdfFilename, pdfConversion.buffer, 'application/pdf');
-          pdfKey = pdfResult.key;
-          logger.info({ originalKey: key, pdfKey }, 'Auto-converted document to PDF');
+          const pdfFilename = `${randomUUID()}.pdf`;
+          await storageService.uploadDocument(storageClaimId, storageCategory, pdfFilename, pdfConversion.buffer, 'application/pdf', corporateId);
+          logger.info({ originalKey: key }, 'Auto-converted document to PDF');
         }
 
         const createPayload: Record<string, unknown> = {
@@ -86,7 +102,6 @@ export const documentsService = {
           uploadedBy: user.userId,
         };
 
-        // Only set categoryId if it looks like a valid UUID
         const catId = req.body.categoryId;
         if (catId && typeof catId === 'string' && catId.length > 10) {
           createPayload.categoryId = catId;
@@ -97,8 +112,13 @@ export const documentsService = {
         }
 
         const doc = await documentsRepository.create(createPayload);
-        logger.info({ docId: doc.id, key, hasPdf: Boolean(pdfKey) }, 'Document uploaded');
+        logger.info({ docId: doc.id, key, size }, 'Document uploaded');
         results.push(doc);
+
+        if (env.GEMINI_API_KEY?.trim()) {
+          this._runAIExtraction(doc.id, { ...doc, s3Key: key, mimeType: file.mimetype, documentName: file.originalname, claimId: req.body.claimId || null })
+            .catch((err) => logger.warn({ err, docId: doc.id }, 'Auto AI extraction failed (non-blocking)'));
+        }
       } catch (fileErr: any) {
         logger.error({ err: fileErr, fileName: file.originalname }, 'Failed to process uploaded file');
         errors.push(`${file.originalname}: ${fileErr.message}`);
@@ -165,12 +185,62 @@ export const documentsService = {
 
       let textContent = '';
       if (doc.mimeType === 'application/pdf' || doc.mimeType?.includes('pdf')) {
-        textContent = body.toString('utf-8', 0, Math.min(body.length, 50000));
-        if (textContent.includes('%PDF')) {
-          textContent = `[PDF Document: ${doc.documentName}] Binary content - extracting metadata from filename and context.`;
+        try {
+          const parser = new PDFParse({ data: new Uint8Array(body) });
+          const pdfResult = await parser.getText();
+          textContent = pdfResult.text?.trim() || '';
+          if (!textContent) {
+            textContent = `[Scanned PDF: ${doc.documentName}] No extractable text — likely a scanned image. Pages: ${pdfResult.total}.`;
+          }
+          await parser.destroy().catch(() => {});
+        } catch (pdfErr) {
+          logger.warn({ err: pdfErr, docId: id }, 'pdf-parse failed, falling back to filename');
+          textContent = `[PDF Document: ${doc.documentName}] Could not extract text from this PDF.`;
         }
       } else if (doc.mimeType?.startsWith('image/')) {
-        textContent = `[Image Document: ${doc.documentName}] Image file - classify based on filename and context.`;
+        // Images go through multimodal analysis — Gemini can "see" the image
+        const ANALYSIS_PROMPT = `Analyze this freight/shipping image document and extract all relevant information.
+Document name: ${doc.documentName}
+
+Return JSON:
+{
+  "category": "bill_of_lading | proof_of_delivery | product_invoice | damage_photos | inspection_report | weight_certificate | packing_list | correspondence | carrier_response | insurance_certificate | other",
+  "confidence": 0.0-1.0,
+  "extractedFields": [
+    { "key": "field_name", "label": "Human Label", "value": "extracted value", "confidence": 0.0-1.0 }
+  ],
+  "summary": "Brief description of what this document is and key information found"
+}
+
+Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, damage_severity, visible_damage, etc. Only include fields that are present.`;
+
+        const extraction = await generateMultimodalJSON<{
+          category: string;
+          confidence: number;
+          extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>;
+          summary: string;
+        }>(
+          [
+            { inline_data: { mime_type: doc.mimeType, data: body.toString('base64') } },
+            { text: ANALYSIS_PROMPT },
+          ],
+          { systemInstruction: 'You are a freight document analysis AI. Classify documents and extract structured data from shipping documents, photos of damage, bills of lading, invoices, and inspection reports.' },
+        );
+
+        await prisma.aiDocument.create({
+          data: {
+            documentId: id,
+            claimId: doc.claimId || null,
+            agentType: 'intake',
+            extractedData: extraction as any,
+            confidence: extraction.confidence,
+            status: 'completed',
+          },
+        });
+
+        await documentsRepository.update(id, { aiProcessingStatus: 'completed' });
+        logger.info({ docId: id, category: extraction.category, confidence: extraction.confidence }, 'AI image extraction completed');
+        return;
       } else {
         textContent = body.toString('utf-8', 0, Math.min(body.length, 50000));
       }

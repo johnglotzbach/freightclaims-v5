@@ -12,9 +12,14 @@ import { logger } from '../../utils/logger';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
+export interface GeminiPart {
+  text?: string;
+  inline_data?: { mime_type: string; data: string };
+}
+
 export interface GeminiMessage {
   role: 'user' | 'model';
-  parts: { text: string }[];
+  parts: GeminiPart[];
 }
 
 export interface GeminiConfig {
@@ -202,7 +207,58 @@ export async function generateJSON<T = Record<string, unknown>>(
     config: { responseMimeType: 'application/json', temperature: 0.2 },
   });
 
-  // Strip markdown fences if present
+  const cleaned = text.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+  return JSON.parse(cleaned) as T;
+}
+
+/**
+ * Sends multimodal content (text + images/files) to Gemini and returns
+ * structured JSON. Used for image-based document analysis (damage photos, etc.).
+ */
+export async function generateMultimodalJSON<T = Record<string, unknown>>(
+  parts: GeminiPart[],
+  options: {
+    systemInstruction?: string;
+    model?: string;
+  } = {},
+): Promise<T> {
+  if (!env.GEMINI_API_KEY?.trim()) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const model = options.model || env.AI_MODEL;
+  const url = `${BASE_URL}/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+
+  const body: Record<string, unknown> = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 8192,
+      topP: 0.95,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  if (options.systemInstruction) {
+    body.systemInstruction = { parts: [{ text: options.systemInstruction }] };
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(90_000),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Gemini ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json() as GeminiResponse;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Empty Gemini multimodal response');
+
   const cleaned = text.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
   return JSON.parse(cleaned) as T;
 }

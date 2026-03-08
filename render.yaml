@@ -34,7 +34,7 @@ services:
     disk:
       name: freightclaims-uploads
       mountPath: /opt/render/project/uploads
-      sizeGB: 10
+      sizeGB: 50
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter database generate && pnpm --filter database push && pnpm --filter api build
     startCommand: pnpm --filter api start
     healthCheckPath: /health

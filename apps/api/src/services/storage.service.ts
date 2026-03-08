@@ -34,8 +34,20 @@ async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-function buildKey(claimId: string, category: string, filename: string): string {
-  return `claims/${claimId}/${category}/${filename}`;
+/**
+ * Builds a storage key organized by tenant/claim/category.
+ * Structure:  tenant/{corporateId}/claims/{claimId}/{category}/{filename}
+ *         or: tenant/_global/general/{filename}  (unlinked docs)
+ *
+ * This keeps each workspace's files physically separated on disk,
+ * makes browsing/debugging easier, and prepares for per-tenant quotas.
+ */
+function buildKey(claimId: string, category: string, filename: string, corporateId?: string): string {
+  const tenant = corporateId || '_global';
+  if (claimId === 'unlinked') {
+    return `tenant/${tenant}/general/${filename}`;
+  }
+  return `tenant/${tenant}/claims/${claimId}/${category}/${filename}`;
 }
 
 function localPath(key: string): string {
@@ -166,8 +178,9 @@ export const storageService = {
     filename: string,
     body: Buffer,
     contentType: string,
+    corporateId?: string,
   ): Promise<{ key: string; size: number }> {
-    const key = buildKey(claimId, category, filename);
+    const key = buildKey(claimId, category, filename, corporateId);
     await backend.upload(key, body, contentType, claimId, category, filename);
     logger.info({ key, size: body.length, backend: useS3 ? 's3' : 'local' }, 'Document uploaded');
     return { key, size: body.length };

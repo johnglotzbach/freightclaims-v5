@@ -1,6 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { prisma } from '../config/database';
+import path from 'path';
+import fs from 'fs/promises';
+import { env } from '../config/env';
 
 export const adminRouter: Router = Router();
 
@@ -151,6 +154,97 @@ adminRouter.get('/user-stats/:userId', authorize(['admin']), async (req: Request
           totalClaimValue: Number(claimStats._sum?.claimAmount ?? 0),
           totalSettledValue: Number(claimStats._sum?.settledAmount ?? 0),
         },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Storage analytics: disk usage broken down by tenant/workspace.
+ * Only available to super admins.
+ */
+adminRouter.get('/storage-stats', authorize(['admin']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!(req as any).user?.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'Super admin required' });
+    }
+
+    const uploadDir = path.resolve(env.LOCAL_UPLOAD_DIR);
+
+    async function dirSize(dir: string): Promise<number> {
+      let total = 0;
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            total += await dirSize(full);
+          } else if (!entry.name.endsWith('.meta.json')) {
+            const stat = await fs.stat(full);
+            total += stat.size;
+          }
+        }
+      } catch { /* dir doesn't exist yet */ }
+      return total;
+    }
+
+    async function fileCount(dir: string): Promise<number> {
+      let count = 0;
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            count += await fileCount(path.join(dir, entry.name));
+          } else if (!entry.name.endsWith('.meta.json')) {
+            count++;
+          }
+        }
+      } catch { /* dir doesn't exist yet */ }
+      return count;
+    }
+
+    const totalBytes = await dirSize(uploadDir);
+    const totalFiles = await fileCount(uploadDir);
+
+    const tenantDir = path.join(uploadDir, 'tenant');
+    const byWorkspace: Array<{ workspaceId: string; workspaceName: string; bytes: number; files: number }> = [];
+
+    try {
+      const tenants = await fs.readdir(tenantDir, { withFileTypes: true });
+      for (const t of tenants) {
+        if (t.isDirectory()) {
+          const tPath = path.join(tenantDir, t.name);
+          const bytes = await dirSize(tPath);
+          const files = await fileCount(tPath);
+          let workspaceName = t.name;
+          if (t.name !== '_global') {
+            const ws = await prisma.customer.findUnique({ where: { id: t.name }, select: { name: true } });
+            workspaceName = ws?.name || t.name;
+          }
+          byWorkspace.push({ workspaceId: t.name, workspaceName, bytes, files });
+        }
+      }
+    } catch { /* tenant dir doesn't exist yet */ }
+
+    const dbDocStats = await prisma.claimDocument.aggregate({ _count: true, _sum: { fileSize: true } });
+
+    res.json({
+      success: true,
+      data: {
+        disk: {
+          totalBytes,
+          totalFiles,
+          totalMB: Math.round(totalBytes / 1024 / 1024 * 100) / 100,
+          diskCapacityGB: 10,
+          usedPercent: Math.round((totalBytes / (10 * 1024 * 1024 * 1024)) * 10000) / 100,
+        },
+        database: {
+          totalDocuments: (dbDocStats._count as any) ?? 0,
+          totalTrackedBytes: Number(dbDocStats._sum?.fileSize ?? 0),
+        },
+        byWorkspace: byWorkspace.sort((a, b) => b.bytes - a.bytes),
       },
     });
   } catch (err) {
