@@ -33,8 +33,8 @@ aiRouter.get('/health', async (_req, res) => {
   }
 
   try {
-    const result = await generateContent('Reply with exactly: OK', {
-      config: { maxOutputTokens: 10, temperature: 0 },
+    const result = await generateContent('What is a freight claim? Answer in one sentence.', {
+      config: { maxOutputTokens: 100, temperature: 0.3 },
     });
     res.json({
       status: 'ok',
