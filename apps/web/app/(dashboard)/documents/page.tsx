@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, getList, del, post, uploadFile } from '@/lib/api-client';
+import { get, getList, del, post, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
@@ -69,7 +69,7 @@ export default function DocumentsPage() {
   const [category, setCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selected, setSelected] = useState<string[]>([]);
-  const [viewingDoc, setViewingDoc] = useState<{ url: string; name: string } | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<{ url: string; name: string; type?: string } | null>(null);
   const [uploadClaimId, setUploadClaimId] = useState<string>('');
   const [showUploadPanel, setShowUploadPanel] = useState(false);
 
@@ -196,13 +196,8 @@ export default function DocumentsPage() {
 
   async function handleView(doc: Document) {
     try {
-      const result = await get<{ url: string }>(`/documents/${doc.id}/url`);
-      const url = (result as any)?.url || (result as any)?.data?.url;
-      if (url) {
-        setViewingDoc({ url, name: doc.name });
-      } else {
-        toast.error('Could not get document URL');
-      }
+      const { blobUrl, contentType } = await fetchDocumentBlob(doc.id);
+      setViewingDoc({ url: blobUrl, name: doc.name, type: contentType });
     } catch {
       toast.error('Failed to load document preview');
     }
@@ -210,15 +205,16 @@ export default function DocumentsPage() {
 
   async function handleDownload(doc: Document) {
     try {
-      const result = await get<{ url: string }>(`/documents/${doc.id}/url`);
-      const url = (result as any)?.url || (result as any)?.data?.url;
-      if (url) {
-        window.open(url, '_blank');
-      } else {
-        toast.error('Could not get download URL');
-      }
+      const { blobUrl } = await fetchDocumentBlob(doc.id);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = doc.name || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch {
-      toast.error('Failed to get download URL');
+      toast.error('Failed to download document');
     }
   }
 
@@ -477,7 +473,8 @@ export default function DocumentsPage() {
         <PdfViewer
           url={viewingDoc.url}
           fileName={viewingDoc.name}
-          onClose={() => setViewingDoc(null)}
+          contentType={viewingDoc.type}
+          onClose={() => { URL.revokeObjectURL(viewingDoc.url); setViewingDoc(null); }}
         />
       )}
     </div>

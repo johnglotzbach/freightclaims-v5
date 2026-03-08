@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getList, post, apiClient, uploadFile } from '@/lib/api-client';
+import { getList, post, apiClient, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -329,6 +329,18 @@ function ReviewDataCapture({
   const docType = (doc.category || doc.documentType || 'other').toLowerCase().replace(/ /g, '_');
   const [activeDocTab, setActiveDocTab] = useState(docType);
   const [zoom, setZoom] = useState(100);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobType, setBlobType] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (doc.id) {
+      fetchDocumentBlob(doc.id).then(({ blobUrl: url, contentType }) => {
+        if (!cancelled) { setBlobUrl(url); setBlobType(contentType); }
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; if (blobUrl) URL.revokeObjectURL(blobUrl); };
+  }, [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const docTabs = allDocuments
     .reduce((acc, d) => {
@@ -410,18 +422,29 @@ function ReviewDataCapture({
               </button>
             </div>
           </div>
-          <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-8 overflow-auto">
-            <div
-              className="bg-white dark:bg-slate-800 shadow-lg rounded-lg w-full max-w-lg aspect-[8.5/11] flex items-center justify-center border border-slate-200 dark:border-slate-700"
-              style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center' }}
-            >
+          <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex items-center justify-center overflow-auto">
+            {blobUrl ? (
+              blobType.startsWith('image/') ? (
+                <img
+                  src={blobUrl}
+                  alt={doc.documentName || 'Document'}
+                  className="max-w-full max-h-full object-contain"
+                  style={{ transform: `scale(${zoom / 100})` }}
+                />
+              ) : (
+                <iframe
+                  src={`${blobUrl}#toolbar=0&zoom=${zoom}`}
+                  className="w-full h-full border-0"
+                  title={doc.documentName || 'Document'}
+                />
+              )
+            ) : (
               <div className="text-center p-8">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-sm text-slate-500 font-medium">{doc.documentName || doc.fileName || 'Document'}</p>
-                <p className="text-xs text-slate-400 mt-1">{doc.mimeType || 'Document preview'}</p>
-                <p className="text-xs text-slate-400 mt-1">{doc.summary || ''}</p>
+                <p className="text-xs text-slate-400 mt-1">Loading preview...</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

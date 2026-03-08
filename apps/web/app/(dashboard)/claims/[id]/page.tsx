@@ -5,14 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { get, put, post, del, getList, apiClient, uploadFile } from '@/lib/api-client';
+import { get, put, post, del, getList, apiClient, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
+import { PdfViewer } from '@/components/pdf-viewer';
 import { cn, getStatusBadgeClass } from '@/lib/utils';
 import { formatCurrency, formatDate, formatDateTime, CLAIM_STATUSES, CARMACK_TIMELINES, daysBetween } from 'shared';
 import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
 import {
   Edit2, Mail, MoreHorizontal, ChevronRight,
   Plus, AlertTriangle, CheckCircle, Clock, Send,
-  FileDown, Trash2,
+  FileDown, Trash2, Eye, Download,
 } from 'lucide-react';
 
 type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'emails-automation' | 'transactions' | 'additional' | 'comments';
@@ -503,6 +504,27 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{ url: string; name: string; type?: string } | null>(null);
+
+  async function handleViewDoc(doc: any) {
+    try {
+      const { blobUrl, contentType } = await fetchDocumentBlob(doc.id);
+      setViewingDoc({ url: blobUrl, name: doc.documentName, type: contentType });
+    } catch { toast.error('Failed to load preview'); }
+  }
+
+  async function handleDownloadDoc(doc: any) {
+    try {
+      const { blobUrl } = await fetchDocumentBlob(doc.id);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = doc.documentName || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch { toast.error('Failed to download'); }
+  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const fileList = e.target.files;
@@ -556,6 +578,7 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Size</th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Uploaded</th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">AI</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
@@ -574,11 +597,25 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => handleViewDoc(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
+                      <button onClick={() => handleDownloadDoc(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {viewingDoc && (
+        <PdfViewer
+          url={viewingDoc.url}
+          fileName={viewingDoc.name}
+          contentType={viewingDoc.type}
+          onClose={() => { URL.revokeObjectURL(viewingDoc.url); setViewingDoc(null); }}
+        />
       )}
     </div>
   );

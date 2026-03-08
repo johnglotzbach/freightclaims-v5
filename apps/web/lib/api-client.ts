@@ -174,4 +174,25 @@ export async function uploadFile(path: string, formData: FormData): Promise<any>
   return data;
 }
 
+/**
+ * Fetch a document binary with auth and return an object URL for inline viewing.
+ * Uses the download endpoint directly via the API server.
+ */
+export async function fetchDocumentBlob(docId: string): Promise<{ blobUrl: string; contentType: string }> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const corpId = typeof window !== 'undefined' ? localStorage.getItem('fc-impersonate-corporate') : null;
+  if (corpId) headers['X-Corporate-Id'] = corpId;
+
+  const base = getUploadBase();
+  const url = `${base}/documents/${docId}/download`;
+
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  return { blobUrl, contentType: blob.type };
+}
+
 export { client as apiClient };
