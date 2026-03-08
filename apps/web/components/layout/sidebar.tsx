@@ -20,22 +20,22 @@ const navItems = [
   { label: 'Claims', href: '/claims/list', icon: FileText },
   { label: 'Dashboard', href: '/claims', icon: BarChart3 },
   { label: 'AI Entry', href: '/ai-entry', icon: Sparkles },
+  { label: 'Insights', href: '/reports', icon: TrendingUp },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
   { label: 'Companies', href: '/companies', icon: Building2 },
-  { label: 'Shipments', href: '/shipments', icon: Truck },
   { label: 'Documents', href: '/documents', icon: FolderOpen },
-  { label: 'Contracts', href: '/contracts', icon: ScrollText },
   { label: 'Reports', href: '/reports/export', icon: FileSearch },
   { label: 'AI Tools', href: '/ai', icon: Bot },
 ];
 
 const companySubItems = [
+  { label: 'Customers', href: '/customers' },
+  { label: 'Capacity Providers', href: '/companies/carriers' },
+  { label: 'Insurance', href: '/companies/suppliers' },
   { label: 'All Companies', href: '/companies' },
-  { label: 'Carriers', href: '/companies/carriers' },
-  { label: 'Suppliers', href: '/companies/suppliers' },
-  { label: 'Locations', href: '/companies/locations' },
-  { label: 'Contacts', href: '/companies/contacts' },
-  { label: 'Products', href: '/companies/products' },
+  { label: 'All Contacts', href: '/companies/contacts' },
+  { label: 'All Products', href: '/companies/products' },
+  { label: 'All Locations', href: '/companies/locations' },
 ];
 
 const aiSubItems = [
@@ -102,6 +102,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   function isActive(href: string) {
     if (href === '/claims/list') return pathname === '/claims/list' || (pathname.startsWith('/claims/') && !pathname.startsWith('/claims/settings') && pathname !== '/claims');
     if (href === '/claims') return pathname === '/claims';
+    if (href === '/reports') return pathname === '/reports';
     if (href === '/reports/export') return pathname === '/reports/export' || pathname.startsWith('/reports/new');
     if (href === '/companies') return pathname === '/companies' && !pathname.includes('/');
     if (href === '/ai') return pathname === '/ai' || pathname.startsWith('/ai/');

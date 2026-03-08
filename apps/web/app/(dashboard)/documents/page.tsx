@@ -15,8 +15,10 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  'All', 'Bill of Lading', 'Proof of Delivery', 'Invoice', 'Damage Photos',
-  'Inspection Report', 'Carrier Response', 'Settlement', 'Correspondence',
+  'All', 'Bill of Lading', 'Freight Invoice', 'Product Invoice',
+  'Delivery Receipt or Proof of Delivery', 'Inspection Report',
+  'Freight Damage Photo', 'Concealed Damage', 'Reefer Log',
+  'Internal Pictures', 'Insurance Certificate', 'Carrier Communication', 'Other',
 ];
 
 interface Document {
@@ -35,11 +37,16 @@ interface Document {
 function getTypeColor(category: string) {
   const colors: Record<string, string> = {
     'Bill of Lading': 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400',
+    'Freight Invoice': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400',
     'Product Invoice': 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400',
-    'Invoice': 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400',
-    'Proof of Delivery': 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400',
-    'Delivery Receipt': 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400',
-    'Damage Photos': 'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400',
+    'Delivery Receipt or Proof of Delivery': 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400',
+    'Inspection Report': 'bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400',
+    'Freight Damage Photo': 'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400',
+    'Concealed Damage': 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
+    'Reefer Log': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400',
+    'Internal Pictures': 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+    'Insurance Certificate': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
+    'Carrier Communication': 'bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400',
     'Other': 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
   };
   return colors[category] || colors['Other'];

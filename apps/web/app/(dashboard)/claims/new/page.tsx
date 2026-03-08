@@ -49,12 +49,17 @@ const CLAIM_MODES = ['LTL', 'FTL', 'Flatbed', 'Air', 'Ocean', 'Rail', 'Parcel', 
 const CLAIM_CONDITIONS = ['Broken', 'Crushed', 'Water Damage', 'Missing Parts', 'Contaminated', 'Pilferage', 'Temperature Damage', 'Short', 'Refused', 'Other'];
 const DOC_CATEGORIES = [
   { key: 'bol', label: 'Bill of Lading' },
-  { key: 'invoice', label: 'Product Invoice' },
+  { key: 'freight-invoice', label: 'Freight Invoice' },
+  { key: 'product-invoice', label: 'Product Invoice' },
   { key: 'pod', label: 'Delivery Receipt or Proof of Delivery' },
   { key: 'inspection', label: 'Inspection Report' },
   { key: 'photos', label: 'Freight Damage Photo' },
-  { key: 'carrier', label: 'Carrier Communication' },
   { key: 'other', label: 'Other' },
+  { key: 'concealed', label: 'Concealed Damage' },
+  { key: 'reefer', label: 'Reefer Log' },
+  { key: 'internal', label: 'Internal Pictures' },
+  { key: 'insurance', label: 'Insurance Certificate' },
+  { key: 'misc', label: 'Misc doc' },
 ];
 
 const IDENTIFIER_TYPES = [
