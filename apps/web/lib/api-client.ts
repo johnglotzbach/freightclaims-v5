@@ -126,12 +126,28 @@ export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<
 }
 
 /**
+ * Resolves the direct API base URL for file uploads at runtime.
+ * Next.js rewrites corrupt multipart bodies, so uploads go directly to the API.
+ * No env var needed — detects Render deployment from window.location.
+ */
+function getUploadBase(): string {
+  if (typeof window === 'undefined') return '/api/v1';
+
+  const env = process.env.NEXT_PUBLIC_UPLOAD_URL;
+  if (env) return env;
+
+  const host = window.location.hostname;
+  if (host.includes('-web.onrender.com')) {
+    return `https://${host.replace('-web.onrender.com', '-api.onrender.com')}/api/v1`;
+  }
+
+  return '/api/v1';
+}
+
+/**
  * Direct file upload using the browser's native fetch — bypasses the Next.js
  * proxy entirely and sends multipart/form-data straight to the API server.
- * This avoids body corruption issues with Next.js rewrites/Route Handlers.
  */
-const UPLOAD_BASE = process.env.NEXT_PUBLIC_UPLOAD_URL || process.env.NEXT_PUBLIC_API_DIRECT_URL || '';
-
 export async function uploadFile(path: string, formData: FormData): Promise<any> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const headers: Record<string, string> = {};
@@ -139,13 +155,13 @@ export async function uploadFile(path: string, formData: FormData): Promise<any>
   const corpId = typeof window !== 'undefined' ? localStorage.getItem('fc-impersonate-corporate') : null;
   if (corpId) headers['X-Corporate-Id'] = corpId;
 
-  const url = UPLOAD_BASE ? `${UPLOAD_BASE}${path}` : `/api/v1${path}`;
+  const base = getUploadBase();
+  const url = `${base}${path}`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers,
     body: formData,
-    credentials: 'include',
     signal: AbortSignal.timeout(120_000),
   });
 
