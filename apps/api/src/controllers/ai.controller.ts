@@ -48,13 +48,18 @@ export const aiController = {
   getAIDocuments: asyncHandler(async (req, res) => {
     const user = getUser(req);
 
-    const tenantWhere: Record<string, unknown> = {};
+    let whereClause: any = {};
     if (!user.isSuperAdmin && user.corporateId) {
-      tenantWhere.claim = { corporateId: user.corporateId };
+      whereClause = {
+        OR: [
+          { claim: { corporateId: user.corporateId } },
+          { claimId: null },
+        ],
+      };
     }
 
     const aiDocs = await prisma.aiDocument.findMany({
-      where: tenantWhere as any,
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: {

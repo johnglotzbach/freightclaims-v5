@@ -159,6 +159,7 @@ export default function ShipmentsPage() {
 
       {/* Shipments Table */}
       <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
@@ -173,24 +174,34 @@ export default function ShipmentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-            {filtered.map(s => (
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Search className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No shipments match your search</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Try adjusting your filters or search term</p>
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.map(s => (
               <React.Fragment key={s.id}>
                 <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}>
                   <td className="px-4 py-3">
                     <p className="font-mono font-semibold text-slate-900 dark:text-white">{s.proNumber}</p>
                     <p className="text-[10px] text-slate-400">{s.bolNumber}</p>
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-slate-900 dark:text-white">{s.carrierName}</p>
+                  <td className="px-4 py-3 min-w-0">
+                    <p className="font-medium text-slate-900 dark:text-white truncate">{s.carrierName}</p>
                     <p className="text-[10px] font-mono text-slate-400">{s.carrierScac}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 text-xs">
-                      <MapPin className="w-3 h-3 text-emerald-500" />
-                      <span>{s.originCity}, {s.originState}</span>
-                      <ArrowRight className="w-3 h-3 text-slate-300 mx-1" />
-                      <MapPin className="w-3 h-3 text-red-400" />
-                      <span>{s.destinationCity}, {s.destinationState}</span>
+                    <div className="flex items-center gap-1 text-xs whitespace-nowrap min-w-0">
+                      <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                      <span className="truncate">{s.originCity}, {s.originState}</span>
+                      <ArrowRight className="w-3 h-3 text-slate-300 mx-1 shrink-0" />
+                      <MapPin className="w-3 h-3 text-red-400 shrink-0" />
+                      <span className="truncate">{s.destinationCity}, {s.destinationState}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{s.shipDate}</td>
@@ -222,6 +233,7 @@ export default function ShipmentsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

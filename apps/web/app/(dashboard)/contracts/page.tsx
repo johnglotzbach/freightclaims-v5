@@ -419,6 +419,7 @@ function ContractsList({ contracts, search, onEdit, onDelete }: { contracts: Con
 
   return (
     <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100 dark:border-slate-700">
@@ -437,7 +438,7 @@ function ContractsList({ contracts, search, onEdit, onDelete }: { contracts: Con
               <Fragment key={contract.id}>
                 <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900 dark:text-white">{contract.name}</div>
+                    <div className="font-medium text-slate-900 dark:text-white truncate">{contract.name}</div>
                     {contract.contractNumber && <div className="text-xs text-slate-400">#{contract.contractNumber}</div>}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
@@ -501,6 +502,7 @@ function ContractsList({ contracts, search, onEdit, onDelete }: { contracts: Con
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -518,6 +520,7 @@ function InsuranceList({ certificates, search, onEdit, onDelete }: { certificate
 
   return (
     <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100 dark:border-slate-700">
@@ -536,7 +539,7 @@ function InsuranceList({ certificates, search, onEdit, onDelete }: { certificate
             return (
               <tr key={cert.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900 dark:text-white">{cert.provider}</div>
+                  <div className="font-medium text-slate-900 dark:text-white truncate">{cert.provider}</div>
                   <div className="text-xs text-slate-400">#{cert.certificateNumber}</div>
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
@@ -577,6 +580,7 @@ function InsuranceList({ certificates, search, onEdit, onDelete }: { certificate
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

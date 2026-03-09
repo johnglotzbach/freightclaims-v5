@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -54,6 +54,17 @@ export default function ClaimEmailPage() {
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(e.target as Node)) {
+        setShowAttachmentMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ['claim-emails', id],
@@ -239,7 +250,7 @@ export default function ClaimEmailPage() {
 
             {/* Actions */}
             <div className="flex items-center justify-between pt-2">
-              <div className="relative">
+              <div className="relative" ref={attachmentMenuRef}>
                 <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 font-medium">
                   <Paperclip className="w-4 h-4" /> Attach <ChevronDown className="w-3 h-3" />
                 </button>

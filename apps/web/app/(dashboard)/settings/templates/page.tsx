@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getList, post, put, del } from '@/lib/api-client';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
@@ -227,6 +227,17 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving 
   const [subject, setSubject] = useState(template.subject || '');
   const [body, setBody] = useState(template.body);
   const [showVars, setShowVars] = useState(false);
+  const varsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (varsRef.current && !varsRef.current.contains(e.target as Node)) {
+        setShowVars(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   function insertVariable(v: string) {
     setBody(body + v);
@@ -259,7 +270,7 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving 
             <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><List className="w-4 h-4 text-slate-500" /></button>
           </>
         )}
-        <div className="relative">
+        <div className="relative" ref={varsRef}>
           <button onClick={() => setShowVars(!showVars)} className="flex items-center gap-1 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-xs text-purple-500 font-medium"><Variable className="w-4 h-4" /> Variables</button>
           {showVars && (
             <div className="absolute left-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-10 p-2 max-h-48 overflow-y-auto">

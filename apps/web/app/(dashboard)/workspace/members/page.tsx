@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { get, post, put, del } from '@/lib/api-client';
@@ -49,6 +49,17 @@ export default function WorkspaceMembersPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [inviteForm, setInviteForm] = useState({ email: '', firstName: '', lastName: '', password: '', roleId: '' });
 
   const canManage = user?.isSuperAdmin || hasPermission('users.manage');
@@ -134,7 +145,7 @@ export default function WorkspaceMembersPage() {
   function renderActionsMenu(m: Member) {
     if (!canManage) return null;
     return (
-      <div className="relative">
+      <div className="relative" ref={menuRef}>
         <button
           onClick={() => toggleMenu(m.id)}
           className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"

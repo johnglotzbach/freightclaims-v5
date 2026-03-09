@@ -72,9 +72,33 @@ export const documentsController = {
 
   linkDocumentsToClaim: asyncHandler(async (req, res) => {
     const user = getUser(req);
-    const { claimId, documentIds } = req.body;
-    if (!claimId || !Array.isArray(documentIds) || documentIds.length === 0) {
-      res.status(400).json({ success: false, error: 'claimId and documentIds[] are required' });
+    const { claimId, documentIds, createClaim } = req.body;
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      res.status(400).json({ success: false, error: 'documentIds[] is required' });
+      return;
+    }
+
+    if (createClaim && !claimId) {
+      const { prisma: db } = await import('../config/database');
+      const claim = await db.claim.create({
+        data: {
+          claimNumber: `CLM-${Date.now().toString(36).toUpperCase()}`,
+          proNumber: 'PENDING',
+          status: 'draft',
+          claimType: 'damage',
+          claimAmount: 0,
+          corporateId: user.corporateId || '',
+          customerId: user.corporateId || '',
+          createdById: user.userId,
+        },
+      });
+      const result = await documentsService.linkDocumentsToClaim(claim.id, documentIds, user);
+      res.json({ success: true, data: { claimId: claim.id, claimNumber: claim.claimNumber, linked: result } });
+      return;
+    }
+
+    if (!claimId) {
+      res.status(400).json({ success: false, error: 'claimId is required (or pass createClaim: true)' });
       return;
     }
     const result = await documentsService.linkDocumentsToClaim(claimId, documentIds, user);

@@ -192,7 +192,17 @@ export default function CompaniesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-              {filtered.map((company) => {
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <Search className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No companies match your search</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">Try adjusting your filters or search term</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filtered.map((company) => {
                 const config = typeConfig[getType(company)] || typeConfig.customer;
                 const TypeIcon = config.icon;
                 return (
@@ -202,13 +212,13 @@ export default function CompaniesPage() {
                     onClick={() => router.push(`/customers/${company.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', config.color)}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', config.color)}>
                           <TypeIcon className="w-4 h-4" />
                         </div>
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white">{company.name}</div>
-                          {company.email && <div className="text-xs text-slate-400">{company.email}</div>}
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 dark:text-white truncate">{company.name}</div>
+                          {company.email && <div className="text-xs text-slate-400 truncate">{company.email}</div>}
                         </div>
                       </div>
                     </td>
