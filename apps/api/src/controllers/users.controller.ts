@@ -8,8 +8,17 @@ import type { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { usersService } from '../services/users.service';
+import { storageService } from '../services/storage.service';
 import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
+
+const ALLOWED_AVATAR_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -369,6 +378,38 @@ export const usersController = {
     }
     const invited = await usersService.inviteToWorkspace(req.body, corporateId);
     res.status(201).json(invited);
+  }),
+
+  uploadAvatar: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+    if (!ALLOWED_AVATAR_MIMES.has(file.mimetype)) {
+      res.status(400).json({ error: 'Only JPEG, PNG, GIF, and WebP images are allowed' });
+      return;
+    }
+    const ext = MIME_TO_EXT[file.mimetype] || 'png';
+    const filename = `${user.userId}.${ext}`;
+    const { key } = await storageService.uploadDocument('_system', 'avatars', filename, file.buffer, file.mimetype);
+    await prisma.user.update({ where: { id: user.userId }, data: { avatarUrl: key } as any });
+    res.json({ success: true, avatarUrl: key });
+  }),
+
+  getAvatar: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
+    const avatarUrl = (dbUser as any)?.avatarUrl as string | null;
+    if (!avatarUrl) {
+      res.status(404).json({ error: 'No avatar set' });
+      return;
+    }
+    const { body, contentType } = await storageService.downloadDocument(avatarUrl);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(body);
   }),
 };
 

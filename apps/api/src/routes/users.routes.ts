@@ -8,6 +8,7 @@
  * Related: apps/api/src/controllers/users.controller.ts
  */
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { authLimiter } from '../middleware/rate-limiter.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -20,6 +21,8 @@ import {
   changePasswordSchema,
   preferencesSchema,
 } from '../validators/common.validators';
+
+const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 export const usersRouter: Router = Router();
 
@@ -39,6 +42,8 @@ usersRouter.put('/me', validate(updateUserSchema), usersController.updateCurrent
 usersRouter.put('/me/password', validate(changePasswordSchema), usersController.changePassword);
 usersRouter.get('/me/preferences', usersController.getPreferences);
 usersRouter.put('/me/preferences', validate(preferencesSchema), usersController.updatePreferences);
+usersRouter.post('/me/avatar', avatarUpload.single('avatar'), usersController.uploadAvatar);
+usersRouter.get('/me/avatar', usersController.getAvatar);
 
 // Roles (must be before /:id)
 usersRouter.get('/roles/all', authorize(['admin']), usersController.getRoles);

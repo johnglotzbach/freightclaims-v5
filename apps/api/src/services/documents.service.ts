@@ -296,13 +296,15 @@ Document name: ${doc.documentName}
 
 Return JSON:
 {
-  "category": "bill_of_lading | proof_of_delivery | product_invoice | damage_photos | inspection_report | weight_certificate | packing_list | correspondence | carrier_response | insurance_certificate | other",
+  "category": "ONE of: bill_of_lading, proof_of_delivery, delivery_receipt, product_invoice, commercial_invoice, claim_form, damage_photos, inspection_report, weight_certificate, packing_list, rate_confirmation, notice_of_claim, carrier_response, insurance_certificate, purchase_order, freight_bill, correspondence, other",
   "confidence": 0.0-1.0,
   "extractedFields": [
     { "key": "field_name", "label": "Human Label", "value": "extracted value", "confidence": 0.0-1.0 }
   ],
   "summary": "Brief description of what this document is and key information found"
 }
+
+Be very specific with the category. A BOL is bill_of_lading. A signed delivery is proof_of_delivery. An invoice for goods is product_invoice. A freight carrier invoice is freight_bill. A claim filing form is claim_form. Photos showing damage are damage_photos. A rate quote/confirmation is rate_confirmation. A letter notifying of a claim is notice_of_claim. Do NOT default to product_invoice unless the document is truly a product/commercial invoice.
 
 Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, damage_severity, visible_damage, etc. Only include fields that are present.`;
 
@@ -354,13 +356,15 @@ ${textContent.slice(0, 8000)}
 
 Return JSON:
 {
-  "category": "bill_of_lading | proof_of_delivery | product_invoice | damage_photos | inspection_report | weight_certificate | packing_list | correspondence | carrier_response | insurance_certificate | other",
+  "category": "ONE of: bill_of_lading, proof_of_delivery, delivery_receipt, product_invoice, commercial_invoice, claim_form, damage_photos, inspection_report, weight_certificate, packing_list, rate_confirmation, notice_of_claim, carrier_response, insurance_certificate, purchase_order, freight_bill, correspondence, other",
   "confidence": 0.0-1.0,
   "extractedFields": [
     { "key": "field_name", "label": "Human Label", "value": "extracted value", "confidence": 0.0-1.0 }
   ],
   "summary": "Brief description of what this document is and key information found"
 }
+
+Be very specific with the category. A BOL is bill_of_lading. A signed delivery is proof_of_delivery. An invoice for goods is product_invoice. A freight carrier invoice is freight_bill. A claim filing form is claim_form. Photos showing damage are damage_photos. A rate quote/confirmation is rate_confirmation. A letter notifying of a claim is notice_of_claim. Do NOT default to product_invoice unless the document is truly a product/commercial invoice.
 
 Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, etc. Only include fields that are present in the document.`,
         { systemInstruction: 'You are a freight document analysis AI. Classify documents and extract structured data from shipping documents, bills of lading, invoices, and damage reports.' },

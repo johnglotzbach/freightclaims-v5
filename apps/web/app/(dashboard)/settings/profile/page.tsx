@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { get, put } from '@/lib/api-client';
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { get, put, uploadFile } from '@/lib/api-client';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -46,6 +46,7 @@ export default function ProfileSettingsPage() {
 }
 
 function GeneralTab() {
+  const queryClient = useQueryClient();
   const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
   const { data: prefs } = useQuery({ queryKey: ['preferences'], queryFn: () => get<any>('/users/me/preferences') });
   const [firstName, setFirstName] = useState('');
@@ -53,6 +54,8 @@ function GeneralTab() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -75,14 +78,51 @@ function GeneralTab() {
     onError: (err: Error) => toast.error(err.message || 'Failed to save profile'),
   });
 
+  const avatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      return uploadFile('/users/me/avatar', formData);
+    },
+    onSuccess: () => {
+      toast.success('Profile picture updated');
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
+    onError: () => toast.error('Failed to upload profile picture'),
+  });
+
+  const handleAvatarClick = () => fileInputRef.current?.click();
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5 MB');
+      return;
+    }
+    setAvatarPreview(URL.createObjectURL(file));
+    avatarMutation.mutate(file);
+  };
+
   const initials = `${(firstName || '?')[0]}${(lastName || '?')[0]}`.toUpperCase();
+  const avatarSrc = avatarPreview || (user?.avatarUrl ? `/api/v1/users/me/avatar?t=${Date.now()}` : null);
 
   return (
     <div className="card p-6 space-y-5 max-w-2xl">
       <div className="flex items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
         <div className="relative">
-          <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-2xl font-bold text-primary-600">{initials}</div>
-          <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-primary-500 rounded-full flex items-center justify-center text-white shadow-lg"><Camera className="w-3.5 h-3.5" /></button>
+          {avatarSrc ? (
+            <img src={avatarSrc} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-primary-200" />
+          ) : (
+            <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-2xl font-bold text-primary-600">{initials}</div>
+          )}
+          <button onClick={handleAvatarClick} disabled={avatarMutation.isPending} className="absolute -bottom-1 -right-1 w-7 h-7 bg-primary-500 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-primary-600 transition-colors disabled:opacity-50">
+            {avatarMutation.isPending ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
         </div>
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white">{firstName} {lastName}</h3>

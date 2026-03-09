@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
   Users, UserPlus, Search, Key, Ban, CheckCircle,
   MoreVertical, Mail, Shield, Calendar, X,
+  Clock, Trash2, UserCog, Activity,
 } from 'lucide-react';
 
 interface Member {
@@ -33,12 +34,21 @@ function extractItems(raw: unknown): any[] {
   return [];
 }
 
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export default function WorkspaceMembersPage() {
   const { user, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
   const [inviteForm, setInviteForm] = useState({ email: '', firstName: '', lastName: '', password: '', roleId: '' });
 
   const canManage = user?.isSuperAdmin || hasPermission('users.manage');
@@ -62,6 +72,9 @@ export default function WorkspaceMembersPage() {
     `${m.firstName} ${m.lastName}`.toLowerCase().includes(search.toLowerCase())
   );
 
+  const activeCount = members.filter(m => m.isActive).length;
+  const uniqueRoles = new Set(members.map(m => m.roleName || m.role || 'User'));
+
   const inviteMutation = useMutation({
     mutationFn: (data: typeof inviteForm) => post('/users/invite', data),
     onSuccess: () => {
@@ -79,8 +92,135 @@ export default function WorkspaceMembersPage() {
     onError: () => toast.error('Failed to reset password'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => del(`/users/${userId}`),
+    onSuccess: () => {
+      toast.success('Member removed successfully');
+      queryClient.invalidateQueries({ queryKey: ['workspace-members'] });
+      setMenuOpen(null);
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to remove member'),
+  });
+
+  const changeRoleMutation = useMutation({
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
+      put(`/users/${userId}`, { roleId }),
+    onSuccess: () => {
+      toast.success('Role updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['workspace-members'] });
+      setMenuOpen(null);
+      setChangingRoleFor(null);
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to update role'),
+  });
+
+  function handleRemove(member: Member) {
+    const confirmed = window.confirm(
+      `Remove ${member.firstName} ${member.lastName} from the team? This action cannot be undone.`
+    );
+    if (confirmed) deleteMutation.mutate(member.id);
+  }
+
+  function toggleMenu(memberId: string) {
+    if (menuOpen === memberId) {
+      setMenuOpen(null);
+      setChangingRoleFor(null);
+    } else {
+      setMenuOpen(memberId);
+      setChangingRoleFor(null);
+    }
+  }
+
+  function renderActionsMenu(m: Member) {
+    if (!canManage) return null;
+    return (
+      <div className="relative">
+        <button
+          onClick={() => toggleMenu(m.id)}
+          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+        {menuOpen === m.id && (
+          <div className="absolute right-0 top-full z-20 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 mt-1">
+            {changingRoleFor === m.id ? (
+              <>
+                <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+                  Select Role
+                </div>
+                {roles.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => changeRoleMutation.mutate({ userId: m.id, roleId: r.id })}
+                    disabled={changeRoleMutation.isPending}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-slate-400" />
+                    {r.name}
+                  </button>
+                ))}
+                <div className="border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">
+                  <button
+                    onClick={() => setChangingRoleFor(null)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-500"
+                  >
+                    <X className="w-3.5 h-3.5" /> Back
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setChangingRoleFor(m.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  <UserCog className="w-4 h-4 text-slate-400" /> Change Role
+                </button>
+                <button
+                  onClick={() => resetPasswordMutation.mutate(m.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  <Key className="w-4 h-4 text-slate-400" /> Reset Password
+                </button>
+                <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
+                <button
+                  onClick={() => handleRemove(m)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" /> Remove
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const roleBadge = (m: Member) => {
+    const displayRole = typeof m.role === 'string' ? m.role : (m.roleName || 'User');
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 whitespace-nowrap">
+        <Shield className="w-3 h-3" />
+        {displayRole}
+      </span>
+    );
+  };
+
+  const statusPill = (m: Member) => (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${
+      m.isActive
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
+        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+    }`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${m.isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
+      {m.isActive ? 'Active' : 'Disabled'}
+    </span>
+  );
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
@@ -88,7 +228,7 @@ export default function WorkspaceMembersPage() {
             Team Members
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage your team · {members.length} member{members.length !== 1 ? 's' : ''}
+            Manage your workspace team and permissions
           </p>
         </div>
         {canManage && (
@@ -102,19 +242,50 @@ export default function WorkspaceMembersPage() {
         )}
       </div>
 
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{members.length}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Total Members</p>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+            <Activity className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{activeCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Active Members</p>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+            <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{uniqueRoles.size}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Roles</p>
+          </div>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search members..."
+          placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
       </div>
 
-      {/* Members List */}
+      {/* Members Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
@@ -126,66 +297,84 @@ export default function WorkspaceMembersPage() {
             <p className="text-sm text-slate-500">No team members found</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {filtered.map(m => {
-              const displayRole = typeof m.role === 'string' ? m.role : (m.roleName || 'User');
-              return (
-                <div key={m.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center flex-shrink-0">
-                    <span className="text-primary-700 dark:text-primary-300 text-sm font-bold">{m.firstName?.[0]}{m.lastName?.[0]}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{m.firstName} {m.lastName}</p>
-                    <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{m.email}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      {displayRole}
-                    </span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                      m.isActive
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${m.isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                      {m.isActive ? 'Active' : 'Disabled'}
-                    </span>
-                    <span className="text-xs text-slate-400 flex items-center gap-1 min-w-[80px]">
-                      <Calendar className="w-3 h-3" />
-                      {m.lastLoginAt ? new Date(m.lastLoginAt).toLocaleDateString() : 'Never'}
-                    </span>
-                    {canManage && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setMenuOpen(menuOpen === m.id ? null : m.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {menuOpen === m.id && (
-                          <div className="absolute right-0 top-full z-10 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1">
-                            <button
-                              onClick={() => { resetPasswordMutation.mutate(m.id); }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
-                            >
-                              <Key className="w-4 h-4 text-slate-400" /> Reset Password
-                            </button>
-                            <button
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500"
-                              onClick={() => setMenuOpen(null)}
-                            >
-                              <Ban className="w-4 h-4" /> Remove
-                            </button>
-                          </div>
-                        )}
+          <>
+            {/* Desktop Table Header */}
+            <div className="hidden md:grid md:grid-cols-[1fr_120px_100px_110px_110px_48px] gap-2 px-5 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Member</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Joined</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Last Login</span>
+              <span />
+            </div>
+
+            {/* Member Rows */}
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {filtered.map(m => (
+                <div key={m.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                  {/* Desktop Row */}
+                  <div className="hidden md:grid md:grid-cols-[1fr_120px_100px_110px_110px_48px] gap-2 items-center px-5 py-3.5">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center flex-shrink-0">
+                        <span className="text-primary-700 dark:text-primary-300 text-xs font-bold">
+                          {m.firstName?.[0]}{m.lastName?.[0]}
+                        </span>
                       </div>
-                    )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                          {m.firstName} {m.lastName}
+                        </p>
+                        <p className="text-xs text-slate-400 truncate">{m.email}</p>
+                      </div>
+                    </div>
+                    <div>{roleBadge(m)}</div>
+                    <div>{statusPill(m)}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {formatDate(m.createdAt)}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {m.lastLoginAt ? formatDate(m.lastLoginAt) : 'Never'}
+                    </div>
+                    <div className="flex justify-end">{renderActionsMenu(m)}</div>
+                  </div>
+
+                  {/* Mobile Card */}
+                  <div className="md:hidden px-4 py-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center flex-shrink-0">
+                          <span className="text-primary-700 dark:text-primary-300 text-sm font-bold">
+                            {m.firstName?.[0]}{m.lastName?.[0]}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                            {m.firstName} {m.lastName}
+                          </p>
+                          <p className="text-xs text-slate-400 truncate">{m.email}</p>
+                        </div>
+                      </div>
+                      {renderActionsMenu(m)}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 ml-[52px]">
+                      {roleBadge(m)}
+                      {statusPill(m)}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-[52px] text-xs text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        Joined {formatDate(m.createdAt)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {m.lastLoginAt ? formatDate(m.lastLoginAt) : 'Never logged in'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

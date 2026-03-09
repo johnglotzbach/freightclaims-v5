@@ -34,12 +34,20 @@ export const usageService = {
 
   async getUsageWithLimits(corporateId: string) {
     const period = currentPeriod();
-    const [usage, customer] = await Promise.all([
-      prisma.usageRecord.findMany({ where: { corporateId, period } }),
-      prisma.customer.findFirst({ where: { id: corporateId }, select: { planType: true } }),
-    ]);
 
-    const planType = (customer as any)?.planType || 'starter';
+    let usage: any[] = [];
+    try {
+      usage = await prisma.usageRecord.findMany({ where: { corporateId, period } });
+    } catch (err) {
+      logger.warn({ err }, 'usageRecord table may not exist yet');
+    }
+
+    let planType = 'starter';
+    try {
+      const customer = await prisma.customer.findFirst({ where: { id: corporateId }, select: { planType: true } });
+      if ((customer as any)?.planType) planType = (customer as any).planType;
+    } catch { /* planType column may not exist */ }
+
     let limits: any = null;
     try {
       limits = await prisma.planLimit.findUnique({ where: { planType } });

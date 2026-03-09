@@ -47,6 +47,7 @@ import { dashboardsRouter } from './routes/dashboards.routes';
 import { webhooksRouter } from './routes/webhooks.routes';
 import { scheduledReportsRouter } from './routes/scheduled-reports.routes';
 import { acknowledgeRouter } from './routes/acknowledge.routes';
+import { carriersRouter } from './routes/carriers.routes';
 
 const app: express.Application = express();
 
@@ -209,6 +210,7 @@ v1.use('/admin', adminRouter);
 v1.use('/news', newsRouter);
 v1.use('/usage', usageRouter);
 v1.use('/dashboards', dashboardsRouter);
+v1.use('/carriers', carriersRouter);
 
 app.use('/api/v1', v1);
 
@@ -250,6 +252,38 @@ async function ensureSchemaSync() {
   await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_claim_number TEXT`, 'claim_parties.carrier_claim_number added');
   await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_response TEXT`, 'claim_parties.carrier_response added');
   await run(`ALTER TABLE claim_documents ADD COLUMN IF NOT EXISTS thumbnail_key TEXT`, 'claim_documents.thumbnail_key added');
+
+  await run(`CREATE TABLE IF NOT EXISTS usage_records (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    corporate_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    count INT DEFAULT 0,
+    period TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(corporate_id, type, period)
+  )`, 'usage_records table created');
+
+  await run(`CREATE TABLE IF NOT EXISTS plan_limits (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    plan_type TEXT UNIQUE NOT NULL,
+    max_users INT NOT NULL DEFAULT 1,
+    max_claims INT NOT NULL DEFAULT 50,
+    max_ai_requests INT NOT NULL DEFAULT 100,
+    max_documents INT NOT NULL DEFAULT 500,
+    overage_per_claim DECIMAL(10,2),
+    overage_per_ai_req DECIMAL(10,2),
+    overage_per_document DECIMAL(10,2)
+  )`, 'plan_limits table created');
+
+  await run(`INSERT INTO plan_limits (id, plan_type, max_users, max_claims, max_ai_requests, max_documents, overage_per_claim, overage_per_ai_req, overage_per_document) VALUES
+    (gen_random_uuid(), 'starter', 1, 25, 50, 100, 2.00, 0.10, 0.05),
+    (gen_random_uuid(), 'team', 5, 100, 250, 500, 1.50, 0.08, 0.04),
+    (gen_random_uuid(), 'pro', 15, 500, 1000, 2500, 1.00, 0.05, 0.03),
+    (gen_random_uuid(), 'enterprise', 999, 999999, 999999, 999999, NULL, NULL, NULL)
+  ON CONFLICT (plan_type) DO NOTHING`, 'plan_limits seeded');
+
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`, 'users.avatar_url added');
 
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
