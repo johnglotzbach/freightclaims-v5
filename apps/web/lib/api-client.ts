@@ -185,8 +185,7 @@ export async function fetchDocumentBlob(docId: string): Promise<{ blobUrl: strin
   const corpId = typeof window !== 'undefined' ? localStorage.getItem('fc-impersonate-corporate') : null;
   if (corpId) headers['X-Corporate-Id'] = corpId;
 
-  const base = getUploadBase();
-  const url = `${base}/documents/${docId}/download`;
+  const url = `/api/v1/documents/${docId}/download`;
 
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);

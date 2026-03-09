@@ -9,9 +9,17 @@ import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loadin
 import {
   Building2, Truck, Shield, Search, Plus, Filter,
   ChevronRight, MoreHorizontal, CheckCircle, XCircle,
+  TrendingUp, DollarSign, AlertCircle, Clock,
 } from 'lucide-react';
 
 type CompanyType = 'all' | 'customer' | 'carrier' | 'insurance';
+
+interface ClaimStats {
+  totalClaims: number;
+  totalAmount: number;
+  openClaims: number;
+  avgResolutionDays: number | null;
+}
 
 interface Company {
   id: string;
@@ -26,6 +34,7 @@ interface Company {
   claimCount?: number;
   isCorporate?: boolean;
   industry?: string;
+  claimStats?: ClaimStats;
 }
 
 const typeConfig: Record<string, { icon: typeof Building2; color: string; label: string }> = {
@@ -42,7 +51,7 @@ export default function CompaniesPage() {
 
   const { data: companies = [], isLoading } = useQuery({
     queryKey: ['customers'],
-    queryFn: () => getList<Company>('/customers'),
+    queryFn: () => getList<Company>('/customers?includeStats=true'),
   });
 
   if (isLoading) {
@@ -177,7 +186,7 @@ export default function CompaniesPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Code</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Location</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Claims</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">KPI</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Action</th>
               </tr>
@@ -215,7 +224,28 @@ export default function CompaniesPage() {
                       {company.city && company.state ? `${company.city}, ${company.state}` : '—'}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">{company.claimCount || 0}</span>
+                      {company.claimStats ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400" title="Total Claims">
+                            <TrendingUp className="w-3 h-3" />{company.claimStats.totalClaims}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" title="Total Amount">
+                            <DollarSign className="w-3 h-3" />{company.claimStats.totalAmount >= 1000 ? `${(company.claimStats.totalAmount / 1000).toFixed(1)}k` : company.claimStats.totalAmount.toFixed(0)}
+                          </span>
+                          {company.claimStats.openClaims > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" title="Open Claims">
+                              <AlertCircle className="w-3 h-3" />{company.claimStats.openClaims}
+                            </span>
+                          )}
+                          {company.claimStats.avgResolutionDays != null && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400" title="Avg Resolution Days">
+                              <Clock className="w-3 h-3" />{company.claimStats.avgResolutionDays}d
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">{company.claimCount || 0}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {company.isActive !== false ? (

@@ -88,7 +88,7 @@ export default function WorkspaceMembersPage() {
             Team Members
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage your workspace team · {members.length} member{members.length !== 1 ? 's' : ''}
+            Manage your team · {members.length} member{members.length !== 1 ? 's' : ''}
           </p>
         </div>
         {canManage && (

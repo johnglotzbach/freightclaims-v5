@@ -77,6 +77,13 @@ contractsRouter.put('/insurance/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+contractsRouter.delete('/insurance/:id', authorize(['admin', 'manager']), async (req, res, next) => {
+  try {
+    await prisma.insuranceCertificate.delete({ where: { id: req.params.id } });
+    res.status(204).send();
+  } catch (err) { next(err); }
+});
+
 // --- Carrier Tariffs (static paths BEFORE /:id) ---
 contractsRouter.get('/tariffs', async (req, res, next) => {
   try {

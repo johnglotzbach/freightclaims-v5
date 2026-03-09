@@ -24,6 +24,9 @@ documentsRouter.post('/upload', upload.any(), documentsController.upload);
 // --- Document merge (must be before /:id) ---
 documentsRouter.post('/merge', documentsController.mergeClaimDocs);
 
+// --- Link documents to a claim ---
+documentsRouter.post('/link', documentsController.linkDocumentsToClaim);
+
 // --- Document categories (must be before /:id) ---
 documentsRouter.get('/categories/all', documentsController.getCategories);
 documentsRouter.post('/categories', authorize(['admin']), documentsController.createCategory);
@@ -37,8 +40,9 @@ documentsRouter.get('/', documentsController.list);
 documentsRouter.get('/:id', documentsController.getById);
 documentsRouter.delete('/:id', authorize(['admin', 'manager']), documentsController.delete);
 
-// --- Document download / signed URL ---
+// --- Document download / signed URL / thumbnail ---
 documentsRouter.get('/:id/download', documentsController.download);
+documentsRouter.get('/:id/thumbnail', documentsController.thumbnail);
 documentsRouter.get('/:id/url', documentsController.getSignedUrl);
 
 // --- AI document processing ---

@@ -172,7 +172,7 @@ export default function AcknowledgementPage() {
         </button>
 
         <p className="text-center text-xs text-slate-400">
-          Powered by FreightClaims v5.0 &middot; <a href="https://freightclaims.com" className="text-primary-500">freightclaims.com</a>
+          Powered by FreightClaims v5.0 · <a href="https://freightclaims.com" className="text-primary-500">freightclaims.com</a>
         </p>
       </div>
     </div>

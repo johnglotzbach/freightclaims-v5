@@ -21,16 +21,9 @@ import {
 
 const DashboardCharts = dynamic(() => import('@/components/dashboard/dashboard-charts'), { ssr: false });
 
-interface DashboardStatsResponse {
-  total: number;
-  pending: number;
-  inReview: number;
-  settled: number;
-  deleted: number;
-}
-
 interface DashboardData {
   stats: { label: string; value: number; change?: number }[];
+  totalClaimValue?: number;
   claimsByStatus: { name: string; count: number }[];
   claimsByType: { name: string; count: number }[];
   monthlyTrend: { month: string; filed: number; settled: number; amount: number }[];
@@ -53,37 +46,23 @@ const PLACEHOLDER: DashboardData = {
   recentClaims: [],
 };
 
-function mapStatsResponse(raw: DashboardStatsResponse): DashboardData {
-  const settlementRate = raw.total > 0 ? Math.round((raw.settled / raw.total) * 100) : 0;
-  return {
-    stats: [
-      { label: 'Total Claims', value: raw.total },
-      { label: 'Pending Review', value: raw.pending + raw.inReview },
-      { label: 'Settlement Rate', value: settlementRate },
-      { label: 'Settled', value: raw.settled },
-    ],
-    claimsByStatus: [
-      { name: 'Pending', count: raw.pending },
-      { name: 'In Review', count: raw.inReview },
-      { name: 'Settled', count: raw.settled },
-    ].filter(s => s.count > 0),
-    claimsByType: [],
-    monthlyTrend: [],
-    topCarriers: [],
-    recentClaims: [],
-  };
-}
-
 export default function ClaimsDashboard() {
   const { user } = useAuth();
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
-    queryFn: async () => {
-      const raw = await get<DashboardStatsResponse>('/claims/dashboard/stats');
-      return mapStatsResponse(raw);
-    },
+    queryFn: () => get<DashboardData>('/reports/dashboard'),
     placeholderData: PLACEHOLDER,
   });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-6">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
   const stats = data?.stats || PLACEHOLDER.stats;
   const statIcons = [FileText, Clock, CheckCircle, DollarSign];

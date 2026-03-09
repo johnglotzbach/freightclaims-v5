@@ -7,6 +7,8 @@
 import { Router } from 'express';
 import { prisma } from '../config/database';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validate.middleware';
+import { newsSubscribeSchema } from '../validators/common.validators';
 
 export const newsRouter: Router = Router();
 
@@ -62,7 +64,7 @@ newsRouter.get('/post/:slug', async (req, res, next) => {
 
 // --- Newsletter subscription ---
 
-newsRouter.post('/subscribe', async (req, res, next) => {
+newsRouter.post('/subscribe', validate(newsSubscribeSchema), async (req, res, next) => {
   try {
     const { email, name } = req.body;
     const subscriber = await prisma.newsSubscriber.upsert({
@@ -74,7 +76,7 @@ newsRouter.post('/subscribe', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-newsRouter.post('/unsubscribe', async (req, res, next) => {
+newsRouter.post('/unsubscribe', validate(newsSubscribeSchema), async (req, res, next) => {
   try {
     const { email } = req.body;
     await prisma.newsSubscriber.update({

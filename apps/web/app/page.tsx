@@ -10,6 +10,7 @@
  */
 import Link from 'next/link';
 import { PublicNavbar } from '@/components/layout/public-navbar';
+import { PricingSection } from '@/components/landing/pricing-section';
 import {
   Truck, Shield, Brain, BarChart3, Clock, MessageSquare,
   CheckCircle2, ArrowRight, ChevronDown, Zap, Lock,
@@ -53,7 +54,7 @@ export default function HomePage() {
       <Partnerships />
       <Stats />
       <Testimonials />
-      <Pricing />
+      <PricingSection />
       <FAQ />
       <CTABanner />
       <Footer />
@@ -782,149 +783,6 @@ function Testimonials() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Pricing                                                            */
-/* ------------------------------------------------------------------ */
-function Pricing() {
-  const plans = [
-    {
-      name: 'Starter',
-      price: '$79 – $129',
-      period: '/month',
-      badge: null,
-      bestFor: 'Small brokers, owner-operators, single claims manager',
-      perClaim: '$2.50 – $4 per claim',
-      features: ['1 user', 'AI claim generation', 'Document processing', 'Basic carrier communication'],
-      cta: 'Get Started',
-      highlight: false,
-    },
-    {
-      name: 'Team',
-      price: '$199 – $349',
-      period: '/month',
-      badge: 'Most Popular',
-      bestFor: 'Small freight brokerages, teams handling frequent claims',
-      perClaim: '$2 – $3 per claim',
-      features: ['5 users', 'Shared claim dashboard', 'Automation rules', 'Reporting', 'Extra seats $10–$15/user'],
-      cta: 'Get Started',
-      highlight: true,
-    },
-    {
-      name: 'Pro / Growth',
-      price: '$499 – $799',
-      period: '/month',
-      badge: null,
-      bestFor: 'Mid-size logistics companies, heavy claim volumes',
-      perClaim: '$1 – $2 per claim',
-      features: ['15–25 users', 'Advanced AI automation', 'Bulk claim ingestion', 'Analytics dashboard', 'Integrations'],
-      cta: 'Get Started',
-      highlight: false,
-    },
-    {
-      name: 'Enterprise',
-      price: '$1,500 – $4,000',
-      period: '/month',
-      badge: null,
-      bestFor: 'Large brokers, 3PLs, shippers',
-      perClaim: '$0.50 – $1.50 per claim',
-      features: ['Unlimited users', 'API access', 'TMS integrations', 'Priority AI processing', 'SLA support', 'Custom workflows'],
-      cta: 'Contact Sales',
-      highlight: false,
-    },
-  ];
-
-  return (
-    <section id="pricing" className="py-20 sm:py-28 bg-white dark:bg-slate-950">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-14">
-          <span className="text-sm font-semibold text-primary-500 uppercase tracking-wider">Pricing</span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-3 tracking-tight">
-            Simple, transparent pricing
-          </h2>
-          <p className="text-lg text-slate-500 dark:text-slate-400 mt-4">
-            Start free for 14 days. No credit card required. Scale as your team grows.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative rounded-2xl p-6 flex flex-col ${
-                plan.highlight
-                  ? 'bg-primary-50 dark:bg-primary-950 border-2 border-primary-500 shadow-xl shadow-primary-500/10'
-                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg'
-              } transition-all duration-300`}
-            >
-              {plan.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
-                  {plan.badge}
-                </div>
-              )}
-
-              <div className="mb-4">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{plan.name}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{plan.bestFor}</p>
-              </div>
-
-              <div className="mb-1">
-                <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{plan.price}</span>
-                <span className="text-sm text-slate-500">{plan.period}</span>
-              </div>
-              <p className="text-xs text-slate-500 mb-5">{plan.perClaim}</p>
-
-              <ul className="space-y-2.5 flex-1 mb-6">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href={plan.name === 'Enterprise' ? '/contact' : '/register'}
-                className={`inline-flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                  plan.highlight
-                    ? 'bg-primary-500 hover:bg-primary-600 text-white shadow-md shadow-primary-500/20'
-                    : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                {plan.cta}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          ))}
-        </div>
-
-        {/* White-Label / Custom */}
-        <div className="mt-8 bg-gradient-to-r from-slate-50 to-primary-50/50 dark:from-slate-900 dark:to-primary-950/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary-500" />
-                Custom / White-Label Plan
-              </h3>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-lg">
-                $5,000 – $20,000+ /year or custom contract. For logistics networks, large 3PL companies,
-                insurance firms, and freight auditing companies. Includes custom AI training, white-label product,
-                private cloud deployment, unlimited claims processing, and dedicated infrastructure.
-              </p>
-            </div>
-            <Link
-              href="/contact"
-              className="flex-shrink-0 inline-flex items-center gap-2 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 px-6 py-3 rounded-xl font-semibold text-sm transition-colors"
-            >
-              Contact Sales
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
         </div>
       </div>
     </section>

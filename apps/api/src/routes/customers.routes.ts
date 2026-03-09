@@ -9,6 +9,7 @@
  * Related: apps/api/src/controllers/customers.controller.ts
  */
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { customersController } from '../controllers/customers.controller';
@@ -18,9 +19,14 @@ import {
   listCustomersQuerySchema,
 } from '../validators/customers.validators';
 
+const massUploadMulter = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 export const customersRouter: Router = Router();
 
 customersRouter.use(authenticate);
+
+// --- Mass upload (must be before /:id) ---
+customersRouter.post('/mass-upload', authorize(['admin', 'manager']), massUploadMulter.single('file'), customersController.massUpload);
 
 // --- Customer CRUD ---
 customersRouter.get('/', validate(listCustomersQuerySchema, 'query'), customersController.list);

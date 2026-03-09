@@ -12,6 +12,7 @@ import type { GeminiMessage } from '../services/agents/gemini-client';
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { softAuthenticate } from '../middleware/auth.middleware';
 
 export const chatbotRouter: Router = Router();
 
@@ -22,6 +23,7 @@ const chatLimiter = rateLimit({
 });
 
 chatbotRouter.use(chatLimiter);
+chatbotRouter.use(softAuthenticate);
 
 const CHATBOT_SYSTEM = `You are FreightClaims AI Assistant, a helpful chatbot for FreightClaims.com — the leading freight claims management platform.
 

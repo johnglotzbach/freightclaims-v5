@@ -13,15 +13,22 @@ import { authLimiter } from '../middleware/rate-limiter.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { usersController } from '../controllers/users.controller';
 import { loginSchema, registerSchema, updateUserSchema } from '../validators/users.validators';
+import {
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
+  preferencesSchema,
+} from '../validators/common.validators';
 
 export const usersRouter: Router = Router();
 
 // --- Public auth routes (rate-limited) ---
 usersRouter.post('/login', authLimiter, validate(loginSchema), usersController.login);
 usersRouter.post('/register', authLimiter, validate(registerSchema), usersController.register);
-usersRouter.post('/refresh-token', usersController.refreshToken);
-usersRouter.post('/forgot-password', authLimiter, usersController.forgotPassword);
-usersRouter.post('/reset-password', authLimiter, usersController.resetPassword);
+usersRouter.post('/refresh-token', validate(refreshTokenSchema), usersController.refreshToken);
+usersRouter.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), usersController.forgotPassword);
+usersRouter.post('/reset-password', authLimiter, validate(resetPasswordSchema), usersController.resetPassword);
 
 // --- Protected routes ---
 usersRouter.use(authenticate);
@@ -29,9 +36,9 @@ usersRouter.use(authenticate);
 // Current user (must be before /:id)
 usersRouter.get('/me', usersController.getCurrentUser);
 usersRouter.put('/me', validate(updateUserSchema), usersController.updateCurrentUser);
-usersRouter.put('/me/password', usersController.changePassword);
+usersRouter.put('/me/password', validate(changePasswordSchema), usersController.changePassword);
 usersRouter.get('/me/preferences', usersController.getPreferences);
-usersRouter.put('/me/preferences', usersController.updatePreferences);
+usersRouter.put('/me/preferences', validate(preferencesSchema), usersController.updatePreferences);
 
 // Roles (must be before /:id)
 usersRouter.get('/roles/all', authorize(['admin']), usersController.getRoles);
@@ -57,7 +64,15 @@ usersRouter.delete('/templates/letter/:id', authorize(['admin']), usersControlle
 usersRouter.get('/api-keys', usersController.getApiKeys);
 usersRouter.post('/api-keys', authorize(['admin']), usersController.createApiKey);
 usersRouter.delete('/api-keys/:id', authorize(['admin']), usersController.deleteApiKey);
-usersRouter.put('/webhook-config', authorize(['admin']), usersController.saveWebhookConfig);
+usersRouter.get('/webhooks', usersController.getWebhooks);
+usersRouter.post('/webhooks', authorize(['admin']), usersController.saveWebhookConfig);
+usersRouter.put('/webhooks/:id', authorize(['admin']), usersController.updateWebhookConfig);
+usersRouter.delete('/webhooks/:id', authorize(['admin']), usersController.deleteWebhookConfig);
+
+// Two-Factor Authentication (must be before /:id)
+usersRouter.post('/2fa/setup', usersController.setupTwoFactor);
+usersRouter.post('/2fa/verify', usersController.verifyAndEnableTwoFactor);
+usersRouter.post('/2fa/disable', usersController.disableTwoFactor);
 
 // Onboarding (must be before /:id)
 usersRouter.post('/onboarding', usersController.onboarding);

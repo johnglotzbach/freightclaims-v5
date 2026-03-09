@@ -10,13 +10,14 @@ import { PdfViewer } from '@/components/pdf-viewer';
 import { cn, getStatusBadgeClass } from '@/lib/utils';
 import { formatCurrency, formatDate, formatDateTime, CLAIM_STATUSES, CARMACK_TIMELINES, daysBetween } from 'shared';
 import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
-import {
+  import {
   Edit2, Mail, MoreHorizontal, ChevronRight,
   Plus, AlertTriangle, CheckCircle, Clock, Send,
-  FileDown, Trash2, Eye, Download,
+  FileDown, Trash2, Eye, Download, CalendarClock,
+  Activity, MessageSquare, FileText, CreditCard, ListTodo, RefreshCw, Upload, UserCheck, Zap, Bell,
 } from 'lucide-react';
 
-type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'emails-automation' | 'transactions' | 'additional' | 'comments';
+type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'deadlines' | 'emails-automation' | 'transactions' | 'additional' | 'comments' | 'activity';
 
 interface CarrierParty {
   id: string;
@@ -115,10 +116,12 @@ export default function ClaimDetailPage() {
     { key: 'form-data', label: 'Claim Form Data' },
     { key: 'documents', label: 'Documents', count: claim.documents?.length },
     { key: 'tasks', label: 'Tasks' },
+    { key: 'deadlines', label: 'Deadlines' },
     { key: 'emails-automation', label: 'Emails & Automations' },
     { key: 'transactions', label: 'Transactions' },
     { key: 'additional', label: 'Additional Information' },
     { key: 'comments', label: 'Comments & Activity Log' },
+    { key: 'activity', label: 'Activity' },
   ];
 
   return (
@@ -246,10 +249,12 @@ export default function ClaimDetailPage() {
         {activeTab === 'form-data' && <FormDataTab claim={claim} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
         {activeTab === 'tasks' && <TasksTab tasks={claim.tasks || []} claimId={id} />}
+        {activeTab === 'deadlines' && <DeadlinesTab claimId={id} />}
         {activeTab === 'emails-automation' && <EmailsAutomationTab claimId={id} />}
         {activeTab === 'transactions' && <TransactionsTab claim={claim} />}
         {activeTab === 'additional' && <AdditionalInfoTab claim={claim} />}
         {activeTab === 'comments' && <CommentsActivityTab comments={claim.comments || []} timeline={claim.timeline || []} claimId={id} />}
+        {activeTab === 'activity' && <ActivityTab claimId={id} />}
       </div>
     </div>
   );
@@ -728,6 +733,142 @@ function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
   );
 }
 
+interface ClaimDeadlineItem {
+  id: string;
+  type: string;
+  dueDate: string;
+  reminderDays: number[];
+  status: string;
+}
+
+const DEADLINE_TYPES = [
+  { key: 'filing_deadline', label: 'Filing Deadline' },
+  { key: 'response_deadline', label: 'Response Deadline' },
+  { key: 'statute_of_limitations', label: 'Statute of Limitations' },
+  { key: 'custom', label: 'Custom' },
+];
+
+function DeadlinesTab({ claimId }: { claimId: string }) {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [dlType, setDlType] = useState('filing_deadline');
+  const [dlDate, setDlDate] = useState('');
+  const [dlReminder, setDlReminder] = useState('7');
+
+  const { data: deadlines = [] } = useQuery({
+    queryKey: ['claim-deadlines', claimId],
+    queryFn: () => getList<ClaimDeadlineItem>(`/claims/${claimId}/deadlines`),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (data: { type: string; dueDate: string; reminderDays: number[] }) =>
+      post(`/claims/${claimId}/deadlines`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-deadlines', claimId] });
+      setShowForm(false);
+      setDlType('filing_deadline');
+      setDlDate('');
+      setDlReminder('7');
+      toast.success('Deadline added');
+    },
+    onError: () => toast.error('Failed to add deadline'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (did: string) => del(`/claims/${claimId}/deadlines/${did}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-deadlines', claimId] });
+      toast.success('Deadline removed');
+    },
+    onError: () => toast.error('Failed to remove deadline'),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dlDate) { toast.error('Due date is required'); return; }
+    const reminderDays = dlReminder.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    addMutation.mutate({ type: dlType, dueDate: `${dlDate}T00:00:00.000Z`, reminderDays });
+  }
+
+  const now = new Date();
+
+  function deadlineStatus(dl: ClaimDeadlineItem) {
+    const due = new Date(dl.dueDate);
+    if (dl.status === 'completed') return { label: 'Completed', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' };
+    if (due < now) return { label: 'Overdue', cls: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400' };
+    const daysLeft = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 7) return { label: `${daysLeft}d left`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400' };
+    return { label: 'Upcoming', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' };
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+          <CalendarClock className="w-5 h-5 text-primary-500" /> Deadlines ({deadlines.length})
+        </h3>
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-3 py-2 rounded-lg text-xs font-semibold">
+          <Plus className="w-4 h-4" /> Add Deadline
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="card p-4 space-y-3">
+          <h4 className="text-sm font-medium text-slate-900 dark:text-white">New Deadline</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+              <select value={dlType} onChange={e => setDlType(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                {DEADLINE_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Due Date</label>
+              <input type="date" value={dlDate} onChange={e => setDlDate(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Reminder (days before)</label>
+              <input type="text" value={dlReminder} onChange={e => setDlReminder(e.target.value)} placeholder="7, 3, 1" className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={addMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addMutation.isPending ? 'Adding...' : 'Add Deadline'}</button>
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {deadlines.length === 0 && !showForm ? (
+        <EmptyState message="No deadlines set for this claim." action="Add Deadline" onActionClick={() => setShowForm(true)} />
+      ) : (
+        <div className="space-y-2">
+          {deadlines.map(dl => {
+            const st = deadlineStatus(dl);
+            const isOverdue = new Date(dl.dueDate) < now && dl.status !== 'completed';
+            return (
+              <div key={dl.id} className={cn('card p-4 flex items-center justify-between gap-4', isOverdue && 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20')}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={cn('text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full', st.cls)}>{st.label}</span>
+                    <span className="text-xs text-slate-500 capitalize">{(dl.type || '').replace(/_/g, ' ')}</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">Due: {formatDate(dl.dueDate)}</p>
+                  {dl.reminderDays?.length > 0 && (
+                    <p className="text-xs text-slate-400 mt-0.5">Reminders: {dl.reminderDays.join(', ')} days before</p>
+                  )}
+                </div>
+                <button onClick={() => deleteMutation.mutate(dl.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500" title="Remove deadline">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmailsAutomationTab({ claimId }: { claimId: string }) {
   const { data: emails = [] } = useQuery({
     queryKey: ['claim-emails', claimId],
@@ -771,7 +912,7 @@ function EmailsAutomationTab({ claimId }: { claimId: string }) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{email.subject}</p>
-                <p className="text-xs text-slate-500">{email.from} &middot; {email.date}</p>
+                <p className="text-xs text-slate-500">{email.from} · {email.date}</p>
               </div>
             </Link>
           ))}
@@ -790,7 +931,7 @@ function EmailsAutomationTab({ claimId }: { claimId: string }) {
                 <div className={cn('w-2 h-2 rounded-full', auto.status === 'completed' ? 'bg-emerald-500' : auto.status === 'active' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300')} />
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-white">{auto.name}</p>
-                  <p className="text-xs text-slate-500 capitalize">{auto.type} &middot; {auto.status === 'completed' ? `Executed ${auto.executedAt}` : `Scheduled ${auto.scheduledFor}`}</p>
+                  <p className="text-xs text-slate-500 capitalize">{auto.type} · {auto.status === 'completed' ? `Executed ${auto.executedAt}` : `Scheduled ${auto.scheduledFor}`}</p>
                 </div>
               </div>
               <span className={cn('text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full', auto.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : auto.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500')}>{auto.status}</span>
@@ -1082,6 +1223,131 @@ function CommentsActivityTab({ comments, timeline, claimId }: { comments: ClaimC
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+interface ActivityEntry {
+  id: string;
+  type: string;
+  action: string;
+  entity: string;
+  description: string;
+  userName: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+const ACTIVITY_ICONS: Record<string, { icon: typeof Activity; color: string; bg: string }> = {
+  status_change: { icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/40' },
+  create: { icon: Plus, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/40' },
+  update: { icon: Edit2, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/40' },
+  delete: { icon: Trash2, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/40' },
+  email_sent: { icon: Send, color: 'text-violet-600', bg: 'bg-violet-100 dark:bg-violet-900/40' },
+  email: { icon: Mail, color: 'text-violet-600', bg: 'bg-violet-100 dark:bg-violet-900/40' },
+  document_upload: { icon: Upload, color: 'text-cyan-600', bg: 'bg-cyan-100 dark:bg-cyan-900/40' },
+  document: { icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-100 dark:bg-cyan-900/40' },
+  task: { icon: ListTodo, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/40' },
+  comment: { icon: MessageSquare, color: 'text-slate-600', bg: 'bg-slate-100 dark:bg-slate-700' },
+  system_comment: { icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/40' },
+  payment: { icon: CreditCard, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/40' },
+  carrier_acknowledgment: { icon: UserCheck, color: 'text-teal-600', bg: 'bg-teal-100 dark:bg-teal-900/40' },
+  notification: { icon: Bell, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/40' },
+};
+
+function getActivityIcon(action: string) {
+  return ACTIVITY_ICONS[action] || { icon: Activity, color: 'text-slate-500', bg: 'bg-slate-100 dark:bg-slate-700' };
+}
+
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'Yesterday';
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function groupByDate(entries: ActivityEntry[]): { label: string; items: ActivityEntry[] }[] {
+  const groups: Map<string, ActivityEntry[]> = new Map();
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  for (const entry of entries) {
+    const d = new Date(entry.createdAt).toDateString();
+    let label: string;
+    if (d === today) label = 'Today';
+    else if (d === yesterday) label = 'Yesterday';
+    else label = new Date(entry.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(entry);
+  }
+  return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
+}
+
+function ActivityTab({ claimId }: { claimId: string }) {
+  const { data: activities = [], isLoading } = useQuery({
+    queryKey: ['claim-activity', claimId],
+    queryFn: () => getList<ActivityEntry>(`/claims/${claimId}/activity`),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-7 h-7 border-3 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (activities.length === 0) {
+    return <EmptyState message="No activity recorded for this claim yet." />;
+  }
+
+  const grouped = groupByDate(activities);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Activity className="w-5 h-5 text-primary-500" />
+        <h3 className="font-semibold text-slate-900 dark:text-white">Activity Feed ({activities.length})</h3>
+      </div>
+      {grouped.map((group) => (
+        <div key={group.label}>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group.label}</span>
+            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+          </div>
+          <div className="space-y-0">
+            {group.items.map((entry, idx) => {
+              const iconInfo = getActivityIcon(entry.action);
+              const Icon = iconInfo.icon;
+              return (
+                <div key={entry.id} className="flex gap-4 pb-5 relative">
+                  {idx < group.items.length - 1 && (
+                    <div className="absolute left-[17px] top-9 w-0.5 h-[calc(100%-24px)] bg-slate-200 dark:bg-slate-700" />
+                  )}
+                  <div className={cn('w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', iconInfo.bg)}>
+                    <Icon className={cn('w-4 h-4', iconInfo.color)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-900 dark:text-white">{entry.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs font-medium text-slate-500">{entry.userName}</span>
+                      <span className="text-xs text-slate-400">·</span>
+                      <span className="text-xs text-slate-400" title={formatDateTime(entry.createdAt)}>{relativeTime(entry.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

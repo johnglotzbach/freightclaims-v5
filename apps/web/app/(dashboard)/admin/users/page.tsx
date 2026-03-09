@@ -143,7 +143,7 @@ export default function AdminUsersPage() {
             All Users
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {allUsers.length} total &middot; {activeCount} active &middot; {wsCount} workspace{wsCount !== 1 ? 's' : ''}
+            {allUsers.length} total · {activeCount} active · {wsCount} workspace{wsCount !== 1 ? 's' : ''}
           </p>
         </div>
         <Link href="/admin" className="text-sm text-amber-600 hover:text-amber-500 font-medium flex items-center gap-1">

@@ -258,6 +258,33 @@ async function main() {
   console.log(`  ${newsCategories.length} news categories created`);
 
   // ================================================================
+  // PLAN LIMITS
+  // ================================================================
+  console.log('Creating plan limits...');
+  const planLimits = [
+    { planType: 'starter', maxUsers: 1, maxClaims: 50, maxAiRequests: 200, maxDocuments: 100, overagePerClaim: 3.00, overagePerAiReq: 0.05, overagePerDocument: 0.10 },
+    { planType: 'team', maxUsers: 5, maxClaims: 200, maxAiRequests: 1000, maxDocuments: 500, overagePerClaim: 2.00, overagePerAiReq: 0.03, overagePerDocument: 0.08 },
+    { planType: 'pro', maxUsers: 20, maxClaims: 1000, maxAiRequests: 5000, maxDocuments: 2500, overagePerClaim: 1.50, overagePerAiReq: 0.02, overagePerDocument: 0.05 },
+    { planType: 'enterprise', maxUsers: 9999, maxClaims: 999999, maxAiRequests: 999999, maxDocuments: 999999, overagePerClaim: 1.00, overagePerAiReq: 0.01, overagePerDocument: 0.03 },
+  ];
+  for (const pl of planLimits) {
+    await prisma.planLimit.upsert({
+      where: { planType: pl.planType },
+      update: {
+        maxUsers: pl.maxUsers,
+        maxClaims: pl.maxClaims,
+        maxAiRequests: pl.maxAiRequests,
+        maxDocuments: pl.maxDocuments,
+        overagePerClaim: pl.overagePerClaim,
+        overagePerAiReq: pl.overagePerAiReq,
+        overagePerDocument: pl.overagePerDocument,
+      },
+      create: pl,
+    });
+  }
+  console.log(`  ${planLimits.length} plan limits created`);
+
+  // ================================================================
   // DONE
   // ================================================================
   console.log('\n========================================');

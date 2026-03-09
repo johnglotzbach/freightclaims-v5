@@ -56,12 +56,21 @@ export default function MassUploadPage() {
     queryFn: () => getList<UploadHistory>('/claims/mass-upload/history'),
   });
 
+  const UPLOAD_ENDPOINTS: Record<UploadType, string> = {
+    claims: '/claims/mass-upload',
+    customers: '/customers/mass-upload',
+    contacts: '/customers/mass-upload',
+    carriers: '/shipments/carriers/mass-upload',
+    'carrier-contacts': '/shipments/carriers/mass-upload',
+    locations: '/customers/mass-upload',
+  };
+
   const uploadMutation = useMutation({
     mutationFn: async ({ file, type }: { file: File; type: UploadType }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
-      return uploadFile('/claims/mass-upload', formData);
+      return uploadFile(UPLOAD_ENDPOINTS[type], formData);
     },
     onSuccess: () => {
       toast.success('Upload completed. Processing...');

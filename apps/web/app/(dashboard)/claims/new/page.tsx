@@ -144,9 +144,16 @@ export default function NewClaimPage() {
     }
   };
 
+  const [duplicateWarnings, setDuplicateWarnings] = useState<{ id: string; claimNumber: string; proNumber: string; status: string }[]>([]);
+
   const createClaim = useMutation({
-    mutationFn: (data: Record<string, unknown>) => post('/claims', data) as Promise<{ id: string }>,
-    onSuccess: async (result: { id: string }) => {
+    mutationFn: (data: Record<string, unknown>) => post('/claims', data) as Promise<{ id: string; potentialDuplicates?: { id: string; claimNumber: string; proNumber: string; status: string }[] }>,
+    onSuccess: async (result) => {
+      if (result.potentialDuplicates && result.potentialDuplicates.length > 0) {
+        setDuplicateWarnings(result.potentialDuplicates);
+        toast.warning(`${result.potentialDuplicates.length} potential duplicate claim(s) found`, { duration: 8000 });
+      }
+
       if (documents.length > 0) {
         setUploadProgress({ current: 0, total: documents.length });
         let failed = 0;
@@ -558,6 +565,26 @@ export default function NewClaimPage() {
           </div>
           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
             <div className="bg-primary-500 h-2 rounded-full transition-all" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Duplicate Warning ── */}
+      {duplicateWarnings.length > 0 && (
+        <div className="card p-4 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Potential Duplicate Claims Detected</p>
+          </div>
+          <p className="text-xs text-amber-700 dark:text-amber-400">The following existing claims have matching PRO or BOL numbers:</p>
+          <div className="space-y-1">
+            {duplicateWarnings.map(dup => (
+              <Link key={dup.id} href={`/claims/${dup.id}`} className="flex items-center gap-3 p-2 rounded-lg bg-white/60 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                <span className="text-sm font-medium text-primary-600 dark:text-primary-400">{dup.claimNumber}</span>
+                <span className="text-xs text-slate-500">PRO: {dup.proNumber}</span>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">{dup.status}</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}

@@ -150,7 +150,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   };
 
   const displayName = user?.corporateName || 'FreightClaims';
-  const roleBadge = isSuperAdmin ? 'Owner' : isWorkspaceAdmin ? 'Admin' : user?.roleName || 'User';
+  const roleBadge = isSuperAdmin ? 'Platform Admin' : isWorkspaceAdmin ? 'Admin' : user?.roleName || 'User';
   const badgeColor = isSuperAdmin
     ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
     : isWorkspaceAdmin
@@ -189,7 +189,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Platform Admin</span>
           </div>
-          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Full platform access &middot; All workspaces</p>
+          <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 mt-0.5">Full platform access · All teams</p>
         </div>
       )}
 
@@ -204,7 +204,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <SidebarSectionHeader label="Platform" showFull={showFull} />
             <SidebarNavLink href="/admin" icon={Crown} label="Overview" amber {...linkProps} />
             <SidebarExpandable sectionKey="platform" icon={Globe} label="Manage" amber expanded={expanded} onToggle={toggle} pathname={pathname} showFull={showFull}>
-              <SidebarNavLink href="/admin/workspaces" icon={Building2} label="Workspaces & Teams" indent {...linkProps} />
+              <SidebarNavLink href="/admin/workspaces" icon={Building2} label="Team Accounts" indent {...linkProps} />
               <SidebarNavLink href="/admin/users" icon={Users} label="All Users" indent {...linkProps} />
               <SidebarNavLink href="/admin/billing" icon={CreditCard} label="Billing & Plans" indent {...linkProps} />
               <SidebarNavLink href="/admin/settings" icon={Settings} label="Platform Settings" indent {...linkProps} />
@@ -282,8 +282,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <SidebarSectionHeader label="Management" showFull={showFull} />
             <SidebarExpandable sectionKey="manage" icon={LayoutDashboard} label="Management" expanded={expanded} onToggle={toggle} pathname={pathname} showFull={showFull}>
               <SidebarNavLink href="/workspace/members" icon={UserPlus} label="Team Members" indent {...linkProps} />
-              <SidebarNavLink href="/workspace/roles" icon={Lock} label="Roles & Permissions" indent {...linkProps} />
-              <SidebarNavLink href="/workspace/billing" icon={CreditCard} label="Billing" indent {...linkProps} />
+              <SidebarNavLink href="/workspace/roles" icon={Lock} label="Team Roles" indent {...linkProps} />
+              <SidebarNavLink href="/workspace/billing" icon={CreditCard} label="Team Billing" indent {...linkProps} />
               <SidebarNavLink href="/settings" icon={Settings} label="General Settings" indent {...linkProps} />
               <SidebarNavLink href="/settings/templates" icon={Settings} label="Templates" indent {...linkProps} />
               <SidebarNavLink href="/settings/api-setup" icon={Settings} label="API & Integrations" indent {...linkProps} />

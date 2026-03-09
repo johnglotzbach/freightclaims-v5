@@ -35,6 +35,8 @@ export const reportsController = {
   getWriteOffAmount: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await reportsService.getWriteOffAmount(req.body, user)); }),
   exportReport: asyncHandler(async (req, res) => {
     const user = getUser(req);
-    await reportsService.exportReport(req.params.type as string, req.query, user, res);
+    const reportType = req.params.reportType as string;
+    const format = (req.query.format as string) || 'csv';
+    await reportsService.exportReport(reportType, format, req.query as Record<string, unknown>, user, res);
   }),
 };

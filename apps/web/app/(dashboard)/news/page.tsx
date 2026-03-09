@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, post as apiPost, put, del, uploadFile } from '@/lib/api-client';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -275,7 +276,7 @@ export default function NewsPage() {
 
                       {isExpanded && (
                         <div className="mt-4 prose prose-sm dark:prose-invert max-w-none">
-                          <div dangerouslySetInnerHTML={{ __html: post.content }} />
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />
                         </div>
                       )}
 

@@ -92,4 +92,8 @@ export const shipmentsService = {
   async massUpload(data: Record<string, unknown>, user: JwtPayload) {
     return shipmentsRepository.massUpload(data, user.corporateId);
   },
+
+  async carriersMassUpload(rows: Record<string, unknown>[], type: string) {
+    return shipmentsRepository.carriersMassUpload(rows, type);
+  },
 };

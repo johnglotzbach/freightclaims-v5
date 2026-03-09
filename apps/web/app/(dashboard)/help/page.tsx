@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { sanitizeHtml } from '@/lib/sanitize';
 import {
   HelpCircle, Search, Rocket, ClipboardList, FileUp, Sparkles,
   BarChart3, UserCog, ChevronRight, ChevronDown, ExternalLink,
@@ -687,7 +688,7 @@ export default function HelpPage() {
           <HelpCircle className="w-6 h-6 text-primary-500" /> Help Center
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          {helpCategories.length} categories &middot; {totalArticles} articles &middot; Everything you need to know about FreightClaims
+          {helpCategories.length} categories · {totalArticles} articles · Everything you need to know about FreightClaims
         </p>
       </div>
 
@@ -864,12 +865,12 @@ export default function HelpPage() {
                                           <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 flex-shrink-0 mt-1.5" />
                                           <span
                                             dangerouslySetInnerHTML={{
-                                              __html: line
+                                              __html: sanitizeHtml(line
                                                 .replace(/^[•\-*]\s*/, '')
                                                 .replace(
                                                   /\*\*(.+?)\*\*/g,
                                                   '<strong class="text-slate-700 dark:text-slate-300">$1</strong>'
-                                                ),
+                                                )),
                                             }}
                                           />
                                         </li>
@@ -883,12 +884,12 @@ export default function HelpPage() {
                                     key={pi}
                                     className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed my-2"
                                     dangerouslySetInnerHTML={{
-                                      __html: paragraph
+                                      __html: sanitizeHtml(paragraph
                                         .replace(/\n/g, '<br/>')
                                         .replace(
                                           /\*\*(.+?)\*\*/g,
                                           '<strong class="text-slate-700 dark:text-slate-300">$1</strong>'
-                                        ),
+                                        )),
                                     }}
                                   />
                                 );

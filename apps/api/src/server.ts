@@ -42,6 +42,11 @@ import { chatbotRouter } from './routes/chatbot.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { adminRouter } from './routes/admin.routes';
 import { newsRouter } from './routes/news.routes';
+import { usageRouter } from './routes/usage.routes';
+import { dashboardsRouter } from './routes/dashboards.routes';
+import { webhooksRouter } from './routes/webhooks.routes';
+import { scheduledReportsRouter } from './routes/scheduled-reports.routes';
+import { acknowledgeRouter } from './routes/acknowledge.routes';
 
 const app: express.Application = express();
 
@@ -118,15 +123,15 @@ app.get('/ai-health', async (_req, res) => {
   try {
     const { env: appEnv } = await import('./config/env');
     const keyPresent = !!(appEnv.GEMINI_API_KEY && appEnv.GEMINI_API_KEY.trim().length > 0);
-    const keyPrefix = keyPresent ? appEnv.GEMINI_API_KEY.slice(0, 8) + '...' : '(empty)';
     if (!keyPresent) {
-      return res.json({ status: 'misconfigured', geminiKey: keyPrefix, model: appEnv.AI_MODEL, error: 'GEMINI_API_KEY is empty or not set' });
+      return res.json({ status: 'misconfigured', model: appEnv.AI_MODEL, error: 'GEMINI_API_KEY is not configured' });
     }
     const { generateContent } = await import('./services/agents/gemini-client');
     const result = await generateContent('What is a freight claim? Answer in one sentence.', { config: { maxOutputTokens: 100, temperature: 0.3 } });
-    res.json({ status: 'ok', geminiKey: keyPrefix, model: appEnv.AI_MODEL, testResponse: result.text.trim(), tokenUsage: result.tokenUsage });
+    res.json({ status: 'ok', model: appEnv.AI_MODEL, testResponse: result.text.trim() });
   } catch (err: any) {
-    res.json({ status: 'error', error: err.message || String(err) });
+    logger.error({ err }, 'AI health check failed');
+    res.json({ status: 'error', error: 'AI service unavailable' });
   }
 });
 
@@ -140,12 +145,25 @@ import { authenticate, softAuthenticate } from './middleware/auth.middleware';
 app.get('/api/v1/files/*', authenticate, async (req, res) => {
   try {
     const key = decodeURIComponent(req.params[0]);
+
+    if (key.includes('..')) {
+      return res.status(400).json({ success: false, error: 'Invalid file path' });
+    }
+
+    const user = (req as any).user;
+    if (user && !user.isSuperAdmin) {
+      const tenantPrefix = `tenant/${user.corporateId}/`;
+      if (!key.startsWith(tenantPrefix) && !key.startsWith('tenant/_global/')) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+    }
+
     const { body, contentType } = await storageService.downloadDocument(key);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${key.split('/').pop()}"`);
     res.send(body);
   } catch (err: any) {
-    if (err?.code === 'ENOENT') {
+    if (err?.code === 'ENOENT' || err?.message?.includes('Path traversal') || err?.message?.includes('Invalid storage key')) {
       res.status(404).json({ success: false, error: 'File not found' });
     } else {
       logger.error({ err }, 'File download error');
@@ -159,6 +177,10 @@ app.get('/api/v1/files/*', authenticate, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const v1: express.Router = express.Router();
+
+// Public routes (no auth) — must be registered before auth middleware
+v1.use('/acknowledge', acknowledgeRouter);
+v1.use('/webhooks', webhooksRouter);
 
 // softAuthenticate extracts req.user from the JWT (if present) without
 // rejecting unauthenticated requests. This ensures tenantIsolation and
@@ -174,6 +196,7 @@ v1.use('/shipments', shipmentsRouter);
 v1.use('/documents', documentsRouter);
 v1.use('/email', emailRouter);
 v1.use('/search', searchRouter);
+v1.use('/reports/scheduled', scheduledReportsRouter);
 v1.use('/reports', reportsRouter);
 v1.use('/automation', automationRouter);
 v1.use('/ai', aiRouter);
@@ -184,6 +207,8 @@ v1.use('/chatbot', chatbotRouter);
 v1.use('/notifications', notificationsRouter);
 v1.use('/admin', adminRouter);
 v1.use('/news', newsRouter);
+v1.use('/usage', usageRouter);
+v1.use('/dashboards', dashboardsRouter);
 
 app.use('/api/v1', v1);
 
@@ -214,6 +239,17 @@ async function ensureSchemaSync() {
   await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS plan_type TEXT`, 'customers.plan_type added');
   await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS max_users INT DEFAULT 1`, 'customers.max_users added');
   await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_email TEXT`, 'customers.billing_email added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0`, 'users.failed_login_attempts added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`, 'users.locked_until added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT`, 'users.two_factor_secret added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE`, 'users.two_factor_enabled added');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS owner_id TEXT`, 'customers.owner_id added');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filing_status TEXT DEFAULT 'unfiled'`, 'claim_parties.filing_status added');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filed_date TIMESTAMP`, 'claim_parties.filed_date added');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS acknowledged_date TIMESTAMP`, 'claim_parties.acknowledged_date added');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_claim_number TEXT`, 'claim_parties.carrier_claim_number added');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_response TEXT`, 'claim_parties.carrier_response added');
+  await run(`ALTER TABLE claim_documents ADD COLUMN IF NOT EXISTS thumbnail_key TEXT`, 'claim_documents.thumbnail_key added');
 
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
@@ -223,7 +259,7 @@ async function ensureSchemaSync() {
 const server = app.listen(env.PORT, () => {
   logger.info(`FreightClaims API v5.0.0 running on port ${env.PORT} [${env.NODE_ENV}]`);
   logger.info({
-    geminiKey: env.GEMINI_API_KEY ? `${env.GEMINI_API_KEY.slice(0, 4)}...${env.GEMINI_API_KEY.slice(-4)} (${env.GEMINI_API_KEY.length} chars)` : 'NOT SET',
+    geminiKey: env.GEMINI_API_KEY ? `configured (${env.GEMINI_API_KEY.length} chars)` : 'NOT SET',
     aiModel: env.AI_MODEL,
     smtp: env.SMTP_HOST ? `${env.SMTP_HOST}:${env.SMTP_PORT}` : 'NOT SET',
     storage: env.STORAGE_MODE || 'local',

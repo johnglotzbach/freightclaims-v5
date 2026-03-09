@@ -42,7 +42,12 @@ export const customersService = {
   async updateProduct(customerId: string, productId: string, data: Record<string, unknown>) { return customersRepository.updateProduct(customerId, productId, data); },
   async removeProduct(customerId: string, productId: string) { return customersRepository.removeProduct(customerId, productId); },
 
+  async getClaimStatsForCustomers(customerIds: string[]) { return customersRepository.getClaimStatsForCustomers(customerIds); },
   async getReports(customerId: string) { return customersRepository.getReports(customerId); },
   async getCountries() { return customersRepository.getCountries(); },
   async addressAutocomplete(query: string) { return customersRepository.addressAutocomplete(query); },
+
+  async massUpload(rows: Record<string, unknown>[], type: string) {
+    return customersRepository.massUpload(rows, type);
+  },
 };

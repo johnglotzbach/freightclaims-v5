@@ -410,9 +410,22 @@ function EmailSubmissionSection() {
 }
 
 function SecuritySection() {
+  const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [tfaStep, setTfaStep] = useState<'idle' | 'setup' | 'verify'>('idle');
+  const [otpauthUri, setOtpauthUri] = useState('');
+  const [tfaSecret, setTfaSecret] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+
+  useEffect(() => {
+    setTwoFactorEnabled(!!(user as any)?.twoFactorEnabled);
+  }, [user]);
 
   const passwordMutation = useMutation({
     mutationFn: (data: { currentPassword: string; newPassword: string }) =>
@@ -424,6 +437,40 @@ function SecuritySection() {
       setConfirmPassword('');
     },
     onError: (err: Error) => toast.error(err.message || 'Failed to update password'),
+  });
+
+  const setupMutation = useMutation({
+    mutationFn: () => post<{ secret: string; otpauth: string }>('/users/2fa/setup', {}),
+    onSuccess: (data) => {
+      setTfaSecret(data.secret);
+      setOtpauthUri(data.otpauth);
+      setTfaStep('verify');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to start 2FA setup'),
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: (code: string) => post<{ enabled: boolean }>('/users/2fa/verify', { code }),
+    onSuccess: () => {
+      toast.success('Two-factor authentication enabled');
+      setTwoFactorEnabled(true);
+      setTfaStep('idle');
+      setVerifyCode('');
+      setOtpauthUri('');
+      setTfaSecret('');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Invalid verification code'),
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: (password: string) => post<{ enabled: boolean }>('/users/2fa/disable', { password }),
+    onSuccess: () => {
+      toast.success('Two-factor authentication disabled');
+      setTwoFactorEnabled(false);
+      setShowDisableConfirm(false);
+      setDisablePassword('');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to disable 2FA'),
   });
 
   function handleUpdatePassword() {
@@ -463,10 +510,129 @@ function SecuritySection() {
 
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Two-Factor Authentication</h2>
-        <p className="text-sm text-slate-500 mb-4">Add an extra layer of security to your account.</p>
-        <button onClick={() => toast.info('Two-factor authentication coming soon')} className="border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          Enable 2FA
-        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
+            twoFactorEnabled
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+          )}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', twoFactorEnabled ? 'bg-emerald-500' : 'bg-slate-400')} />
+            {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">
+          {twoFactorEnabled
+            ? 'Your account is protected with two-factor authentication.'
+            : 'Add an extra layer of security to your account by enabling two-factor authentication.'}
+        </p>
+
+        {!twoFactorEnabled && tfaStep === 'idle' && (
+          <button
+            onClick={() => setupMutation.mutate()}
+            disabled={setupMutation.isPending}
+            className="border border-primary-500 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {setupMutation.isPending ? 'Setting up...' : 'Enable 2FA'}
+          </button>
+        )}
+
+        {tfaStep === 'verify' && (
+          <div className="space-y-4 max-w-md">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl space-y-3">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                1. Scan this QR code with your authenticator app
+              </p>
+              <div className="flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUri)}`}
+                  alt="2FA QR Code"
+                  width={200}
+                  height={200}
+                  className="rounded-lg"
+                />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Or enter this secret manually:</p>
+                <code className="block text-xs bg-white dark:bg-slate-900 p-2 rounded border dark:border-slate-700 font-mono break-all select-all">
+                  {tfaSecret}
+                </code>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                2. Enter the 6-digit code from your app
+              </label>
+              <input
+                type="text"
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                maxLength={6}
+                className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm tracking-widest text-center font-mono text-lg"
+                onKeyDown={(e) => e.key === 'Enter' && verifyCode.length === 6 && verifyMutation.mutate(verifyCode)}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => verifyMutation.mutate(verifyCode)}
+                disabled={verifyCode.length !== 6 || verifyMutation.isPending}
+                className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {verifyMutation.isPending ? 'Verifying...' : 'Verify & Enable'}
+              </button>
+              <button
+                onClick={() => { setTfaStep('idle'); setVerifyCode(''); setOtpauthUri(''); setTfaSecret(''); }}
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {twoFactorEnabled && !showDisableConfirm && (
+          <button
+            onClick={() => setShowDisableConfirm(true)}
+            className="border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Disable 2FA
+          </button>
+        )}
+
+        {showDisableConfirm && (
+          <div className="space-y-3 max-w-md">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Enter your password to confirm disabling two-factor authentication.
+            </p>
+            <input
+              type="password"
+              value={disablePassword}
+              onChange={(e) => setDisablePassword(e.target.value)}
+              placeholder="Your password"
+              className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 text-sm"
+              onKeyDown={(e) => e.key === 'Enter' && disablePassword && disableMutation.mutate(disablePassword)}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => disableMutation.mutate(disablePassword)}
+                disabled={!disablePassword || disableMutation.isPending}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {disableMutation.isPending ? 'Disabling...' : 'Confirm Disable'}
+              </button>
+              <button
+                onClick={() => { setShowDisableConfirm(false); setDisablePassword(''); }}
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -50,8 +50,21 @@ function buildKey(claimId: string, category: string, filename: string, corporate
   return `tenant/${tenant}/claims/${claimId}/${category}/${filename}`;
 }
 
+function sanitizeKey(key: string): string {
+  const normalized = key.split('/').filter(seg => seg !== '..' && seg !== '.' && seg !== '').join('/');
+  if (normalized !== key.replace(/^\/+/, '')) {
+    throw new Error('Invalid storage key');
+  }
+  return normalized;
+}
+
 function localPath(key: string): string {
-  return path.join(uploadDir, ...key.split('/'));
+  const safe = sanitizeKey(key);
+  const resolved = path.join(uploadDir, ...safe.split('/'));
+  if (!resolved.startsWith(uploadDir)) {
+    throw new Error('Path traversal detected');
+  }
+  return resolved;
 }
 
 // ── S3 backend ──────────────────────────────────────────────

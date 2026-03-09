@@ -18,6 +18,8 @@ import type { TenantContext } from '../middleware/tenant.middleware';
 import { smtpService } from './smtp.service';
 import { env } from '../config/env';
 import { prisma } from '../config/database';
+import { documentsService } from './documents.service';
+import { usageService } from './usage.service';
 
 export const claimsService = {
   /**
@@ -117,7 +119,7 @@ export const claimsService = {
 
     const customerId = user.customerId || user.corporateId;
     if (!customerId) {
-      throw new BadRequestError('Cannot create claim without a workspace context. Super admins must impersonate a workspace first.');
+      throw new BadRequestError('Cannot create claim without a team context. Super admins must impersonate a team first.');
     }
 
     const claimFields: Record<string, unknown> = {
@@ -135,7 +137,26 @@ export const claimsService = {
       createdById: user.userId,
     };
 
+    const potentialDuplicates: any[] = [];
+    if (data.proNumber || data.bolNumber) {
+      const where: any = { corporateId: user.corporateId, deletedAt: null };
+      const or: any[] = [];
+      if (data.proNumber) or.push({ proNumber: data.proNumber });
+      if (data.bolNumber) {
+        or.push({ identifiers: { some: { type: 'bol', value: data.bolNumber } } });
+      }
+      if (or.length > 0) {
+        where.OR = or;
+        const matches = await prisma.claim.findMany({ where, take: 5, select: { id: true, claimNumber: true, proNumber: true, status: true, createdAt: true } });
+        potentialDuplicates.push(...matches);
+      }
+    }
+
     const claim = await claimsRepository.create(claimFields);
+
+    if (user.corporateId) {
+      usageService.incrementUsage(user.corporateId, 'claims').catch(() => {});
+    }
 
     const identifiers: { type: string; value: string }[] = [];
     if (data.bolNumber) identifiers.push({ type: 'bol', value: data.bolNumber as string });
@@ -183,7 +204,17 @@ export const claimsService = {
       );
     }
 
-    return claim;
+    const documentIds = Array.isArray(data.documentIds) ? data.documentIds as string[] : [];
+    if (documentIds.length > 0) {
+      try {
+        await documentsService.linkDocumentsToClaim(claim.id, documentIds, user);
+        logger.info({ claimId: claim.id, documentIds }, 'Linked documents to new claim');
+      } catch (linkErr: any) {
+        logger.warn({ err: linkErr, claimId: claim.id }, 'Failed to link documents to new claim');
+      }
+    }
+
+    return { ...claim, potentialDuplicates };
   },
 
   /** Updates claim fields. Validates that the claim exists first. */
@@ -308,6 +339,43 @@ export const claimsService = {
   async getIdentifiers(claimId: string) { return claimsRepository.getIdentifiers(claimId); },
   async addIdentifier(claimId: string, data: Record<string, unknown>) { return claimsRepository.addIdentifier(claimId, data); },
 
+  // --- Deadlines ---
+  async getDeadlines(claimId: string) {
+    return prisma.claimDeadline.findMany({
+      where: { claimId },
+      orderBy: { dueDate: 'asc' },
+    });
+  },
+  async addDeadline(claimId: string, data: Record<string, unknown>) {
+    return prisma.claimDeadline.create({
+      data: {
+        claimId,
+        type: data.type as string,
+        dueDate: new Date(data.dueDate as string),
+        reminderDays: Array.isArray(data.reminderDays) ? data.reminderDays.map(Number) : [],
+        status: (data.status as string) || 'upcoming',
+      },
+    });
+  },
+  async updateDeadline(claimId: string, deadlineId: string, data: Record<string, unknown>) {
+    const existing = await prisma.claimDeadline.findFirst({ where: { id: deadlineId, claimId } });
+    if (!existing) throw new NotFoundError('Deadline not found');
+    return prisma.claimDeadline.update({
+      where: { id: deadlineId },
+      data: {
+        ...(data.type !== undefined ? { type: data.type as string } : {}),
+        ...(data.dueDate !== undefined ? { dueDate: new Date(data.dueDate as string) } : {}),
+        ...(data.reminderDays !== undefined ? { reminderDays: (data.reminderDays as number[]).map(Number) } : {}),
+        ...(data.status !== undefined ? { status: data.status as string } : {}),
+      },
+    });
+  },
+  async deleteDeadline(claimId: string, deadlineId: string) {
+    const existing = await prisma.claimDeadline.findFirst({ where: { id: deadlineId, claimId } });
+    if (!existing) throw new NotFoundError('Deadline not found');
+    return prisma.claimDeadline.delete({ where: { id: deadlineId } });
+  },
+
   // --- Dashboard ---
   async getDashboardStats(user: JwtPayload, tenant?: TenantContext) {
     const effectiveCorporateId = tenant?.effectiveCorporateId ?? user.corporateId ?? null;
@@ -333,7 +401,7 @@ export const claimsService = {
   },
 
   /** Files a claim: transitions status to 'pending' and optionally emails carriers */
-  async fileClaim(claimId: string, opts: { sendEmail?: boolean; partyIds?: string[]; notes?: string }, user: JwtPayload) {
+  async fileClaim(claimId: string, opts: { sendEmail?: boolean; partyIds?: string[]; partyId?: string; notes?: string }, user: JwtPayload) {
     const claim = await this.getById(claimId, user);
 
     await claimsRepository.update(claimId, {
@@ -342,9 +410,21 @@ export const claimsService = {
     });
     await claimsRepository.addTimeline(claimId, 'pending', user.userId, opts.notes || 'Claim filed');
 
-    if (opts.sendEmail && opts.partyIds?.length) {
+    const targetPartyId = opts.partyId;
+    const targetPartyIds = opts.partyIds || (targetPartyId ? [targetPartyId] : []);
+
+    if (targetPartyIds.length > 0) {
+      for (const pid of targetPartyIds) {
+        await claimsRepository.updateParty(claimId, pid, {
+          filingStatus: 'filed',
+          filedDate: new Date(),
+        }).catch((err: any) => logger.warn({ err, partyId: pid }, 'Failed to update party filing status'));
+      }
+    }
+
+    if (opts.sendEmail && targetPartyIds.length > 0) {
       const parties = await claimsRepository.getParties(claimId);
-      const selectedParties = parties.filter((p: any) => opts.partyIds!.includes(p.id));
+      const selectedParties = parties.filter((p: any) => targetPartyIds.includes(p.id));
       for (const party of selectedParties) {
         if ((party as any).email) {
           await smtpService.sendClaimNotification({
@@ -359,5 +439,27 @@ export const claimsService = {
     }
 
     return { success: true, status: 'pending', message: 'Claim filed successfully' };
+  },
+
+  /** Acknowledges a carrier's receipt of a filed claim */
+  async acknowledgeClaimFiling(claimId: string, partyId: string, data: { carrierClaimNumber?: string; carrierResponse?: string; notes?: string }, user: JwtPayload) {
+    const claim = await this.getById(claimId, user);
+
+    await claimsRepository.updateParty(claimId, partyId, {
+      filingStatus: 'acknowledged',
+      acknowledgedDate: new Date(),
+      ...(data.carrierClaimNumber ? { carrierClaimNumber: data.carrierClaimNumber } : {}),
+      ...(data.carrierResponse ? { carrierResponse: data.carrierResponse } : {}),
+    });
+
+    await claimsRepository.addTimeline(
+      claimId,
+      'acknowledged',
+      user.userId,
+      data.notes || `Carrier acknowledged claim filing${data.carrierClaimNumber ? ` (Carrier Ref: ${data.carrierClaimNumber})` : ''}`,
+    );
+
+    logger.info({ claimId, partyId, carrierClaimNumber: data.carrierClaimNumber }, 'Claim filing acknowledged by carrier');
+    return { success: true, message: 'Claim filing acknowledged' };
   },
 };

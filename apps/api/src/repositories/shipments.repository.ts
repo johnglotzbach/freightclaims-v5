@@ -91,4 +91,56 @@ export const shipmentsRepository = {
 
     return results;
   },
+
+  async carriersMassUpload(rows: Record<string, unknown>[], type: string) {
+    const results = { created: 0, errors: [] as string[], total: rows.length };
+
+    if (type === 'carriers') {
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const row = rows[i];
+          const name = (row.name as string) || (row.CarrierName as string);
+          if (!name) { results.errors.push(`Row ${i + 1}: Carrier name is required`); continue; }
+          await prisma.carrier.create({
+            data: {
+              name,
+              scacCode: (row.scacCode as string) || undefined,
+              dotNumber: (row.dotNumber as string) || undefined,
+              mcNumber: (row.mcNumber as string) || undefined,
+              email: (row.email as string) || undefined,
+              phone: (row.phone as string) || undefined,
+            },
+          });
+          results.created++;
+        } catch (err: any) {
+          results.errors.push(`Row ${i + 1}: ${err.message || String(err)}`);
+        }
+      }
+    } else if (type === 'carrier-contacts') {
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const row = rows[i];
+          const carrierName = (row.name as string) || (row.CarrierName as string);
+          if (!carrierName) { results.errors.push(`Row ${i + 1}: Carrier name is required`); continue; }
+          const carrier = await prisma.carrier.findFirst({ where: { name: { equals: carrierName, mode: 'insensitive' } } });
+          if (!carrier) { results.errors.push(`Row ${i + 1}: Carrier "${carrierName}" not found`); continue; }
+          const contactName = [(row.firstName as string) || '', (row.lastName as string) || ''].filter(Boolean).join(' ') || 'Contact';
+          await prisma.carrierContact.create({
+            data: {
+              carrierId: carrier.id,
+              name: contactName,
+              email: (row.email as string) || undefined,
+              phone: (row.phone as string) || undefined,
+              title: (row.title as string) || undefined,
+            },
+          });
+          results.created++;
+        } catch (err: any) {
+          results.errors.push(`Row ${i + 1}: ${err.message || String(err)}`);
+        }
+      }
+    }
+
+    return results;
+  },
 };

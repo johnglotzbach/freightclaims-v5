@@ -57,6 +57,7 @@ export const documentsController = {
   },
   delete: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.delete(req.params.id as string, user); res.status(204).send(); }),
   download: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.download(req.params.id as string, res, user); }),
+  thumbnail: asyncHandler(async (req, res) => { const user = getUser(req); await documentsService.thumbnail(req.params.id as string, res, user); }),
   getSignedUrl: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.getSignedUrl(req.params.id as string, user)); }),
 
   // Categories (shared reference data)
@@ -68,6 +69,17 @@ export const documentsController = {
   // Category mapping
   getCategoryMapping: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.getCategoryMapping(user)); }),
   updateCategoryMapping: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.updateCategoryMapping(req.body, user)); }),
+
+  linkDocumentsToClaim: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const { claimId, documentIds } = req.body;
+    if (!claimId || !Array.isArray(documentIds) || documentIds.length === 0) {
+      res.status(400).json({ success: false, error: 'claimId and documentIds[] are required' });
+      return;
+    }
+    const result = await documentsService.linkDocumentsToClaim(claimId, documentIds, user);
+    res.json({ success: true, data: result });
+  }),
 
   // AI processing
   processWithAI: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await documentsService.processWithAI(req.params.id as string, user)); }),

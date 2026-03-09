@@ -62,4 +62,48 @@ export const shipmentsController = {
 
   // Mass upload
   massUpload: asyncHandler(async (req, res) => { const user = getUser(req); res.json(await shipmentsService.massUpload(req.body, user)); }),
+
+  carriersMassUpload: asyncHandler(async (req, res) => {
+    const file = (req as any).file as Express.Multer.File | undefined;
+    const uploadType = req.body?.type || 'carriers';
+
+    let rows: Record<string, unknown>[] = [];
+
+    if (file) {
+      const csvText = file.buffer.toString('utf-8');
+      const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+        return;
+      }
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const headerMap: Record<string, string> = {
+        'carrier name': 'name', 'scac code': 'scacCode', 'dot number': 'dotNumber',
+        'mc number': 'mcNumber', 'email': 'email', 'phone': 'phone',
+        'address': 'address', 'city': 'city', 'state': 'state', 'zip': 'zip',
+        'first name': 'firstName', 'last name': 'lastName',
+        'title': 'title', 'department': 'department',
+      };
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: Record<string, unknown> = {};
+        headers.forEach((h, idx) => {
+          const key = headerMap[h.toLowerCase()] || h.replace(/\s+/g, '');
+          if (values[idx]) row[key] = values[idx];
+        });
+        if (Object.keys(row).length > 0) rows.push(row);
+      }
+    } else if (req.body?.rows) {
+      rows = req.body.rows;
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'No data rows found' });
+      return;
+    }
+
+    const result = await shipmentsService.carriersMassUpload(rows, uploadType);
+    res.json(result);
+  }),
 };

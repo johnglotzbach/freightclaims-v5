@@ -10,7 +10,10 @@
  *          apps/api/src/routes/claims.routes.ts
  */
 import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { claimsService } from '../services/claims.service';
+import { prisma } from '../config/database';
+import { env } from '../config/env';
 import type { JwtPayload } from '../middleware/auth.middleware';
 import type { TenantContext } from '../middleware/tenant.middleware';
 
@@ -149,6 +152,71 @@ export const claimsController = {
     await claimsService.getById(req.params.id as string, user);
     await claimsService.removeProduct(req.params.id as string, req.params.productId as string);
     res.status(204).send();
+  }),
+
+  // --- Activity (verify claim ownership first) ---
+  getActivity: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    const claimId = req.params.id as string;
+
+    const [activityLogs, timeline, comments] = await Promise.all([
+      prisma.activityLog.findMany({
+        where: { entityId: claimId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      }),
+      prisma.claimTimeline.findMany({
+        where: { claimId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { changedBy: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      }),
+      prisma.claimComment.findMany({
+        where: { claimId, type: 'system' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      }),
+    ]);
+
+    const merged = [
+      ...activityLogs.map((a) => ({
+        id: a.id,
+        type: 'activity' as const,
+        action: a.action,
+        entity: a.entity,
+        description: (a.metadata as any)?.description || `${a.action} on ${a.entity}`,
+        userName: a.user ? `${a.user.firstName} ${a.user.lastName}` : 'System',
+        metadata: a.metadata,
+        createdAt: a.createdAt.toISOString(),
+      })),
+      ...timeline.map((t) => ({
+        id: t.id,
+        type: 'timeline' as const,
+        action: 'status_change',
+        entity: 'claim',
+        description: t.description || `Status changed to ${t.status}`,
+        userName: `${t.changedBy.firstName} ${t.changedBy.lastName}`,
+        metadata: { status: t.status },
+        createdAt: t.createdAt.toISOString(),
+      })),
+      ...comments.map((c) => ({
+        id: c.id,
+        type: 'comment' as const,
+        action: 'system_comment',
+        entity: 'claim',
+        description: c.content,
+        userName: `${c.user.firstName} ${c.user.lastName}`,
+        metadata: null,
+        createdAt: c.createdAt.toISOString(),
+      })),
+    ];
+
+    merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json(merged.slice(0, 100));
   }),
 
   // --- Comments (verify claim ownership first) ---
@@ -336,11 +404,66 @@ export const claimsController = {
     res.status(201).json(ack);
   }),
 
+  // --- Deadlines (verify claim ownership first) ---
+  getDeadlines: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    const deadlines = await claimsService.getDeadlines(req.params.id as string);
+    res.json(deadlines);
+  }),
+
+  addDeadline: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    const deadline = await claimsService.addDeadline(req.params.id as string, req.body);
+    res.status(201).json(deadline);
+  }),
+
+  updateDeadline: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    const deadline = await claimsService.updateDeadline(req.params.id as string, req.params.did as string, req.body);
+    res.json(deadline);
+  }),
+
+  deleteDeadline: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    await claimsService.deleteDeadline(req.params.id as string, req.params.did as string);
+    res.status(204).send();
+  }),
+
   fileClaim: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
     const claimId = req.params.id as string;
-    const { sendEmail, partyIds, notes } = req.body;
-    const result = await claimsService.fileClaim(claimId, { sendEmail, partyIds, notes }, user);
+    const { sendEmail, partyIds, partyId, notes } = req.body;
+    const result = await claimsService.fileClaim(claimId, { sendEmail, partyIds, partyId, notes }, user);
+    res.json(result);
+  }),
+
+  generateAcknowledgmentLink: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const claimId = req.params.id as string;
+    const { partyId } = req.body;
+    await claimsService.getById(claimId, user);
+    const token = jwt.sign(
+      { claimId, partyId: partyId || null, type: 'acknowledgment' },
+      env.JWT_SECRET,
+      { expiresIn: '30d' },
+    );
+    const url = `${env.NEXT_PUBLIC_APP_URL}/acknowledge/${token}`;
+    res.json({ success: true, url, token });
+  }),
+
+  acknowledgeClaimFiling: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const claimId = req.params.id as string;
+    const { partyId, carrierClaimNumber, carrierResponse, notes } = req.body;
+    if (!partyId) {
+      res.status(400).json({ success: false, error: 'partyId is required' });
+      return;
+    }
+    const result = await claimsService.acknowledgeClaimFiling(claimId, partyId, { carrierClaimNumber, carrierResponse, notes }, user);
     res.json(result);
   }),
 };

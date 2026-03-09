@@ -28,4 +28,5 @@ reportsRouter.post('/insights/metrics-per-destination', reportsController.getMet
 reportsRouter.post('/insights/write-off-amount', reportsController.getWriteOffAmount);
 
 // --- Exportable reports ---
-reportsRouter.get('/export/:type', reportsController.exportReport);
+// GET /reports/export/:reportType?format=csv|pdf|excel&dateRange=30d|3m|6m|1y|all
+reportsRouter.get('/export/:reportType', reportsController.exportReport);

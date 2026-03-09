@@ -61,8 +61,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <div className="relative text-xs text-primary-400">
-          &copy; 2026 FreightClaims.com &middot;{' '}
-          <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link> &middot;{' '}
+          &copy; 2026 FreightClaims.com ·{' '}
+          <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link> ·{' '}
           <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
         </div>
       </div>

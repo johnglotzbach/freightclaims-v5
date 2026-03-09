@@ -76,20 +76,49 @@ export const usersService = {
    * The access token carries the full JwtPayload (corporateId, permissions, etc.)
    * so middleware can enforce tenant isolation and RBAC without DB hits.
    */
-  async login(credentials: { email: string; password: string }) {
+  async login(credentials: { email: string; password: string; totpCode?: string }) {
     const user = await usersRepository.findByEmail(credentials.email);
     if (!user) throw new UnauthorizedError('Invalid email or password');
 
     if (!user.isActive) throw new UnauthorizedError('Account is suspended. Contact support@freightclaims.com.');
 
+    const now = new Date();
+    if ((user as any).lockedUntil && new Date((user as any).lockedUntil) > now) {
+      const remaining = Math.ceil((new Date((user as any).lockedUntil).getTime() - now.getTime()) / 60000);
+      throw new UnauthorizedError(`Account temporarily locked. Try again in ${remaining} minute(s).`);
+    }
+
     const passwordValid = await bcrypt.compare(credentials.password, user.passwordHash);
-    if (!passwordValid) throw new UnauthorizedError('Invalid email or password');
+    if (!passwordValid) {
+      const attempts = ((user as any).failedLoginAttempts || 0) + 1;
+      const updateData: Record<string, unknown> = { failedLoginAttempts: attempts };
+      if (attempts >= 5) {
+        updateData.lockedUntil = new Date(now.getTime() + 15 * 60 * 1000);
+        logger.warn({ userId: user.id, attempts }, 'Account locked after failed attempts');
+      }
+      await usersRepository.update(user.id, updateData).catch(() => {});
+      throw new UnauthorizedError('Invalid email or password');
+    }
+
+    if ((user as any).twoFactorEnabled) {
+      if (!credentials.totpCode) {
+        return { requiresTwoFactor: true, userId: user.id };
+      }
+      try {
+        const { authenticator } = await import('otplib');
+        const valid = authenticator.verify({ token: credentials.totpCode, secret: (user as any).twoFactorSecret });
+        if (!valid) throw new UnauthorizedError('Invalid two-factor code');
+      } catch (err: any) {
+        if (err instanceof UnauthorizedError) throw err;
+        throw new UnauthorizedError('Two-factor verification failed');
+      }
+    }
 
     const payload = buildJwtPayload(user as unknown as Record<string, unknown>);
     const accessToken = generateToken(payload);
     const refreshToken = generateRefreshToken(user.id);
 
-    await usersRepository.update(user.id, { lastLoginAt: new Date() });
+    await usersRepository.update(user.id, { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null });
 
     logger.info({ userId: user.id }, 'User logged in');
 
@@ -302,6 +331,35 @@ export const usersService = {
     }).catch((err) => logger.error({ err }, 'Failed to send invite email'));
 
     return safeUser(user as unknown as Record<string, unknown>);
+  },
+
+  async setupTwoFactor(userId: string) {
+    const { authenticator } = await import('otplib');
+    const secret = authenticator.generateSecret();
+    await usersRepository.update(userId, { twoFactorSecret: secret });
+    const otpauth = authenticator.keyuri(userId, 'FreightClaims', secret);
+    return { secret, otpauth };
+  },
+
+  async verifyAndEnableTwoFactor(userId: string, code: string) {
+    const user = await usersRepository.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
+    const secret = (user as any).twoFactorSecret;
+    if (!secret) throw new BadRequestError('2FA setup not initiated');
+    const { authenticator } = await import('otplib');
+    const valid = authenticator.verify({ token: code, secret });
+    if (!valid) throw new BadRequestError('Invalid verification code');
+    await usersRepository.update(userId, { twoFactorEnabled: true });
+    return { enabled: true };
+  },
+
+  async disableTwoFactor(userId: string, password: string) {
+    const user = await usersRepository.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
+    const passwordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordValid) throw new UnauthorizedError('Invalid password');
+    await usersRepository.update(userId, { twoFactorEnabled: false, twoFactorSecret: null });
+    return { enabled: false };
   },
 
   async adminResetPassword(userId: string) {

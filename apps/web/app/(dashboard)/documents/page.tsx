@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, getList, del, post, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -10,7 +11,8 @@ import { PdfViewer } from '@/components/pdf-viewer';
 import {
   FileText, Search, Upload, Download, Eye, Trash2,
   FolderOpen, Image, Brain, List, Grid,
-  CheckCircle, TrendingUp, Loader2, Link2,
+  CheckCircle, TrendingUp, Loader2, Link2, FilePlus2,
+  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, RefreshCw,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -24,14 +26,18 @@ interface Document {
   id: string;
   name: string;
   category: string;
+  categoryId?: string;
   claimId?: string;
   claimNumber: string;
   uploadedBy: string;
   date: string;
   size: string;
   type: 'pdf' | 'image';
+  mimeType?: string;
   aiProcessed: boolean;
+  aiProcessingStatus?: string;
   confidence?: number | null;
+  thumbnailKey?: string | null;
 }
 
 interface ClaimOption {
@@ -57,12 +63,92 @@ function getTypeColor(category: string) {
   return colors[category] || colors['Other'];
 }
 
+function getStatusPill(status?: string) {
+  switch (status) {
+    case 'completed':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400';
+    case 'processing':
+      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400';
+    case 'failed':
+      return 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400';
+    default:
+      return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
+  }
+}
+
+function getStatusLabel(status?: string) {
+  switch (status) {
+    case 'completed': return 'Completed';
+    case 'processing': return 'Processing';
+    case 'failed': return 'Failed';
+    default: return 'Pending';
+  }
+}
+
+function getFileBadge(mimeType?: string): { label: string; className: string } | null {
+  if (!mimeType) return null;
+  if (mimeType === 'application/pdf') return { label: 'PDF', className: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400 font-bold' };
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('ms-excel')) return { label: 'XLSX', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 font-bold' };
+  if (mimeType.includes('word') || mimeType.includes('document')) return { label: 'DOCX', className: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400 font-bold' };
+  if (mimeType === 'text/csv') return { label: 'CSV', className: 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 font-bold' };
+  if (mimeType.startsWith('image/')) return null;
+  return null;
+}
+
+function DocumentThumbnail({ doc, size = 'lg' }: { doc: Document; size?: 'sm' | 'lg' }) {
+  const badge = getFileBadge(doc.mimeType);
+  const isImage = doc.mimeType?.startsWith('image/');
+  const dim = size === 'lg' ? 'w-full aspect-square' : 'w-10 h-10';
+  const badgeText = size === 'lg' ? 'text-2xl' : 'text-[9px]';
+  const iconSize = size === 'lg' ? 'w-10 h-10' : 'w-5 h-5';
+
+  if (isImage && doc.thumbnailKey) {
+    return (
+      <div className={cn(dim, 'bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden')}>
+        <img
+          src={`/api/v1/documents/${doc.id}/thumbnail`}
+          alt={doc.name}
+          loading="lazy"
+          className="w-full h-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="${iconSize} text-violet-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>`; }}
+        />
+      </div>
+    );
+  }
+
+  if (badge) {
+    return (
+      <div className={cn(dim, 'bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center')}>
+        <span className={cn('px-2.5 py-1 rounded-lg', badgeText, badge.className)}>{badge.label}</span>
+      </div>
+    );
+  }
+
+  if (isImage) {
+    return (
+      <div className={cn(dim, 'bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center')}>
+        <Image className={cn(iconSize, 'text-violet-400')} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(dim, 'bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center')}>
+      <FileText className={cn(iconSize, 'text-primary-400')} />
+    </div>
+  );
+}
+
 function extractClaims(raw: unknown): ClaimOption[] {
   const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as any).data)) ? (raw as any).data : [];
   return arr.map((c: any) => ({ id: c.id, claimNumber: c.claimNumber || c.id }));
 }
 
+type SortKey = 'name' | 'date' | 'category' | 'aiProcessingStatus';
+type SortDir = 'asc' | 'desc';
+
 export default function DocumentsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
@@ -72,6 +158,11 @@ export default function DocumentsPage() {
   const [viewingDoc, setViewingDoc] = useState<{ url: string; name: string; type?: string } | null>(null);
   const [uploadClaimId, setUploadClaimId] = useState<string>('');
   const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set());
+  const [linkClaimId, setLinkClaimId] = useState('');
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['documents'],
@@ -79,9 +170,9 @@ export default function DocumentsPage() {
   });
 
   const { data: rawClaims } = useQuery({
-    queryKey: ['claims-for-upload'],
-    queryFn: () => get<unknown>('/claims?limit=100'),
-    enabled: showUploadPanel,
+    queryKey: ['claims-for-linking'],
+    queryFn: () => get<unknown>('/claims?limit=200'),
+    enabled: showUploadPanel || showLinkModal,
   });
   const claimOptions = extractClaims(rawClaims);
 
@@ -135,6 +226,20 @@ export default function DocumentsPage() {
     onError: () => toast.error('Failed to delete some documents'),
   });
 
+  const linkMutation = useMutation({
+    mutationFn: async ({ claimId, documentIds }: { claimId: string; documentIds: string[] }) => {
+      return post('/documents/link', { claimId, documentIds });
+    },
+    onSuccess: () => {
+      toast.success('Documents linked to claim');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      setSelected([]);
+      setShowLinkModal(false);
+      setLinkClaimId('');
+    },
+    onError: () => toast.error('Failed to link documents'),
+  });
+
   const [processingDocId, setProcessingDocId] = useState<string | null>(null);
   const processMutation = useMutation({
     mutationFn: (id: string) => post(`/documents/${id}/process`),
@@ -145,6 +250,18 @@ export default function DocumentsPage() {
     },
     onError: () => toast.error('Failed to start AI analysis'),
     onSettled: () => setProcessingDocId(null),
+  });
+
+  const bulkReanalyzeMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.allSettled(ids.map(id => post(`/documents/${id}/process`)));
+    },
+    onSuccess: () => {
+      toast.success('AI re-analysis started for selected documents');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      setSelected([]);
+    },
+    onError: () => toast.error('Failed to start re-analysis'),
   });
 
   function handleDelete(id: string) {
@@ -158,6 +275,25 @@ export default function DocumentsPage() {
     bulkDeleteMutation.mutate([...selected]);
   }
 
+  async function handleBulkDownload() {
+    for (const id of selected) {
+      const doc = docs.find(d => d.id === id);
+      if (doc) {
+        try {
+          const { blobUrl } = await fetchDocumentBlob(doc.id);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = doc.name || 'document';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch { /* skip failed downloads */ }
+      }
+    }
+    toast.success(`Downloading ${selected.length} document(s)`);
+  }
+
   function handleUploadClick() {
     setShowUploadPanel(true);
   }
@@ -169,6 +305,28 @@ export default function DocumentsPage() {
       e.target.value = '';
     }
   }
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
+  }
+
+  const toggleSelectAll = () => {
+    if (selected.length === filtered.length) {
+      setSelected([]);
+    } else {
+      setSelected(filtered.map(d => d.id));
+    }
+  };
 
   if (isLoading) {
     return (
@@ -189,6 +347,29 @@ export default function DocumentsPage() {
     const matchCat = category === 'All' || d.category === category;
     return matchSearch && matchCat;
   });
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'name':
+          cmp = (a.name || '').localeCompare(b.name || '');
+          break;
+        case 'date':
+          cmp = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
+          break;
+        case 'category':
+          cmp = (a.category || '').localeCompare(b.category || '');
+          break;
+        case 'aiProcessingStatus':
+          cmp = (a.aiProcessingStatus || '').localeCompare(b.aiProcessingStatus || '');
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
 
   function toggleSelect(id: string) {
     setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
@@ -226,7 +407,7 @@ export default function DocumentsPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FolderOpen className="w-6 h-6 text-primary-500" /> Documents
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">{docs.length} document{docs.length !== 1 ? 's' : ''} &middot; {aiProcessedDocs.length} AI processed</p>
+          <p className="text-sm text-slate-500 mt-0.5">{docs.length} document{docs.length !== 1 ? 's' : ''} · {aiProcessedDocs.length} AI processed</p>
         </div>
         <button onClick={handleUploadClick} disabled={uploadMutation.isPending} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
           <Upload className="w-4 h-4" /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Documents'}
@@ -273,13 +454,42 @@ export default function DocumentsPage() {
               <span className="text-sm text-slate-500">
                 {uploadMutation.isPending ? 'Uploading...' : 'Click to select files (PDF, images, docs)'}
               </span>
-              <span className="text-xs text-slate-400">Multiple files supported &middot; Max 50MB each</span>
+              <span className="text-xs text-slate-400">Multiple files supported · Max 50MB each</span>
             </button>
           </div>
           <p className="text-xs text-slate-400 flex items-center gap-1">
             <Brain className="w-3 h-3 text-violet-500" />
             Gemini AI will automatically analyze and extract data from uploaded documents.
           </p>
+        </div>
+      )}
+
+      {/* Link to Claim Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-xl space-y-4">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Link {selected.length} document(s) to Claim</h3>
+            <select
+              value={linkClaimId}
+              onChange={e => setLinkClaimId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300"
+            >
+              <option value="">Select a claim...</option>
+              {claimOptions.map(c => (
+                <option key={c.id} value={c.id}>{c.claimNumber}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-3 justify-end">
+              <button onClick={() => { setShowLinkModal(false); setLinkClaimId(''); }} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+              <button
+                onClick={() => linkClaimId && linkMutation.mutate({ claimId: linkClaimId, documentIds: selected })}
+                disabled={!linkClaimId || linkMutation.isPending}
+                className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {linkMutation.isPending ? 'Linking...' : 'Link'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -361,11 +571,6 @@ export default function DocumentsPage() {
               />
             </div>
             <div className="flex items-center gap-2">
-              {selected.length > 0 && (
-                <button onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 font-medium px-3 py-2 disabled:opacity-50">
-                  <Trash2 className="w-4 h-4" /> Delete ({selected.length})
-                </button>
-              )}
               <div className="flex border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                 <button onClick={() => setViewMode('list')} className={cn('p-2.5', viewMode === 'list' ? 'bg-primary-50 dark:bg-primary-500/10 text-primary-500' : 'text-slate-400 hover:text-slate-600')}>
                   <List className="w-4 h-4" />
@@ -377,58 +582,121 @@ export default function DocumentsPage() {
             </div>
           </div>
 
+          {/* Batch Actions Toolbar */}
+          {selected.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap bg-primary-50 dark:bg-primary-500/5 border border-primary-200 dark:border-primary-500/20 rounded-xl px-4 py-3">
+              <span className="text-sm font-medium text-primary-700 dark:text-primary-300">{selected.length} selected</span>
+              <div className="w-px h-5 bg-primary-200 dark:bg-primary-500/30 mx-1" />
+              <button
+                onClick={() => setShowLinkModal(true)}
+                className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg border border-primary-200 dark:border-primary-500/30"
+              >
+                <Link2 className="w-3.5 h-3.5" /> Link to Claim
+              </button>
+              <button
+                onClick={() => { const ids = selected.join(','); router.push(`/claims/new?documentIds=${ids}`); }}
+                className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg border border-primary-200 dark:border-primary-500/30"
+              >
+                <FilePlus2 className="w-3.5 h-3.5" /> Create Claim
+              </button>
+              <button
+                onClick={handleBulkDownload}
+                className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-700 dark:text-slate-400 font-medium px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+              >
+                <Download className="w-3.5 h-3.5" /> Download All
+              </button>
+              <button
+                onClick={() => bulkReanalyzeMutation.mutate([...selected])}
+                disabled={bulkReanalyzeMutation.isPending}
+                className="flex items-center gap-1.5 text-sm text-violet-600 hover:text-violet-700 dark:text-violet-400 font-medium px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg border border-violet-200 dark:border-violet-500/30 disabled:opacity-50"
+              >
+                <RefreshCw className={cn('w-3.5 h-3.5', bulkReanalyzeMutation.isPending && 'animate-spin')} /> Re-analyze with AI
+              </button>
+              <button onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending} className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 font-medium px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg border border-red-200 dark:border-red-500/30 disabled:opacity-50">
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
+            </div>
+          )}
+
           {/* List View */}
           {viewMode === 'list' && (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-700">
-                      <th className="w-8 px-4 py-3"><input type="checkbox" className="rounded" /></th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">File</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Type</th>
+                  <thead className="sticky top-0 z-10 bg-white dark:bg-slate-800">
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      <th className="w-8 px-4 py-3">
+                        <input type="checkbox" className="rounded" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} />
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase cursor-pointer select-none" onClick={() => handleSort('name')}>
+                        <span className="flex items-center">File <SortIcon col="name" /></span>
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell cursor-pointer select-none" onClick={() => handleSort('category')}>
+                        <span className="flex items-center">Type <SortIcon col="category" /></span>
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell cursor-pointer select-none" onClick={() => handleSort('aiProcessingStatus')}>
+                        <span className="flex items-center">Status <SortIcon col="aiProcessingStatus" /></span>
+                      </th>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Claim</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Date</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell cursor-pointer select-none" onClick={() => handleSort('date')}>
+                        <span className="flex items-center">Date <SortIcon col="date" /></span>
+                      </th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                    {filtered.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                        <td className="px-4 py-3"><input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="rounded" /></td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
-                            {doc.type === 'image' ? <Image className="w-5 h-5 text-violet-500 flex-shrink-0" /> : <FileText className="w-5 h-5 text-primary-500 flex-shrink-0" />}
-                            <div className="min-w-0">
-                              <div className="font-medium text-slate-900 dark:text-white truncate max-w-xs">{doc.name}</div>
-                              <div className="text-xs text-slate-400">{doc.size}</div>
+                    {sorted.map((doc) => {
+                      const badge = getFileBadge(doc.mimeType);
+                      return (
+                        <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors even:bg-slate-50/50 dark:even:bg-slate-900/50">
+                          <td className="px-4 py-3"><input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="rounded" /></td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <DocumentThumbnail doc={doc} size="sm" />
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-900 dark:text-white truncate max-w-xs">{doc.name}</div>
+                                <div className="text-xs text-slate-400">{doc.size}</div>
+                              </div>
+                              {doc.aiProcessed && (
+                                <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  <CheckCircle className="w-3 h-3" /> AI
+                                </span>
+                              )}
                             </div>
-                            {doc.aiProcessed && (
-                              <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                <CheckCircle className="w-3 h-3" /> AI
-                              </span>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg', getTypeColor(doc.category))}>
+                              {doc.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full', getStatusPill(doc.aiProcessingStatus))}>
+                              {getStatusLabel(doc.aiProcessingStatus)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            {doc.claimId && doc.claimNumber ? (
+                              <button onClick={() => router.push(`/claims/${doc.claimId}`)} className="text-xs text-primary-500 hover:text-primary-600 font-medium hover:underline">
+                                {doc.claimNumber}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500">Unlinked</span>
                             )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <span className={cn('text-xs font-medium px-2.5 py-1 rounded-lg', getTypeColor(doc.category))}>
-                            {doc.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-xs text-primary-500 font-medium">{doc.claimNumber || '—'}</td>
-                        <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">
-                          {doc.date ? new Date(doc.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => handleView(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
-                            <button onClick={() => handleDownload(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
-                            <button onClick={() => processMutation.mutate(doc.id)} disabled={processingDocId !== null} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500 disabled:opacity-50" title="AI Analyze">{processingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}</button>
-                            <button onClick={() => handleDelete(doc.id)} disabled={deleteMutation.isPending} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">
+                            {doc.date ? new Date(doc.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => handleView(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Preview"><Eye className="w-4 h-4" /></button>
+                              <button onClick={() => handleDownload(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Download"><Download className="w-4 h-4" /></button>
+                              <button onClick={() => processMutation.mutate(doc.id)} disabled={processingDocId !== null} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500 disabled:opacity-50" title="AI Analyze">{processingDocId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}</button>
+                              <button onClick={() => handleDelete(doc.id)} disabled={deleteMutation.isPending} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 disabled:opacity-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -441,22 +709,37 @@ export default function DocumentsPage() {
           {/* Grid View */}
           {viewMode === 'grid' && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {filtered.map((doc) => (
-                <div key={doc.id} className="card p-4 hover:shadow-lg transition-all group">
-                  <div className="w-full aspect-square bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center mb-3 relative">
-                    {doc.type === 'image' ? <Image className="w-10 h-10 text-violet-400" /> : <FileText className="w-10 h-10 text-primary-400" />}
+              {sorted.map((doc) => (
+                <div key={doc.id} className={cn('card p-4 hover:shadow-lg transition-all group', selected.includes(doc.id) && 'ring-2 ring-primary-400')}>
+                  <div className="relative mb-3">
+                    <DocumentThumbnail doc={doc} size="lg" />
                     {doc.aiProcessed && (
                       <span className="absolute top-2 right-2 bg-emerald-500 text-white rounded-full p-1">
                         <CheckCircle className="w-3 h-3" />
                       </span>
                     )}
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(doc.id)}
+                      onChange={() => toggleSelect(doc.id)}
+                      className="absolute top-2 left-2 rounded opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity"
+                    />
                   </div>
                   <div className="font-medium text-xs text-slate-900 dark:text-white truncate">{doc.name}</div>
                   <div className="text-[10px] text-slate-400 mt-0.5">{doc.size}</div>
-                  <span className={cn('inline-block text-[10px] font-medium px-2 py-0.5 rounded-lg mt-1', getTypeColor(doc.category))}>
-                    {doc.category}
-                  </span>
-                  {doc.claimNumber && <div className="text-[10px] text-primary-500 mt-1">{doc.claimNumber}</div>}
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span className={cn('inline-block text-[10px] font-medium px-2 py-0.5 rounded-lg', getTypeColor(doc.category))}>
+                      {doc.category}
+                    </span>
+                    <span className={cn('inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full', getStatusPill(doc.aiProcessingStatus))}>
+                      {getStatusLabel(doc.aiProcessingStatus)}
+                    </span>
+                  </div>
+                  {doc.claimId && doc.claimNumber ? (
+                    <button onClick={() => router.push(`/claims/${doc.claimId}`)} className="text-[10px] text-primary-500 mt-1 hover:underline">{doc.claimNumber}</button>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-1 inline-block">Unlinked</span>
+                  )}
                   <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => handleView(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Eye className="w-3.5 h-3.5" /></button>
                     <button onClick={() => handleDownload(doc)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500"><Download className="w-3.5 h-3.5" /></button>

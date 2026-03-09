@@ -24,8 +24,11 @@ import type { ZodSchema, ZodError } from 'zod';
  * router.post('/claims', validate(createClaimSchema), claimsController.create);
  */
 export function validate(schema: ZodSchema, source: 'body' | 'query' | 'params' = 'body') {
+  // Support request-level schemas like z.object({ body: z.object({...}) })
+  const effectiveSchema = (schema as any).shape?.[source] ?? schema;
+
   return (req: Request, res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req[source]);
+    const result = effectiveSchema.safeParse(req[source]);
 
     if (!result.success) {
       const errors = formatZodErrors(result.error);

@@ -74,6 +74,7 @@ export const documentsRepository = {
       type: doc.mimeType?.startsWith('image/') ? 'image' : 'pdf',
       mimeType: doc.mimeType,
       s3Key: doc.s3Key,
+      thumbnailKey: doc.thumbnailKey || null,
       aiProcessed: doc.aiProcessingStatus === 'completed',
       aiProcessingStatus: doc.aiProcessingStatus,
       confidence: null,

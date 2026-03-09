@@ -8,6 +8,7 @@
  * Related: apps/api/src/controllers/shipments.controller.ts
  */
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { shipmentsController } from '../controllers/shipments.controller';
@@ -15,6 +16,8 @@ import {
   createShipmentSchema,
   updateShipmentSchema,
 } from '../validators/shipments.validators';
+
+const carriersMassUploadMulter = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export const shipmentsRouter: Router = Router();
 
@@ -26,6 +29,7 @@ shipmentsRouter.get('/', shipmentsController.list);
 shipmentsRouter.post('/', validate(createShipmentSchema), shipmentsController.create);
 
 // --- Carriers ---
+shipmentsRouter.post('/carriers/mass-upload', authorize(['admin', 'manager']), carriersMassUploadMulter.single('file'), shipmentsController.carriersMassUpload);
 shipmentsRouter.get('/carriers/all', shipmentsController.listCarriers);
 shipmentsRouter.get('/carriers/data/scac', shipmentsController.getCarrierData);
 shipmentsRouter.get('/carriers/integrated/all', shipmentsController.getIntegratedCarriers);

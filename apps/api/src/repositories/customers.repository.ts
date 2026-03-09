@@ -115,6 +115,39 @@ export const customersRepository = {
       recentClaims,
     };
   },
+  async getClaimStatsForCustomers(customerIds: string[]) {
+    if (customerIds.length === 0) return new Map<string, { totalClaims: number; totalAmount: number; openClaims: number; avgResolutionDays: number | null }>();
+
+    const stats = await prisma.$queryRaw<Array<{
+      customer_id: string;
+      total_claims: bigint;
+      total_amount: number | null;
+      open_claims: bigint;
+      avg_resolution_days: number | null;
+    }>>`
+      SELECT
+        c.customer_id,
+        COUNT(*)::bigint AS total_claims,
+        COALESCE(SUM(c.claim_amount), 0)::float AS total_amount,
+        COUNT(*) FILTER (WHERE c.status NOT IN ('settled', 'closed', 'cancelled') AND c.deleted_at IS NULL)::bigint AS open_claims,
+        AVG(EXTRACT(EPOCH FROM (c.updated_at - c.created_at)) / 86400) FILTER (WHERE c.status = 'settled') AS avg_resolution_days
+      FROM claims c
+      WHERE c.deleted_at IS NULL AND c.customer_id = ANY(${customerIds})
+      GROUP BY c.customer_id
+    `;
+
+    const map = new Map<string, { totalClaims: number; totalAmount: number; openClaims: number; avgResolutionDays: number | null }>();
+    for (const row of stats) {
+      map.set(row.customer_id, {
+        totalClaims: Number(row.total_claims),
+        totalAmount: Number(row.total_amount ?? 0),
+        openClaims: Number(row.open_claims),
+        avgResolutionDays: row.avg_resolution_days != null ? Math.round(row.avg_resolution_days * 10) / 10 : null,
+      });
+    }
+    return map;
+  },
+
   async getCountries() { return prisma.country.findMany({ orderBy: { name: 'asc' } }); },
   /** Aggregate: all contacts across customers with company name (for tenant) */
   async listAllContacts(corporateId?: string | null, isSuperAdmin = false) {
@@ -227,5 +260,78 @@ export const customersRepository = {
       take: 10,
     });
     return addresses;
+  },
+
+  async massUpload(rows: Record<string, unknown>[], type: string) {
+    const results = { created: 0, errors: [] as string[], total: rows.length };
+
+    if (type === 'customers' || type === 'locations') {
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const row = rows[i];
+          if (type === 'customers') {
+            const name = (row.name as string) || (row.CompanyName as string);
+            if (!name) { results.errors.push(`Row ${i + 1}: Company name is required`); continue; }
+            await prisma.customer.create({
+              data: {
+                name,
+                code: (row.code as string) || undefined,
+                email: (row.email as string) || undefined,
+                phone: (row.phone as string) || undefined,
+                industry: (row.industry as string) || undefined,
+                isCorporate: row.isCorporate === 'true' || row.isCorporate === true,
+              },
+            });
+          } else {
+            const customerName = (row.customerName as string) || (row.CustomerName as string);
+            if (!customerName) { results.errors.push(`Row ${i + 1}: Customer name is required`); continue; }
+            const customer = await prisma.customer.findFirst({ where: { name: { equals: customerName, mode: 'insensitive' } } });
+            if (!customer) { results.errors.push(`Row ${i + 1}: Customer "${customerName}" not found`); continue; }
+            await prisma.customerAddress.create({
+              data: {
+                customerId: customer.id,
+                label: (row.locationName as string) || 'Main',
+                street1: (row.addressLine1 as string) || '',
+                street2: (row.addressLine2 as string) || undefined,
+                city: (row.city as string) || '',
+                state: (row.state as string) || '',
+                zipCode: (row.zipCode as string) || '',
+                country: (row.country as string) || 'US',
+                isDefault: row.isDefault === 'true' || row.isDefault === true,
+              },
+            });
+          }
+          results.created++;
+        } catch (err: any) {
+          results.errors.push(`Row ${i + 1}: ${err.message || String(err)}`);
+        }
+      }
+    } else if (type === 'contacts') {
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const row = rows[i];
+          const customerName = (row.customerName as string) || (row.CustomerName as string);
+          if (!customerName) { results.errors.push(`Row ${i + 1}: Customer name is required`); continue; }
+          const customer = await prisma.customer.findFirst({ where: { name: { equals: customerName, mode: 'insensitive' } } });
+          if (!customer) { results.errors.push(`Row ${i + 1}: Customer "${customerName}" not found`); continue; }
+          await prisma.customerContact.create({
+            data: {
+              customerId: customer.id,
+              firstName: (row.firstName as string) || '',
+              lastName: (row.lastName as string) || '',
+              email: (row.email as string) || undefined,
+              phone: (row.phone as string) || undefined,
+              title: (row.title as string) || undefined,
+              isPrimary: row.isPrimary === 'true' || row.isPrimary === true,
+            },
+          });
+          results.created++;
+        } catch (err: any) {
+          results.errors.push(`Row ${i + 1}: ${err.message || String(err)}`);
+        }
+      }
+    }
+
+    return results;
   },
 };

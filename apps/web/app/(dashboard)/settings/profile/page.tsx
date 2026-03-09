@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { get, put } from '@/lib/api-client';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -85,7 +86,7 @@ function GeneralTab() {
         </div>
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white">{firstName} {lastName}</h3>
-          <p className="text-xs text-slate-500">{user?.roleName || (typeof user?.role === 'string' ? user.role : 'User')}</p>
+          <p className="text-xs text-slate-500">{user?.roleName || (typeof user?.role === 'string' ? user.role : user?.role?.name || 'User')}</p>
         </div>
       </div>
 
@@ -211,7 +212,7 @@ function NotificationsTab() {
 
 function SignatureTab() {
   const { data: user } = useQuery({ queryKey: ['profile'], queryFn: () => get<any>('/users/me') });
-  const roleName = user?.roleName || (typeof user?.role === 'string' ? user.role : '') || '';
+  const roleName = user?.roleName || (typeof user?.role === 'string' ? user.role : user?.role?.name) || '';
   const defaultSig = user ? `<p>Best regards,</p><p><strong>${user.firstName || ''} ${user.lastName || ''}</strong><br/>${roleName}<br/>FreightClaims<br/>${user.email || ''}</p>` : '';
   const [signature, setSignature] = useState('');
   const [sigLoaded, setSigLoaded] = useState(false);
@@ -242,7 +243,7 @@ function SignatureTab() {
       <textarea value={signature} onChange={(e) => setSignature(e.target.value)} rows={8} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 font-mono resize-none" />
       <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
         <p className="text-xs text-slate-500 mb-2">Preview</p>
-        <div className="text-sm" dangerouslySetInnerHTML={{ __html: signature }} />
+        <div className="text-sm" dangerouslySetInnerHTML={{ __html: sanitizeHtml(signature) }} />
       </div>
       <button onClick={() => saveMutation.mutate({ signature })} className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" disabled={saveMutation.isPending}><Save className="w-4 h-4 inline mr-1" /> Save Signature</button>
     </div>

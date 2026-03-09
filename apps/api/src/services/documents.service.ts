@@ -18,6 +18,7 @@ import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
 import { NotFoundError } from '../utils/errors';
 import { env } from '../config/env';
+import { usageService } from './usage.service';
 
 /**
  * Loads a document and verifies the requesting user has access via the
@@ -169,6 +170,21 @@ export const documentsService = {
             throw createErr;
           }
         }
+        const isImage = file.mimetype.startsWith('image/');
+        if (isImage) {
+          try {
+            const thumbFilename = `${filename}.thumb.jpg`;
+            const { key: thumbKey } = await storageService.uploadDocument(
+              storageClaimId, storageCategory, thumbFilename,
+              file.buffer, file.mimetype, corporateId,
+            );
+            await documentsRepository.update(doc.id, { thumbnailKey: thumbKey });
+            doc.thumbnailKey = thumbKey;
+          } catch (thumbErr) {
+            logger.warn({ err: thumbErr, docId: doc.id }, 'Thumbnail generation failed (non-blocking)');
+          }
+        }
+
         logger.info({ docId: doc.id, key, size }, 'Document uploaded');
         results.push(doc);
 
@@ -180,6 +196,10 @@ export const documentsService = {
         logger.error({ err: fileErr, fileName: file.originalname }, 'Failed to process uploaded file');
         errors.push(`${file.originalname}: ${fileErr.message}`);
       }
+    }
+
+    if (results.length > 0 && corporateId) {
+      usageService.incrementUsage(corporateId, 'documents', results.length).catch(() => {});
     }
 
     if (results.length === 0 && errors.length > 0) {
@@ -196,6 +216,20 @@ export const documentsService = {
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${doc.documentName}"`);
+    res.setHeader('Content-Length', String(body.length));
+    res.end(body);
+  },
+
+  async thumbnail(id: string, res: Response, user: JwtPayload) {
+    const doc = await verifyDocumentAccess(id, user);
+    const thumbKey = (doc as any).thumbnailKey;
+    if (!thumbKey) {
+      res.status(404).json({ error: 'No thumbnail available' });
+      return;
+    }
+    const { body, contentType } = await storageService.downloadDocument(thumbKey);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Content-Length', String(body.length));
     res.end(body);
   },
@@ -381,6 +415,26 @@ Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, s
     const { key: pdfKey } = await storageService.uploadDocument(claimId, category, pdfFilename, result.buffer, 'application/pdf');
 
     return { id, status: 'converted', pdfKey };
+  },
+
+  async linkDocumentsToClaim(claimId: string, documentIds: string[], user: JwtPayload) {
+    const claim = await prisma.claim.findUnique({ where: { id: claimId }, select: { corporateId: true } });
+    if (!claim) throw new NotFoundError(`Claim ${claimId} not found`);
+    if (!user.isSuperAdmin && claim.corporateId && claim.corporateId !== user.corporateId) {
+      throw new NotFoundError(`Claim ${claimId} not found`);
+    }
+
+    const updated = [];
+    for (const docId of documentIds) {
+      const doc = await prisma.claimDocument.update({
+        where: { id: docId },
+        data: { claimId },
+      });
+      updated.push(doc);
+    }
+
+    logger.info({ claimId, documentIds, userId: user.userId }, 'Linked documents to claim');
+    return updated;
   },
 
   async mergeClaimDocs(claimId: string, documentIds: string[], user: JwtPayload) {

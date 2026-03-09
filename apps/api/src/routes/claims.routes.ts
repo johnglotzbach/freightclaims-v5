@@ -65,6 +65,9 @@ claimsRouter.post('/:id/products', claimsController.addProduct);
 claimsRouter.put('/:id/products/:productId', claimsController.updateProduct);
 claimsRouter.delete('/:id/products/:productId', claimsController.removeProduct);
 
+// --- Claim activity log ---
+claimsRouter.get('/:id/activity', claimsController.getActivity);
+
 // --- Claim comments / activity log ---
 claimsRouter.get('/:id/comments', claimsController.getComments);
 claimsRouter.post('/:id/comments', claimsController.addComment);
@@ -88,5 +91,17 @@ claimsRouter.post('/:id/identifiers', claimsController.addIdentifier);
 claimsRouter.get('/:id/acknowledgement', claimsController.getAcknowledgement);
 claimsRouter.post('/:id/acknowledgement', claimsController.createAcknowledgement);
 
+// --- Claim deadlines ---
+claimsRouter.get('/:id/deadlines', claimsController.getDeadlines);
+claimsRouter.post('/:id/deadlines', claimsController.addDeadline);
+claimsRouter.put('/:id/deadlines/:did', claimsController.updateDeadline);
+claimsRouter.delete('/:id/deadlines/:did', claimsController.deleteDeadline);
+
 // --- File claim (submit to carrier) ---
 claimsRouter.post('/:id/file', claimsController.fileClaim);
+
+// --- Generate public acknowledgment link ---
+claimsRouter.post('/:id/acknowledgment-link', claimsController.generateAcknowledgmentLink);
+
+// --- Acknowledge carrier receipt of filed claim ---
+claimsRouter.post('/:id/acknowledge', claimsController.acknowledgeClaimFiling);

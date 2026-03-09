@@ -5,7 +5,10 @@
  * Related: apps/api/src/services/users.service.ts
  */
 import type { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { usersService } from '../services/users.service';
+import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
 
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
@@ -165,20 +168,147 @@ export const usersController = {
     res.status(204).send();
   }),
 
-  getApiKeys: asyncHandler(async (_req, res) => {
-    res.json([]);
+  getApiKeys: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.json([]);
+      return;
+    }
+    const keys = await prisma.apiKey.findMany({
+      where: { corporateId: user.corporateId },
+      select: { id: true, name: true, prefix: true, lastUsedAt: true, createdAt: true, expiresAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(keys);
   }),
 
-  createApiKey: asyncHandler(async (_req, res) => {
-    res.status(501).json({ message: 'API key management coming soon' });
+  createApiKey: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.status(400).json({ error: 'No workspace context' });
+      return;
+    }
+    const { name, expiresAt } = req.body;
+    if (!name || typeof name !== 'string') {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const rawKey = crypto.randomBytes(32).toString('hex');
+    const prefix = rawKey.substring(0, 8);
+    const keyHash = await bcrypt.hash(rawKey, 10);
+
+    const apiKey = await prisma.apiKey.create({
+      data: {
+        userId: user.userId,
+        corporateId: user.corporateId,
+        name,
+        keyHash,
+        prefix,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      },
+      select: { id: true, name: true, prefix: true, createdAt: true, expiresAt: true },
+    });
+
+    res.status(201).json({ ...apiKey, key: rawKey });
   }),
 
-  deleteApiKey: asyncHandler(async (_req, res) => {
-    res.status(501).json({ message: 'API key management coming soon' });
+  deleteApiKey: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.status(400).json({ error: 'No workspace context' });
+      return;
+    }
+    const { id } = req.params;
+    const existing = await prisma.apiKey.findFirst({ where: { id, corporateId: user.corporateId } });
+    if (!existing) {
+      res.status(404).json({ error: 'API key not found' });
+      return;
+    }
+    await prisma.apiKey.delete({ where: { id } });
+    res.status(204).send();
   }),
 
-  saveWebhookConfig: asyncHandler(async (_req, res) => {
-    res.status(501).json({ message: 'Webhook configuration coming soon' });
+  getWebhooks: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.json([]);
+      return;
+    }
+    const configs = await prisma.webhookConfig.findMany({
+      where: { corporateId: user.corporateId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(configs);
+  }),
+
+  saveWebhookConfig: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.status(400).json({ error: 'No workspace context' });
+      return;
+    }
+    const { url, secret, events, isActive } = req.body;
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'url is required' });
+      return;
+    }
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      res.status(400).json({ error: 'events array is required' });
+      return;
+    }
+    const generatedSecret = secret || crypto.randomBytes(32).toString('hex');
+    const config = await prisma.webhookConfig.create({
+      data: {
+        corporateId: user.corporateId,
+        url,
+        secret: generatedSecret,
+        events,
+        isActive: isActive !== false,
+      },
+    });
+    res.status(201).json(config);
+  }),
+
+  updateWebhookConfig: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.status(400).json({ error: 'No workspace context' });
+      return;
+    }
+    const { id } = req.params;
+    const existing = await prisma.webhookConfig.findFirst({ where: { id, corporateId: user.corporateId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Webhook config not found' });
+      return;
+    }
+    const { url, secret, events, isActive } = req.body;
+    const updated = await prisma.webhookConfig.update({
+      where: { id },
+      data: {
+        ...(url && { url }),
+        ...(secret && { secret }),
+        ...(events && { events }),
+        ...(isActive !== undefined && { isActive }),
+      },
+    });
+    res.json(updated);
+  }),
+
+  deleteWebhookConfig: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    if (!user.corporateId) {
+      res.status(400).json({ error: 'No workspace context' });
+      return;
+    }
+    const { id } = req.params;
+    const existing = await prisma.webhookConfig.findFirst({ where: { id, corporateId: user.corporateId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Webhook config not found' });
+      return;
+    }
+    await prisma.webhookConfig.delete({ where: { id } });
+    res.status(204).send();
   }),
 
   onboarding: asyncHandler(async (req, res) => {
@@ -208,6 +338,23 @@ export const usersController = {
     res.json({ message: 'Onboarding complete' });
   }),
 
+  setupTwoFactor: asyncHandler(async (req, res) => {
+    const result = await usersService.setupTwoFactor(getUser(req).userId);
+    res.json(result);
+  }),
+
+  verifyAndEnableTwoFactor: asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    const result = await usersService.verifyAndEnableTwoFactor(getUser(req).userId, code);
+    res.json(result);
+  }),
+
+  disableTwoFactor: asyncHandler(async (req, res) => {
+    const { password } = req.body;
+    const result = await usersService.disableTwoFactor(getUser(req).userId, password);
+    res.json(result);
+  }),
+
   adminResetPassword: asyncHandler(async (req, res) => {
     await usersService.adminResetPassword(req.params.id as string);
     res.json({ message: 'Password has been reset. A temporary password has been generated.' });
@@ -224,3 +371,23 @@ export const usersController = {
     res.status(201).json(invited);
   }),
 };
+
+export async function dispatchWebhook(corporateId: string, event: string, payload: unknown) {
+  const configs = await prisma.webhookConfig.findMany({
+    where: { corporateId, isActive: true, events: { has: event } },
+  });
+  for (const config of configs) {
+    try {
+      const body = JSON.stringify({ event, timestamp: new Date().toISOString(), data: payload });
+      const signature = crypto.createHmac('sha256', config.secret).update(body).digest('hex');
+      await fetch(config.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': signature },
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch {
+      // Log but don't fail — webhook delivery is best-effort
+    }
+  }
+}
