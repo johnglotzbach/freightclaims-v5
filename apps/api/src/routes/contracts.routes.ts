@@ -72,14 +72,14 @@ contractsRouter.put('/insurance/:id', async (req, res, next) => {
     if (deductible !== undefined) data.deductible = deductible;
     if (customerId !== undefined) data.customerId = customerId;
     if (carrierId !== undefined) data.carrierId = carrierId;
-    const cert = await prisma.insuranceCertificate.update({ where: { id: req.params.id }, data });
+    const cert = await prisma.insuranceCertificate.update({ where: { id: req.params.id as string }, data });
     res.json({ success: true, data: cert });
   } catch (err) { next(err); }
 });
 
 contractsRouter.delete('/insurance/:id', authorize(['admin', 'manager']), async (req, res, next) => {
   try {
-    await prisma.insuranceCertificate.delete({ where: { id: req.params.id } });
+    await prisma.insuranceCertificate.delete({ where: { id: req.params.id as string } });
     res.status(204).send();
   } catch (err) { next(err); }
 });

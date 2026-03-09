@@ -6,7 +6,7 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { usersService } from '../services/users.service';
 import { prisma } from '../config/database';
 import type { JwtPayload } from '../middleware/auth.middleware';
@@ -219,7 +219,7 @@ export const usersController = {
       res.status(400).json({ error: 'No workspace context' });
       return;
     }
-    const { id } = req.params;
+    const id = req.params.id as string;
     const existing = await prisma.apiKey.findFirst({ where: { id, corporateId: user.corporateId } });
     if (!existing) {
       res.status(404).json({ error: 'API key not found' });
@@ -276,7 +276,7 @@ export const usersController = {
       res.status(400).json({ error: 'No workspace context' });
       return;
     }
-    const { id } = req.params;
+    const id = req.params.id as string;
     const existing = await prisma.webhookConfig.findFirst({ where: { id, corporateId: user.corporateId } });
     if (!existing) {
       res.status(404).json({ error: 'Webhook config not found' });
@@ -301,7 +301,7 @@ export const usersController = {
       res.status(400).json({ error: 'No workspace context' });
       return;
     }
-    const { id } = req.params;
+    const id = req.params.id as string;
     const existing = await prisma.webhookConfig.findFirst({ where: { id, corporateId: user.corporateId } });
     if (!existing) {
       res.status(404).json({ error: 'Webhook config not found' });

@@ -443,7 +443,7 @@ export const claimsService = {
 
   /** Acknowledges a carrier's receipt of a filed claim */
   async acknowledgeClaimFiling(claimId: string, partyId: string, data: { carrierClaimNumber?: string; carrierResponse?: string; notes?: string }, user: JwtPayload) {
-    const claim = await this.getById(claimId, user);
+    await this.getById(claimId, user);
 
     await claimsRepository.updateParty(claimId, partyId, {
       filingStatus: 'acknowledged',

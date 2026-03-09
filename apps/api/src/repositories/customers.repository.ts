@@ -290,14 +290,14 @@ export const customersRepository = {
             await prisma.customerAddress.create({
               data: {
                 customerId: customer.id,
-                label: (row.locationName as string) || 'Main',
+                type: (row.locationType as string) || 'billing',
                 street1: (row.addressLine1 as string) || '',
                 street2: (row.addressLine2 as string) || undefined,
                 city: (row.city as string) || '',
                 state: (row.state as string) || '',
                 zipCode: (row.zipCode as string) || '',
                 country: (row.country as string) || 'US',
-                isDefault: row.isDefault === 'true' || row.isDefault === true,
+                isPrimary: row.isPrimary === 'true' || row.isPrimary === true,
               },
             });
           }

@@ -105,7 +105,8 @@ export const usersService = {
         return { requiresTwoFactor: true, userId: user.id };
       }
       try {
-        const { authenticator } = await import('otplib');
+        const otplib = await import('otplib');
+        const authenticator = otplib.default?.authenticator ?? (otplib as any).authenticator;
         const valid = authenticator.verify({ token: credentials.totpCode, secret: (user as any).twoFactorSecret });
         if (!valid) throw new UnauthorizedError('Invalid two-factor code');
       } catch (err: any) {
@@ -334,7 +335,8 @@ export const usersService = {
   },
 
   async setupTwoFactor(userId: string) {
-    const { authenticator } = await import('otplib');
+    const otplib = await import('otplib');
+    const authenticator = otplib.default?.authenticator ?? (otplib as any).authenticator;
     const secret = authenticator.generateSecret();
     await usersRepository.update(userId, { twoFactorSecret: secret });
     const otpauth = authenticator.keyuri(userId, 'FreightClaims', secret);
@@ -346,7 +348,8 @@ export const usersService = {
     if (!user) throw new NotFoundError('User not found');
     const secret = (user as any).twoFactorSecret;
     if (!secret) throw new BadRequestError('2FA setup not initiated');
-    const { authenticator } = await import('otplib');
+    const otplib = await import('otplib');
+    const authenticator = otplib.default?.authenticator ?? (otplib as any).authenticator;
     const valid = authenticator.verify({ token: code, secret });
     if (!valid) throw new BadRequestError('Invalid verification code');
     await usersRepository.update(userId, { twoFactorEnabled: true });
