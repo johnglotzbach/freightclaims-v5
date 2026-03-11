@@ -68,15 +68,15 @@ export default function ClaimDetailPage() {
   async function handleExportPdf() {
     setMenuOpen(false);
     try {
-      const res = await apiClient.get('/reports/export/pdf', { responseType: 'blob', params: { claimId: id } });
+      const res = await apiClient.get('/reports/export/claim', { responseType: 'blob', params: { claimId: id, format: 'csv' } });
       const blob = res.data as Blob;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `claim-${claim?.claimNumber || id}-${Date.now()}.pdf`;
+      a.download = `claim-${claim?.claimNumber || id}-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Claim exported as PDF');
+      toast.success('Claim exported');
     } catch {
       toast.error('Export failed');
     }
@@ -190,7 +190,7 @@ export default function ClaimDetailPage() {
                     <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} aria-hidden="true" />
                     <div className="absolute right-0 top-full mt-1 z-20 w-48 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
                       <button onClick={handleExportPdf} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
-                        <FileDown className="w-4 h-4" /> Export as PDF
+                        <FileDown className="w-4 h-4" /> Export Claim
                       </button>
                       <button onClick={handleDeleteClaim} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30">
                         <Trash2 className="w-4 h-4" /> Delete Claim

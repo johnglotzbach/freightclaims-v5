@@ -1,19 +1,21 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { post, uploadFile } from '@/lib/api-client';
+import { post, get, getList, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { CLAIM_TYPES } from 'shared';
 import {
-  FileText, Users, Package, Truck, Upload,
-  Plus, Trash2, MapPin, DollarSign,
+  FileText, Users, Package, Upload,
+  Plus, Trash2, DollarSign,
   X, Loader2, CheckCircle, AlertCircle,
-  Mail,
+  Search, ChevronDown,
 } from 'lucide-react';
+
+/* ────────────────────────── Types ────────────────────────── */
 
 interface PartyEntry {
   type: string;
@@ -26,6 +28,8 @@ interface PartyEntry {
   city: string;
   state: string;
   zipCode: string;
+  carrierId?: string;
+  customerId?: string;
 }
 
 interface ProductEntry {
@@ -38,6 +42,7 @@ interface ProductEntry {
   claimAmount: string;
   sku: string;
   poNumber: string;
+  catalogId?: string;
 }
 
 interface DocFile {
@@ -45,13 +50,51 @@ interface DocFile {
   category: string;
 }
 
+interface CarrierResult {
+  id: string;
+  name: string;
+  scacCode?: string;
+  dotNumber?: string;
+  mcNumber?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface CustomerResult {
+  id: string;
+  name: string;
+  code?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface ProductResult {
+  id: string;
+  name: string;
+  sku?: string;
+  description?: string;
+  value?: number;
+  weight?: number;
+}
+
+interface LocationResult {
+  id: string;
+  street1?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  customerName?: string;
+}
+
+/* ────────────────────────── Constants ────────────────────────── */
+
 const CLAIM_MODES = ['LTL', 'FTL', 'Flatbed', 'Air', 'Ocean', 'Rail', 'Parcel', 'Intermodal'];
 const CLAIM_CONDITIONS = ['Broken', 'Crushed', 'Water Damage', 'Missing Parts', 'Contaminated', 'Pilferage', 'Temperature Damage', 'Short', 'Refused', 'Other'];
 const DOC_CATEGORIES = [
   { key: 'bol', label: 'Bill of Lading' },
   { key: 'freight-invoice', label: 'Freight Invoice' },
   { key: 'product-invoice', label: 'Product Invoice' },
-  { key: 'pod', label: 'Delivery Receipt or Proof of Delivery' },
+  { key: 'pod', label: 'Delivery Receipt / POD' },
   { key: 'inspection', label: 'Inspection Report' },
   { key: 'photos', label: 'Freight Damage Photo' },
   { key: 'other', label: 'Other' },
@@ -71,6 +114,106 @@ const IDENTIFIER_TYPES = [
   { key: 'freightclaims', label: 'FreightClaims ID' },
 ];
 
+/* ────────────────────────── Autocomplete Component ────────────────────────── */
+
+function Autocomplete<T extends { id: string }>({
+  placeholder,
+  value,
+  onSearch,
+  results,
+  isLoading,
+  onSelect,
+  renderItem,
+  onClear,
+  className,
+}: {
+  placeholder: string;
+  value: string;
+  onSearch: (term: string) => void;
+  results: T[];
+  isLoading: boolean;
+  onSelect: (item: T) => void;
+  renderItem: (item: T) => React.ReactNode;
+  onClear: () => void;
+  className?: string;
+}) {
+  const [inputValue, setInputValue] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => { setInputValue(value); }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setInputValue(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (v.trim().length >= 2) {
+        onSearch(v.trim());
+        setIsOpen(true);
+      } else {
+        setIsOpen(false);
+      }
+    }, 400);
+  };
+
+  return (
+    <div ref={containerRef} className={cn('relative', className)}>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          type="text"
+          value={inputValue}
+          onChange={handleChange}
+          onFocus={() => { if (results.length > 0) setIsOpen(true); }}
+          placeholder={placeholder}
+          className="input pl-8 pr-8"
+        />
+        {value && (
+          <button onClick={() => { onClear(); setInputValue(''); setIsOpen(false); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+              <span className="ml-2 text-xs text-slate-500">Searching...</span>
+            </div>
+          ) : results.length === 0 ? (
+            <div className="py-3 px-4 text-xs text-slate-500 text-center">No results found. You can type a new name.</div>
+          ) : (
+            results.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => { onSelect(item); setIsOpen(false); }}
+                className="w-full text-left px-4 py-2.5 hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+              >
+                {renderItem(item)}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ────────────────────────── Main Page ────────────────────────── */
+
 export default function NewClaimPage() {
   const router = useRouter();
 
@@ -89,11 +232,21 @@ export default function NewClaimPage() {
   const [poNumber, setPoNumber] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
 
+  const [originSearch, setOriginSearch] = useState('');
+  const [destSearch, setDestSearch] = useState('');
+  const [originAddress, setOriginAddress] = useState<LocationResult | null>(null);
+  const [destAddress, setDestAddress] = useState<LocationResult | null>(null);
+
   const [parties, setParties] = useState<PartyEntry[]>([]);
   const [showPartyForm, setShowPartyForm] = useState(false);
+  const [partyType, setPartyType] = useState('carrier');
   const [partyDraft, setPartyDraft] = useState<PartyEntry>({ type: 'carrier', name: '', email: '', phone: '', scacCode: '', contactName: '', address: '', city: '', state: '', zipCode: '' });
 
-  const [products, setProducts] = useState<ProductEntry[]>([{ productName: '', claimType: 'damage', claimCondition: '', quantity: 0, weight: '', unitCost: '', claimAmount: '', sku: '', poNumber: '' }]);
+  const [carrierSearch, setCarrierSearch] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  const [products, setProducts] = useState<ProductEntry[]>([{ productName: '', claimType: 'damage', claimCondition: '', quantity: 0, weight: '', unitCost: '', claimAmount: '', sku: '', poNumber: '', catalogId: undefined }]);
+  const [productSearches, setProductSearches] = useState<Record<number, string>>({});
 
   const [salvageAllowance, setSalvageAllowance] = useState('');
 
@@ -101,18 +254,79 @@ export default function NewClaimPage() {
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [agreeTerms, setAgreeTerms] = useState(false);
 
+  /* ── API search queries ── */
+  const { data: carrierResults = [], isFetching: isCarrierLoading } = useQuery({
+    queryKey: ['carrier-search', carrierSearch],
+    queryFn: async () => {
+      const res = await get<{ data: CarrierResult[] }>(`/carriers?search=${encodeURIComponent(carrierSearch)}&limit=15`);
+      return res.data || [];
+    },
+    enabled: carrierSearch.length >= 2,
+    staleTime: 10_000,
+  });
+
+  const { data: customerResults = [], isFetching: isCustomerLoading } = useQuery({
+    queryKey: ['customer-search', customerSearch],
+    queryFn: async () => {
+      const res = await get<{ data: CustomerResult[] }>(`/customers?search=${encodeURIComponent(customerSearch)}&limit=15`);
+      return res.data || [];
+    },
+    enabled: customerSearch.length >= 2,
+    staleTime: 10_000,
+  });
+
+  const { data: productCatalog = [] } = useQuery({
+    queryKey: ['product-catalog'],
+    queryFn: () => getList<ProductResult>('/customers/products'),
+    staleTime: 60_000,
+  });
+
+  const { data: locationResults = [] } = useQuery({
+    queryKey: ['location-search', originSearch || destSearch],
+    queryFn: () => getList<LocationResult>(`/customers/lookup/address-autocomplete?q=${encodeURIComponent(originSearch || destSearch)}`),
+    enabled: (originSearch || destSearch || '').length >= 3,
+    staleTime: 10_000,
+  });
+
   const totalCommodityAmount = products.reduce((sum, p) => sum + (parseFloat(p.claimAmount) || 0), 0);
   const totalClaimAmount = totalCommodityAmount - (parseFloat(salvageAllowance) || 0);
 
+  /* ── Party helpers ── */
+  const selectCarrier = (carrier: CarrierResult) => {
+    setPartyDraft({
+      ...partyDraft,
+      type: 'carrier',
+      name: carrier.name,
+      scacCode: carrier.scacCode || '',
+      email: carrier.email || '',
+      phone: carrier.phone || '',
+      carrierId: carrier.id,
+    });
+  };
+
+  const selectCustomer = (customer: CustomerResult) => {
+    setPartyDraft({
+      ...partyDraft,
+      type: partyType === 'customer' ? 'customer' : partyType,
+      name: customer.name,
+      email: customer.email || '',
+      phone: customer.phone || '',
+      customerId: customer.id,
+    });
+  };
+
   const addParty = useCallback(() => {
     if (!partyDraft.name.trim()) return;
-    setParties(prev => [...prev, { ...partyDraft }]);
+    setParties(prev => [...prev, { ...partyDraft, type: partyType }]);
     setPartyDraft({ type: 'carrier', name: '', email: '', phone: '', scacCode: '', contactName: '', address: '', city: '', state: '', zipCode: '' });
     setShowPartyForm(false);
-  }, [partyDraft]);
+    setCarrierSearch('');
+    setCustomerSearch('');
+  }, [partyDraft, partyType]);
 
+  /* ── Product helpers ── */
   const addProductRow = () => {
-    setProducts(prev => [...prev, { productName: '', claimType: 'damage', claimCondition: '', quantity: 0, weight: '', unitCost: '', claimAmount: '', sku: '', poNumber: '' }]);
+    setProducts(prev => [...prev, { productName: '', claimType: 'damage', claimCondition: '', quantity: 0, weight: '', unitCost: '', claimAmount: '', sku: '', poNumber: '', catalogId: undefined }]);
   };
 
   const updateProduct = (idx: number, field: keyof ProductEntry, value: string | number) => {
@@ -128,24 +342,41 @@ export default function NewClaimPage() {
     }));
   };
 
+  const selectProduct = (idx: number, product: ProductResult) => {
+    setProducts(prev => prev.map((p, i) => {
+      if (i !== idx) return p;
+      return {
+        ...p,
+        productName: product.name,
+        sku: product.sku || '',
+        unitCost: product.value ? String(product.value) : p.unitCost,
+        weight: product.weight ? String(product.weight) : p.weight,
+        catalogId: product.id,
+        claimAmount: product.value && p.quantity ? (product.value * (p.quantity || 1)).toFixed(2) : p.claimAmount,
+      };
+    }));
+    setProductSearches(prev => ({ ...prev, [idx]: '' }));
+  };
+
   const removeProduct = (idx: number) => {
     if (products.length <= 1) return;
     setProducts(prev => prev.filter((_, i) => i !== idx));
   };
 
+  /* ── Document helpers ── */
   const handleFileSelect = (files: FileList | File[], category: string) => {
     const newFiles = Array.from(files).map(file => ({ file, category }));
     setDocuments(prev => [...prev, ...newFiles]);
   };
 
   const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      handleFileSelect(e.target.files, 'other');
-    }
+    if (e.target.files) handleFileSelect(e.target.files, 'other');
   };
 
+  /* ── Duplicate detection ── */
   const [duplicateWarnings, setDuplicateWarnings] = useState<{ id: string; claimNumber: string; proNumber: string; status: string }[]>([]);
 
+  /* ── Claim creation ── */
   const createClaim = useMutation({
     mutationFn: (data: Record<string, unknown>) => post('/claims', data) as Promise<{ id: string; potentialDuplicates?: { id: string; claimNumber: string; proNumber: string; status: string }[] }>,
     onSuccess: async (result) => {
@@ -207,6 +438,8 @@ export default function NewClaimPage() {
       poNumber: poNumber || undefined,
       referenceNumber: referenceNumber || undefined,
       salvageAllowance: parseFloat(salvageAllowance) || undefined,
+      originAddress: originAddress ? { address: originAddress.street1, city: originAddress.city, state: originAddress.state, zipCode: originAddress.zipCode } : undefined,
+      destinationAddress: destAddress ? { address: destAddress.street1, city: destAddress.city, state: destAddress.state, zipCode: destAddress.zipCode } : undefined,
       status: 'draft',
       parties,
       products: products
@@ -220,6 +453,17 @@ export default function NewClaimPage() {
         })),
     });
   }
+
+  /* ── Filtered product results for search ── */
+  const getProductResults = (idx: number) => {
+    const term = productSearches[idx]?.toLowerCase() || '';
+    if (term.length < 2) return [];
+    return productCatalog.filter(p =>
+      p.name.toLowerCase().includes(term) ||
+      (p.sku && p.sku.toLowerCase().includes(term)) ||
+      (p.description && p.description.toLowerCase().includes(term))
+    ).slice(0, 10);
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -316,7 +560,7 @@ export default function NewClaimPage() {
             <Users className="w-5 h-5 text-primary-500" />
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Shipment Parties</h2>
           </div>
-          <button onClick={() => setShowPartyForm(true)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+          <button onClick={() => { setShowPartyForm(true); setPartyType('carrier'); }} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
             <Plus className="w-3.5 h-3.5" /> Add Shipment Party
           </button>
         </div>
@@ -351,41 +595,140 @@ export default function NewClaimPage() {
         )}
 
         {parties.length === 0 && !showPartyForm && (
-          <p className="text-sm text-slate-400 text-center py-4">No parties added yet. Click "Add Shipment Party" to add a carrier, customer, or other party.</p>
+          <p className="text-sm text-slate-400 text-center py-4">No parties added yet. Click &quot;Add Shipment Party&quot; to add a carrier, customer, or other party.</p>
         )}
 
         {showPartyForm && (
-          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-5 border border-slate-200 dark:border-slate-700 space-y-3">
-            <div className="grid md:grid-cols-3 gap-3">
-              <div>
-                <label className="label">Role</label>
-                <select value={partyDraft.type} onChange={e => setPartyDraft({ ...partyDraft, type: e.target.value })} className="input">
-                  {['customer', 'carrier', 'consignee', 'shipper', 'payee', '3pl', 'insurance'].map(t => <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Company Name *</label>
-                <input value={partyDraft.name} onChange={e => setPartyDraft({ ...partyDraft, name: e.target.value })} className="input" placeholder="Company Name" />
-              </div>
-              <div>
-                <label className="label">Contact Name</label>
-                <input value={partyDraft.contactName} onChange={e => setPartyDraft({ ...partyDraft, contactName: e.target.value })} className="input" />
-              </div>
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-5 border border-slate-200 dark:border-slate-700 space-y-4">
+            <div className="flex gap-2">
+              {['carrier', 'customer', 'consignee', 'shipper', '3pl', 'supplier'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setPartyType(t); setPartyDraft({ ...partyDraft, type: t, name: '', email: '', phone: '', scacCode: '' }); setCarrierSearch(''); setCustomerSearch(''); }}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors',
+                    partyType === t ? 'bg-primary-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
-            <div className="grid md:grid-cols-3 gap-3">
-              <div>
-                <label className="label">Email</label>
-                <input value={partyDraft.email} onChange={e => setPartyDraft({ ...partyDraft, email: e.target.value })} className="input" />
+
+            {partyType === 'carrier' ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="label">Search Carrier (by Name, SCAC, DOT#, MC#)</label>
+                  <Autocomplete<CarrierResult>
+                    placeholder="Search carriers..."
+                    value={partyDraft.name}
+                    onSearch={setCarrierSearch}
+                    results={carrierResults}
+                    isLoading={isCarrierLoading}
+                    onSelect={selectCarrier}
+                    onClear={() => setPartyDraft({ ...partyDraft, name: '', scacCode: '', email: '', phone: '', carrierId: undefined })}
+                    renderItem={(c) => (
+                      <div>
+                        <div className="font-medium text-sm text-slate-900 dark:text-white">{c.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {c.scacCode && <span className="font-mono mr-3">SCAC: {c.scacCode}</span>}
+                          {c.dotNumber && <span className="mr-3">DOT: {c.dotNumber}</span>}
+                          {c.mcNumber && <span>MC: {c.mcNumber}</span>}
+                        </div>
+                      </div>
+                    )}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Start typing to search existing carriers, or enter a new carrier name.</p>
+                </div>
+                {!partyDraft.carrierId && partyDraft.name === '' && (
+                  <div>
+                    <label className="label">Or enter carrier name manually</label>
+                    <input value={partyDraft.name} onChange={e => setPartyDraft({ ...partyDraft, name: e.target.value })} className="input" placeholder="Carrier name" />
+                  </div>
+                )}
+                <div className="grid md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">SCAC Code</label>
+                    <input value={partyDraft.scacCode} onChange={e => setPartyDraft({ ...partyDraft, scacCode: e.target.value })} className="input font-mono" />
+                  </div>
+                  <div>
+                    <label className="label">Email</label>
+                    <input value={partyDraft.email} onChange={e => setPartyDraft({ ...partyDraft, email: e.target.value })} className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Phone</label>
+                    <input value={partyDraft.phone} onChange={e => setPartyDraft({ ...partyDraft, phone: e.target.value })} className="input" />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="label">Phone</label>
-                <input value={partyDraft.phone} onChange={e => setPartyDraft({ ...partyDraft, phone: e.target.value })} className="input" />
+            ) : partyType === 'customer' || partyType === '3pl' || partyType === 'supplier' ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="label">Search {partyType === '3pl' ? '3PL' : partyType.charAt(0).toUpperCase() + partyType.slice(1)} (by Name, Code, Email)</label>
+                  <Autocomplete<CustomerResult>
+                    placeholder={`Search ${partyType === '3pl' ? '3PLs' : partyType + 's'}...`}
+                    value={partyDraft.name}
+                    onSearch={setCustomerSearch}
+                    results={customerResults}
+                    isLoading={isCustomerLoading}
+                    onSelect={selectCustomer}
+                    onClear={() => setPartyDraft({ ...partyDraft, name: '', email: '', phone: '', customerId: undefined })}
+                    renderItem={(c) => (
+                      <div>
+                        <div className="font-medium text-sm text-slate-900 dark:text-white">{c.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {c.code && <span className="font-mono mr-3">{c.code}</span>}
+                          {c.email && <span>{c.email}</span>}
+                        </div>
+                      </div>
+                    )}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Start typing to search existing records, or enter a new name.</p>
+                </div>
+                <div className="grid md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Contact Name</label>
+                    <input value={partyDraft.contactName} onChange={e => setPartyDraft({ ...partyDraft, contactName: e.target.value })} className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Email</label>
+                    <input value={partyDraft.email} onChange={e => setPartyDraft({ ...partyDraft, email: e.target.value })} className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Phone</label>
+                    <input value={partyDraft.phone} onChange={e => setPartyDraft({ ...partyDraft, phone: e.target.value })} className="input" />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="label">SCAC Code</label>
-                <input value={partyDraft.scacCode} onChange={e => setPartyDraft({ ...partyDraft, scacCode: e.target.value })} className="input font-mono" />
+            ) : (
+              <div className="space-y-3">
+                <div className="grid md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Company Name *</label>
+                    <input value={partyDraft.name} onChange={e => setPartyDraft({ ...partyDraft, name: e.target.value })} className="input" placeholder="Company Name" />
+                  </div>
+                  <div>
+                    <label className="label">Contact Name</label>
+                    <input value={partyDraft.contactName} onChange={e => setPartyDraft({ ...partyDraft, contactName: e.target.value })} className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Email</label>
+                    <input value={partyDraft.email} onChange={e => setPartyDraft({ ...partyDraft, email: e.target.value })} className="input" />
+                  </div>
+                </div>
+                <div className="grid md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Phone</label>
+                    <input value={partyDraft.phone} onChange={e => setPartyDraft({ ...partyDraft, phone: e.target.value })} className="input" />
+                  </div>
+                  <div>
+                    <label className="label">SCAC Code</label>
+                    <input value={partyDraft.scacCode} onChange={e => setPartyDraft({ ...partyDraft, scacCode: e.target.value })} className="input font-mono" />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
             <div className="grid md:grid-cols-4 gap-3">
               <input value={partyDraft.address} onChange={e => setPartyDraft({ ...partyDraft, address: e.target.value })} placeholder="Address" className="input md:col-span-2" />
               <input value={partyDraft.city} onChange={e => setPartyDraft({ ...partyDraft, city: e.target.value })} placeholder="City" className="input" />
@@ -395,11 +738,71 @@ export default function NewClaimPage() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setShowPartyForm(false)} className="px-4 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button onClick={() => { setShowPartyForm(false); setCarrierSearch(''); setCustomerSearch(''); }} className="px-4 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancel</button>
               <button onClick={addParty} disabled={!partyDraft.name.trim()} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40">Add Party</button>
             </div>
           </div>
         )}
+      </section>
+
+      {/* ── SECTION: Origin & Destination ── */}
+      <section className="card p-6 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <DollarSign className="w-5 h-5 text-primary-500" />
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Origin & Destination</h2>
+        </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <label className="label">Origin (Search by Name, Address, Zip)</label>
+            <Autocomplete<LocationResult>
+              placeholder="Search origin location..."
+              value={originAddress ? `${originAddress.street1 || ''}, ${originAddress.city || ''} ${originAddress.state || ''}` : ''}
+              onSearch={setOriginSearch}
+              results={locationResults}
+              isLoading={false}
+              onSelect={(loc) => setOriginAddress(loc)}
+              onClear={() => setOriginAddress(null)}
+              renderItem={(loc) => (
+                <div className="text-xs">
+                  <span className="font-medium">{loc.street1}</span>
+                  <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
+                  {loc.customerName && <span className="text-slate-400 ml-2">({loc.customerName})</span>}
+                </div>
+              )}
+            />
+            {originAddress && (
+              <div className="bg-primary-50 dark:bg-primary-500/10 rounded-lg p-3 text-xs space-y-0.5">
+                <div className="font-medium text-slate-700 dark:text-slate-300">{originAddress.street1}</div>
+                <div className="text-slate-500">{originAddress.city}, {originAddress.state} {originAddress.zipCode}</div>
+              </div>
+            )}
+          </div>
+          <div className="space-y-3">
+            <label className="label">Destination (Search by Name, Address, Zip)</label>
+            <Autocomplete<LocationResult>
+              placeholder="Search destination location..."
+              value={destAddress ? `${destAddress.street1 || ''}, ${destAddress.city || ''} ${destAddress.state || ''}` : ''}
+              onSearch={setDestSearch}
+              results={locationResults}
+              isLoading={false}
+              onSelect={(loc) => setDestAddress(loc)}
+              onClear={() => setDestAddress(null)}
+              renderItem={(loc) => (
+                <div className="text-xs">
+                  <span className="font-medium">{loc.street1}</span>
+                  <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
+                  {loc.customerName && <span className="text-slate-400 ml-2">({loc.customerName})</span>}
+                </div>
+              )}
+            />
+            {destAddress && (
+              <div className="bg-primary-50 dark:bg-primary-500/10 rounded-lg p-3 text-xs space-y-0.5">
+                <div className="font-medium text-slate-700 dark:text-slate-300">{destAddress.street1}</div>
+                <div className="text-slate-500">{destAddress.city}, {destAddress.state} {destAddress.zipCode}</div>
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* ── SECTION: Documents ── */}
@@ -415,7 +818,7 @@ export default function NewClaimPage() {
           </label>
         </div>
 
-        <p className="text-xs text-slate-500">Supported document formats include PDF, PPTX, DOCX, PNG, JPG, JPEG, XLSX, MP4, TIF, WAV, EML, MSG and JFIF.</p>
+        <p className="text-xs text-slate-500">Supported: PDF, DOCX, PNG, JPG, XLSX, TIF, and more.</p>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {DOC_CATEGORIES.map(cat => {
@@ -432,7 +835,7 @@ export default function NewClaimPage() {
                 <div className="min-h-[60px] border border-dashed border-slate-200 dark:border-slate-600 rounded p-2 text-center">
                   {catDocs.length === 0 ? (
                     <label className="text-[10px] text-slate-400 cursor-pointer block py-2 hover:text-primary-500">
-                      Drop documents or select documents
+                      Drop or select documents
                       <input type="file" multiple onChange={e => e.target.files && handleFileSelect(e.target.files, cat.key)} className="hidden" />
                     </label>
                   ) : (
@@ -460,6 +863,7 @@ export default function NewClaimPage() {
             <Package className="w-5 h-5 text-primary-500" />
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Commodities</h2>
           </div>
+          <p className="text-[10px] text-slate-400">Type in the product name to search your product catalog</p>
         </div>
 
         <div className="overflow-x-auto -mx-2">
@@ -479,47 +883,77 @@ export default function NewClaimPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {products.map((p, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/20">
-                  <td className="px-2 py-1.5">
-                    <select value={p.claimType} onChange={e => updateProduct(idx, 'claimType', e.target.value)} className="input-sm">
-                      <option value="">—</option>
-                      {Object.entries(CLAIM_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <select value={p.claimCondition} onChange={e => updateProduct(idx, 'claimCondition', e.target.value)} className="input-sm">
-                      <option value="">—</option>
-                      {CLAIM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5"><input value={p.poNumber} onChange={e => updateProduct(idx, 'poNumber', e.target.value)} className="input-sm w-20" /></td>
-                  <td className="px-2 py-1.5"><input value={p.sku} onChange={e => updateProduct(idx, 'sku', e.target.value)} className="input-sm w-20 font-mono" /></td>
-                  <td className="px-2 py-1.5"><input value={p.productName} onChange={e => updateProduct(idx, 'productName', e.target.value)} className="input-sm" placeholder="Product name" /></td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-1">
-                      <input value={p.weight} onChange={e => updateProduct(idx, 'weight', e.target.value)} className="input-sm w-16 text-right" placeholder="0" />
-                      <span className="text-[10px] text-slate-400">LBS</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-0.5">
-                      <span className="text-slate-400 text-xs">$</span>
-                      <input value={p.unitCost} onChange={e => updateProduct(idx, 'unitCost', e.target.value)} type="number" step="0.01" className="input-sm w-24 text-right" placeholder="0.00" />
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5"><input value={p.quantity || ''} onChange={e => updateProduct(idx, 'quantity', Number(e.target.value) || 0)} type="number" min="0" className="input-sm w-16 text-center" placeholder="0" /></td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-0.5">
-                      <span className="text-slate-400 text-xs">$</span>
-                      <input value={p.claimAmount} onChange={e => updateProduct(idx, 'claimAmount', e.target.value)} type="number" step="0.01" className="input-sm w-24 text-right font-medium" placeholder="0.00" />
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <button onClick={() => removeProduct(idx)} disabled={products.length <= 1} className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 disabled:opacity-20"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </td>
-                </tr>
-              ))}
+              {products.map((p, idx) => {
+                const productResults = getProductResults(idx);
+                return (
+                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/20">
+                    <td className="px-2 py-1.5">
+                      <select value={p.claimType} onChange={e => updateProduct(idx, 'claimType', e.target.value)} className="input-sm">
+                        <option value="">—</option>
+                        {Object.entries(CLAIM_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <select value={p.claimCondition} onChange={e => updateProduct(idx, 'claimCondition', e.target.value)} className="input-sm">
+                        <option value="">—</option>
+                        {CLAIM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5"><input value={p.poNumber} onChange={e => updateProduct(idx, 'poNumber', e.target.value)} className="input-sm w-20" /></td>
+                    <td className="px-2 py-1.5"><input value={p.sku} onChange={e => updateProduct(idx, 'sku', e.target.value)} className="input-sm w-20 font-mono" /></td>
+                    <td className="px-2 py-1.5 relative">
+                      <input
+                        value={productSearches[idx] !== undefined ? productSearches[idx] : p.productName}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setProductSearches(prev => ({ ...prev, [idx]: v }));
+                          updateProduct(idx, 'productName', v);
+                        }}
+                        onBlur={() => { setTimeout(() => setProductSearches(prev => { const n = { ...prev }; delete n[idx]; return n; }), 200); }}
+                        className="input-sm"
+                        placeholder="Search or type product name"
+                      />
+                      {productResults.length > 0 && productSearches[idx] !== undefined && (
+                        <div className="absolute z-40 mt-1 left-0 right-0 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg">
+                          {productResults.map(pr => (
+                            <button
+                              key={pr.id}
+                              onMouseDown={(e) => { e.preventDefault(); selectProduct(idx, pr); }}
+                              className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-500/10 text-xs border-b border-slate-50 dark:border-slate-700/50 last:border-0"
+                            >
+                              <span className="font-medium">{pr.name}</span>
+                              {pr.sku && <span className="text-slate-400 ml-2 font-mono">SKU: {pr.sku}</span>}
+                              {pr.value && <span className="text-slate-400 ml-2">${pr.value}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <input value={p.weight} onChange={e => updateProduct(idx, 'weight', e.target.value)} className="input-sm w-16 text-right" placeholder="0" />
+                        <span className="text-[10px] text-slate-400">LBS</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-0.5">
+                        <span className="text-slate-400 text-xs">$</span>
+                        <input value={p.unitCost} onChange={e => updateProduct(idx, 'unitCost', e.target.value)} type="number" step="0.01" className="input-sm w-24 text-right" placeholder="0.00" />
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5"><input value={p.quantity || ''} onChange={e => updateProduct(idx, 'quantity', Number(e.target.value) || 0)} type="number" min="0" className="input-sm w-16 text-center" placeholder="0" /></td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-0.5">
+                        <span className="text-slate-400 text-xs">$</span>
+                        <input value={p.claimAmount} onChange={e => updateProduct(idx, 'claimAmount', e.target.value)} type="number" step="0.01" className="input-sm w-24 text-right font-medium" placeholder="0.00" />
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <button onClick={() => removeProduct(idx)} disabled={products.length <= 1} className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 disabled:opacity-20"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -613,7 +1047,6 @@ export default function NewClaimPage() {
         </div>
       </section>
 
-      {/* Inline styles for the compact form inputs */}
       <style jsx global>{`
         .label {
           display: block;

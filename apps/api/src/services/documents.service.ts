@@ -280,27 +280,29 @@ export const documentsService = {
   },
 
   async _runAIExtraction(id: string, doc: Record<string, any>) {
+    const existing = await prisma.aiDocument.findFirst({ where: { documentId: id } });
+    if (existing) {
+      logger.info({ docId: id }, 'AI document record already exists, skipping duplicate extraction');
+      return;
+    }
+
+    const aiDocRecord = await prisma.aiDocument.create({
+      data: {
+        documentId: id,
+        claimId: doc.claimId || null,
+        agentType: 'intake',
+        extractedData: {} as any,
+        confidence: 0,
+        status: 'processing',
+      },
+    });
+
     try {
       const { body } = await storageService.downloadDocument(doc.s3Key);
+      const isImage = doc.mimeType?.startsWith('image/');
+      const isPdf = doc.mimeType === 'application/pdf' || doc.mimeType?.includes('pdf');
 
-      let textContent = '';
-      if (doc.mimeType === 'application/pdf' || doc.mimeType?.includes('pdf')) {
-        try {
-          const { PDFParse } = await import('pdf-parse');
-          const parser = new PDFParse({ data: new Uint8Array(body) });
-          const pdfResult = await parser.getText();
-          textContent = pdfResult.text?.trim() || '';
-          if (!textContent) {
-            textContent = `[Scanned PDF: ${doc.documentName}] No extractable text — likely a scanned image. Pages: ${pdfResult.total}.`;
-          }
-          await parser.destroy().catch(() => {});
-        } catch (pdfErr) {
-          logger.warn({ err: pdfErr, docId: id }, 'pdf-parse failed, falling back to filename');
-          textContent = `[PDF Document: ${doc.documentName}] Could not extract text from this PDF.`;
-        }
-      } else if (doc.mimeType?.startsWith('image/')) {
-        // Images go through multimodal analysis — Gemini can "see" the image
-        const ANALYSIS_PROMPT = `Analyze this freight/shipping image document and extract all relevant information.
+      const ANALYSIS_PROMPT = `Analyze this freight/shipping document and extract all relevant information.
 Document name: ${doc.documentName}
 
 Return JSON:
@@ -317,73 +319,27 @@ Be very specific with the category. A BOL is bill_of_lading. A signed delivery i
 
 Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, damage_severity, visible_damage, etc. Only include fields that are present.`;
 
-        const extraction = await generateMultimodalJSON<{
-          category: string;
-          confidence: number;
-          extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>;
-          summary: string;
-        }>(
+      let extraction: { category: string; confidence: number; extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>; summary: string };
+
+      if (isImage || isPdf) {
+        extraction = await generateMultimodalJSON(
           [
             { inline_data: { mime_type: doc.mimeType, data: body.toString('base64') } },
             { text: ANALYSIS_PROMPT },
           ],
           { systemInstruction: 'You are a freight document analysis AI. Classify documents and extract structured data from shipping documents, photos of damage, bills of lading, invoices, and inspection reports.' },
         );
-
-        await prisma.aiDocument.create({
-          data: {
-            documentId: id,
-            claimId: doc.claimId || null,
-            agentType: 'intake',
-            extractedData: extraction as any,
-            confidence: extraction.confidence,
-            status: 'completed',
-          },
-        });
-
-        await documentsRepository.update(id, { aiProcessingStatus: 'completed' });
-        logger.info({ docId: id, category: extraction.category, confidence: extraction.confidence }, 'AI image extraction completed');
-        return;
       } else {
-        textContent = body.toString('utf-8', 0, Math.min(body.length, 50000));
+        const textContent = body.toString('utf-8', 0, Math.min(body.length, 50000));
+        extraction = await generateJSON(
+          `${ANALYSIS_PROMPT}\n\nDocument content:\n"""\n${textContent.slice(0, 8000)}\n"""`,
+          { systemInstruction: 'You are a freight document analysis AI. Classify documents and extract structured data from shipping documents, bills of lading, invoices, and damage reports.' },
+        );
       }
 
-      const extraction = await generateJSON<{
-        category: string;
-        confidence: number;
-        extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>;
-        summary: string;
-      }>(
-        `Analyze this freight/shipping document and extract all relevant information.
-
-Document name: ${doc.documentName}
-MIME type: ${doc.mimeType}
-Content:
-"""
-${textContent.slice(0, 8000)}
-"""
-
-Return JSON:
-{
-  "category": "ONE of: bill_of_lading, proof_of_delivery, delivery_receipt, product_invoice, commercial_invoice, claim_form, damage_photos, inspection_report, weight_certificate, packing_list, rate_confirmation, notice_of_claim, carrier_response, insurance_certificate, purchase_order, freight_bill, correspondence, other",
-  "confidence": 0.0-1.0,
-  "extractedFields": [
-    { "key": "field_name", "label": "Human Label", "value": "extracted value", "confidence": 0.0-1.0 }
-  ],
-  "summary": "Brief description of what this document is and key information found"
-}
-
-Be very specific with the category. A BOL is bill_of_lading. A signed delivery is proof_of_delivery. An invoice for goods is product_invoice. A freight carrier invoice is freight_bill. A claim filing form is claim_form. Photos showing damage are damage_photos. A rate quote/confirmation is rate_confirmation. A letter notifying of a claim is notice_of_claim. Do NOT default to product_invoice unless the document is truly a product/commercial invoice.
-
-Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, etc. Only include fields that are present in the document.`,
-        { systemInstruction: 'You are a freight document analysis AI. Classify documents and extract structured data from shipping documents, bills of lading, invoices, and damage reports.' },
-      );
-
-      await prisma.aiDocument.create({
+      await prisma.aiDocument.update({
+        where: { id: aiDocRecord.id },
         data: {
-          documentId: id,
-          claimId: doc.claimId || null,
-          agentType: 'intake',
           extractedData: extraction as any,
           confidence: extraction.confidence,
           status: 'completed',
@@ -393,6 +349,10 @@ Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, s
       await documentsRepository.update(id, { aiProcessingStatus: 'completed' });
       logger.info({ docId: id, category: extraction.category, confidence: extraction.confidence }, 'AI extraction completed');
     } catch (err) {
+      await prisma.aiDocument.update({
+        where: { id: aiDocRecord.id },
+        data: { status: 'failed', extractedData: { error: String(err) } as any },
+      }).catch(() => {});
       await documentsRepository.update(id, { aiProcessingStatus: 'failed' }).catch(() => {});
       logger.error({ err, docId: id }, 'AI extraction failed');
       throw err;

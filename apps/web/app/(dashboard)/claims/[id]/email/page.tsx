@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { getList, post } from '@/lib/api-client';
+import { getList, post, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
@@ -126,16 +126,14 @@ export default function ClaimEmailPage() {
 
   function handleSend() {
     if (!to.trim()) { toast.error('Recipient is required'); return; }
-    const docAttachmentIds = attachments
-      .filter(a => a.source === 'documents')
-      .map(a => a.id);
+    const attachmentIds = attachments.map(a => a.id);
     sendMutation.mutate({
       to: to.split(/[\s,;]+/).filter(Boolean),
       cc: cc ? cc.split(/[\s,;]+/).filter(Boolean) : [],
       subject,
       body,
       claimId: id!,
-      ...(docAttachmentIds.length > 0 && { attachmentIds: docAttachmentIds }),
+      ...(attachmentIds.length > 0 && { attachmentIds }),
     });
   }
 
@@ -143,13 +141,25 @@ export default function ClaimEmailPage() {
     aiDraftMutation.mutate();
   }
 
-  function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
-    const newAttachments: EmailAttachment[] = files.map(f => ({
-      id: crypto.randomUUID(), name: f.name, size: f.size, source: 'computer',
-    }));
-    setAttachments([...attachments, ...newAttachments]);
+    if (files.length === 0) return;
     setShowAttachmentMenu(false);
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('files', file);
+        if (id) formData.append('claimId', id);
+        formData.append('documentName', file.name);
+        const result = await uploadFile('/documents/upload', formData);
+        const doc = Array.isArray(result) ? result[0] : result;
+        if (doc?.id) {
+          setAttachments(prev => [...prev, { id: doc.id, name: file.name, size: file.size, source: 'documents' as const }]);
+        }
+      } catch {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
   }
 
   function handleAttachDocument(doc: ClaimDocument) {

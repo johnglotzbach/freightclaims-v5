@@ -882,6 +882,57 @@ export const reportsRepository = {
       case 'insurance':
         reportData = await generateInsurance(where);
         break;
+      case 'pdf':
+      case 'claim': {
+        const claimId = query.claimId as string | undefined;
+        if (claimId) {
+          const claim = await prisma.claim.findUnique({
+            where: { id: claimId },
+            include: {
+              customer: { select: { name: true } },
+              parties: true,
+              products: true,
+              identifiers: true,
+              documents: { select: { documentName: true, mimeType: true, createdAt: true } },
+            },
+          });
+          if (!claim) {
+            reportData = { headers: ['Error'], rows: [['Claim not found']] };
+          } else {
+            const carrier = claim.parties?.find((p: any) => p.type === 'carrier');
+            reportData = {
+              headers: ['Field', 'Value'],
+              rows: [
+                ['Claim Number', claim.claimNumber],
+                ['PRO Number', claim.proNumber || ''],
+                ['Status', claim.status],
+                ['Claim Type', claim.claimType || ''],
+                ['Claim Amount', `$${Number(claim.claimAmount || 0).toFixed(2)}`],
+                ['Settled Amount', claim.settledAmount ? `$${Number(claim.settledAmount).toFixed(2)}` : ''],
+                ['Customer', claim.customer?.name || ''],
+                ['Carrier', carrier?.name || ''],
+                ['Ship Date', claim.shipDate?.toISOString().split('T')[0] ?? ''],
+                ['Delivery Date', claim.deliveryDate?.toISOString().split('T')[0] ?? ''],
+                ['Filing Date', claim.filingDate?.toISOString().split('T')[0] ?? ''],
+                ['Description', claim.description || ''],
+                ['Created', claim.createdAt.toISOString().split('T')[0]],
+                ['', ''],
+                ['--- Parties ---', ''],
+                ...claim.parties.map((p: any) => [p.type?.toUpperCase(), `${p.name || ''} ${p.email ? `(${p.email})` : ''}`]),
+                ['', ''],
+                ['--- Products ---', ''],
+                ...claim.products.map((p: any) => [p.description || 'Item', `Qty: ${p.quantity || 1}, Value: $${Number(p.value || 0).toFixed(2)}`]),
+                ['', ''],
+                ['--- Documents ---', ''],
+                ...claim.documents.map((d: any) => [d.documentName || 'Document', d.createdAt?.toISOString().split('T')[0] ?? '']),
+              ],
+            };
+          }
+        } else {
+          reportData = { headers: ['Error'], rows: [['claimId query parameter is required for PDF export']] };
+        }
+        break;
+      }
       default: {
         const claims = await prisma.claim.findMany({
           where: where as any,

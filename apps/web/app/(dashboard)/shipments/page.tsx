@@ -75,11 +75,25 @@ export default function ShipmentsPage() {
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    post<any>('/shipments/mass-upload', formData)
-      .then(() => { toast.success('Shipments imported'); queryClient.invalidateQueries({ queryKey: ['shipments'] }); })
-      .catch(() => toast.error('Import failed'));
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { toast.error('CSV must have a header and at least one row'); return; }
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const rows = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          const row: Record<string, string> = {};
+          headers.forEach((h, i) => { if (values[i]) row[h] = values[i]; });
+          return row;
+        }).filter(r => Object.keys(r).length > 0);
+        post<any>('/shipments/mass-upload', { rows })
+          .then(() => { toast.success('Shipments imported'); queryClient.invalidateQueries({ queryKey: ['shipments'] }); })
+          .catch(() => toast.error('Import failed'));
+      } catch { toast.error('Failed to parse CSV'); }
+    };
+    reader.readAsText(file);
     e.target.value = '';
   }
 

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getList, post, apiClient, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
+import { getList, post, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -155,13 +155,7 @@ export default function AIEntryPage() {
       files.forEach(f => formData.append('files', f));
       const uploadRes = await uploadFile('/documents/upload', formData);
       const uploaded = uploadRes?.data?.uploaded || (Array.isArray(uploadRes) ? uploadRes : [uploadRes]);
-      const docs = Array.isArray(uploaded) ? uploaded : [uploaded];
-      for (const doc of docs) {
-        if (doc?.id) {
-          await apiClient.post(`/documents/${doc.id}/process`).catch(() => {});
-        }
-      }
-      return docs;
+      return Array.isArray(uploaded) ? uploaded : [uploaded];
     },
     onSuccess: () => {
       toast.success('Documents uploaded — AI is analyzing them now');
@@ -198,6 +192,11 @@ export default function AIEntryPage() {
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['ai-documents'],
     queryFn: () => getList<ProcessedDocument>('/ai/documents'),
+    refetchInterval: (query) => {
+      const docs = query.state.data;
+      if (Array.isArray(docs) && docs.some(d => d.status === 'processing')) return 3000;
+      return false;
+    },
   });
 
   const filtered = documents.filter(d =>
@@ -563,9 +562,25 @@ function ReviewDataCapture({
           <div className="flex-1 overflow-y-auto">
             {fields.length === 0 ? (
               <div className="p-8 text-center">
-                <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                <p className="text-sm text-slate-500 font-medium">No extracted fields</p>
-                <p className="text-xs text-slate-400 mt-1">AI is still processing or could not extract data from this document.</p>
+                {doc.status === 'processing' ? (
+                  <>
+                    <div className="w-10 h-10 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-sm text-slate-500 font-medium">AI is analyzing this document...</p>
+                    <p className="text-xs text-slate-400 mt-1">This usually takes 10-30 seconds. The page will update automatically.</p>
+                  </>
+                ) : doc.status === 'failed' ? (
+                  <>
+                    <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+                    <p className="text-sm text-red-500 font-medium">Extraction failed</p>
+                    <p className="text-xs text-slate-400 mt-1">AI could not extract data from this document. Try re-uploading or check the document format.</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500 font-medium">No extracted fields</p>
+                    <p className="text-xs text-slate-400 mt-1">No data was found in this document.</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
