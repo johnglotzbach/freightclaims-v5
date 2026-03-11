@@ -97,6 +97,46 @@ export const aiController = {
     res.json(docs);
   }),
 
+  deleteAIDocument: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const aiDocId = req.params.id as string;
+
+    const aiDoc = await prisma.aiDocument.findUnique({ where: { id: aiDocId } });
+    if (!aiDoc) {
+      res.status(404).json({ error: 'AI document not found' });
+      return;
+    }
+
+    if (aiDoc.documentId) {
+      const claimDoc = await prisma.claimDocument.findUnique({
+        where: { id: aiDoc.documentId },
+        include: { claim: { select: { corporateId: true } } },
+      });
+
+      if (claimDoc) {
+        if (!user.isSuperAdmin && claimDoc.claim?.corporateId && claimDoc.claim.corporateId !== user.corporateId) {
+          res.status(404).json({ error: 'AI document not found' });
+          return;
+        }
+
+        if (claimDoc.s3Key) {
+          const { storageService } = await import('../services/storage.service');
+          await storageService.deleteDocument(claimDoc.s3Key).catch(() => {});
+        }
+        const thumbKey = (claimDoc as any).thumbnailKey;
+        if (thumbKey) {
+          const { storageService } = await import('../services/storage.service');
+          await storageService.deleteDocument(thumbKey).catch(() => {});
+        }
+
+        await prisma.claimDocument.delete({ where: { id: claimDoc.id } }).catch(() => {});
+      }
+    }
+
+    await prisma.aiDocument.delete({ where: { id: aiDocId } });
+    res.status(204).send();
+  }),
+
   // Agent status
   getAgentStatus: asyncHandler(async (_req, res) => { res.json(await aiService.getAgentStatus()); }),
   getAgentHistory: asyncHandler(async (req, res) => { res.json(await aiService.getAgentHistory(req.query)); }),

@@ -245,9 +245,21 @@ export const documentsService = {
 
   async delete(id: string, user: JwtPayload) {
     const doc = await verifyDocumentAccess(id, user);
+
     if (doc.s3Key) {
-      await storageService.deleteDocument(doc.s3Key);
+      await storageService.deleteDocument(doc.s3Key).catch((err) =>
+        logger.warn({ err, docId: id, key: doc.s3Key }, 'Failed to delete file from disk'));
     }
+
+    const thumbKey = (doc as any).thumbnailKey;
+    if (thumbKey) {
+      await storageService.deleteDocument(thumbKey).catch((err) =>
+        logger.warn({ err, docId: id, key: thumbKey }, 'Failed to delete thumbnail from disk'));
+    }
+
+    await prisma.aiDocument.deleteMany({ where: { documentId: id } }).catch((err) =>
+      logger.warn({ err, docId: id }, 'Failed to clean up AI document records'));
+
     return documentsRepository.delete(id);
   },
 

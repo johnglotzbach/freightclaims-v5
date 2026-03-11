@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getList, post, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
+import { getList, post, del, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,7 @@ import {
   Upload, FileText, CheckCircle, AlertCircle, ChevronRight,
   Sparkles, Eye, RotateCcw, Check, X as XIcon, Search,
   ArrowLeft, ZoomIn, ZoomOut, ChevronLeft, Link2, Plus,
-  Image as ImageIcon, FileSpreadsheet, File,
+  Image as ImageIcon, FileSpreadsheet, File, Trash2,
 } from 'lucide-react';
 
 interface ExtractedField {
@@ -163,6 +163,38 @@ export default function AIEntryPage() {
     },
     onError: () => toast.error('Upload failed'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (docId: string) => del(`/ai/documents/${docId}`),
+    onSuccess: () => {
+      toast.success('Document deleted');
+      queryClient.invalidateQueries({ queryKey: ['ai-documents'] });
+    },
+    onError: () => toast.error('Failed to delete document'),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(id => del(`/ai/documents/${id}`)));
+    },
+    onSuccess: (_data, ids) => {
+      toast.success(`${ids.length} document(s) deleted`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['ai-documents'] });
+    },
+    onError: () => toast.error('Failed to delete some documents'),
+  });
+
+  function handleDelete(id: string) {
+    if (!confirm('Delete this document? This will also remove the file from storage.')) return;
+    deleteMutation.mutate(id);
+  }
+
+  function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} document(s)? This will also remove files from storage.`)) return;
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+  }
 
   function handleUploadClick() { fileInputRef.current?.click(); }
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -320,6 +352,9 @@ export default function AIEntryPage() {
             <div className="px-4 py-2.5 bg-primary-50 dark:bg-primary-500/10 border-b border-primary-100 dark:border-primary-500/20 flex items-center justify-between">
               <span className="text-sm font-medium text-primary-700 dark:text-primary-300">{selectedIds.size} document{selectedIds.size !== 1 ? 's' : ''} selected</span>
               <div className="flex gap-2">
+                <button onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending} className="text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1">
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
                 <button onClick={() => setSelectedIds(new Set())} className="text-xs text-primary-500 hover:text-primary-600">Clear</button>
               </div>
             </div>
@@ -377,12 +412,22 @@ export default function AIEntryPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSelectedDoc(doc)}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-primary-500 hover:text-primary-600 px-3 py-1.5 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors"
-                        >
-                          Review <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setSelectedDoc(doc)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary-500 hover:text-primary-600 px-3 py-1.5 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors"
+                          >
+                            Review <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(doc.id)}
+                            disabled={deleteMutation.isPending}
+                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                            title="Delete document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
