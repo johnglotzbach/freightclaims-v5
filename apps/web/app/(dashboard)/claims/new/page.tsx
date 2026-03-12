@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { CLAIM_TYPES } from 'shared';
 import {
   FileText, Users, Package, Upload,
-  Plus, Trash2, DollarSign,
+  Plus, Trash2, MapPin,
   X, Loader2, CheckCircle, AlertCircle,
   Search, ChevronDown, Sparkles, Wand2,
 } from 'lucide-react';
@@ -239,6 +239,9 @@ export default function NewClaimPage() {
   const [originAddress, setOriginAddress] = useState<LocationResult | null>(null);
   const [destAddress, setDestAddress] = useState<LocationResult | null>(null);
 
+  const [origin, setOrigin] = useState({ address: '', city: '', state: '', zip: '' });
+  const [destination, setDestination] = useState({ address: '', city: '', state: '', zip: '' });
+
   const [parties, setParties] = useState<PartyEntry[]>([]);
   const [showPartyForm, setShowPartyForm] = useState(false);
   const [partyType, setPartyType] = useState('carrier');
@@ -460,8 +463,12 @@ export default function NewClaimPage() {
       poNumber: poNumber || undefined,
       referenceNumber: referenceNumber || undefined,
       salvageAllowance: parseFloat(salvageAllowance) || undefined,
-      originAddress: originAddress ? { address: originAddress.street1, city: originAddress.city, state: originAddress.state, zipCode: originAddress.zipCode } : undefined,
-      destinationAddress: destAddress ? { address: destAddress.street1, city: destAddress.city, state: destAddress.state, zipCode: destAddress.zipCode } : undefined,
+      originAddress: originAddress
+        ? { address: originAddress.street1, city: originAddress.city, state: originAddress.state, zipCode: originAddress.zipCode }
+        : origin.city ? { address: origin.address, city: origin.city, state: origin.state, zipCode: origin.zip } : undefined,
+      destinationAddress: destAddress
+        ? { address: destAddress.street1, city: destAddress.city, state: destAddress.state, zipCode: destAddress.zipCode }
+        : destination.city ? { address: destination.address, city: destination.city, state: destination.state, zipCode: destination.zip } : undefined,
       status: 'draft',
       parties,
       products: products
@@ -600,6 +607,24 @@ export default function NewClaimPage() {
           zipCode: fieldMap.consignee_zip || fieldMap.destination_zip || '',
         }];
       });
+    }
+
+    // Auto-fill origin address
+    const oAddr = fieldMap.origin_address || fieldMap.shipper_address || '';
+    const oCity = fieldMap.origin_city || fieldMap.shipper_city || '';
+    const oState = fieldMap.origin_state || fieldMap.shipper_state || '';
+    const oZip = fieldMap.origin_zip || fieldMap.shipper_zip || '';
+    if (oCity || oAddr) {
+      setOrigin({ address: oAddr, city: oCity, state: oState, zip: oZip });
+    }
+
+    // Auto-fill destination address
+    const dAddr = fieldMap.destination_address || fieldMap.consignee_address || '';
+    const dCity = fieldMap.destination_city || fieldMap.consignee_city || '';
+    const dState = fieldMap.destination_state || fieldMap.consignee_state || '';
+    const dZip = fieldMap.destination_zip || fieldMap.consignee_zip || '';
+    if (dCity || dAddr) {
+      setDestination({ address: dAddr, city: dCity, state: dState, zip: dZip });
     }
 
     if (fieldMap.commodity || fieldMap.product || fieldMap.description) {
@@ -951,59 +976,76 @@ export default function NewClaimPage() {
       {/* ── SECTION: Origin & Destination ── */}
       <section className="card p-6 space-y-4">
         <div className="flex items-center gap-2 mb-1">
-          <DollarSign className="w-5 h-5 text-primary-500" />
+          <MapPin className="w-5 h-5 text-primary-500" />
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Origin & Destination</h2>
         </div>
         <div className="grid md:grid-cols-2 gap-6">
+          {/* Origin */}
           <div className="space-y-3">
-            <label className="label">Origin (Search by Name, Address, Zip)</label>
-            <Autocomplete<LocationResult>
-              placeholder="Search origin location..."
-              value={originAddress ? `${originAddress.street1 || ''}, ${originAddress.city || ''} ${originAddress.state || ''}` : ''}
-              onSearch={setOriginSearch}
-              results={locationResults}
-              isLoading={false}
-              onSelect={(loc) => setOriginAddress(loc)}
-              onClear={() => setOriginAddress(null)}
-              renderItem={(loc) => (
-                <div className="text-xs">
-                  <span className="font-medium">{loc.street1}</span>
-                  <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
-                  {loc.customerName && <span className="text-slate-400 ml-2">({loc.customerName})</span>}
-                </div>
-              )}
-            />
-            {originAddress && (
-              <div className="bg-primary-50 dark:bg-primary-500/10 rounded-lg p-3 text-xs space-y-0.5">
-                <div className="font-medium text-slate-700 dark:text-slate-300">{originAddress.street1}</div>
-                <div className="text-slate-500">{originAddress.city}, {originAddress.state} {originAddress.zipCode}</div>
+            <div className="flex items-center justify-between">
+              <label className="label mb-0">Origin</label>
+              <div className="relative">
+                <Autocomplete<LocationResult>
+                  placeholder="Search saved locations..."
+                  value=""
+                  onSearch={setOriginSearch}
+                  results={locationResults}
+                  isLoading={false}
+                  className="w-48"
+                  onSelect={(loc) => {
+                    setOriginAddress(loc);
+                    setOrigin({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
+                  }}
+                  onClear={() => {}}
+                  renderItem={(loc) => (
+                    <div className="text-xs">
+                      <span className="font-medium">{loc.street1}</span>
+                      <span className="text-slate-500"> {loc.city}, {loc.state}</span>
+                    </div>
+                  )}
+                />
               </div>
-            )}
+            </div>
+            <input value={origin.address} onChange={e => { setOrigin(p => ({ ...p, address: e.target.value })); setOriginAddress(null); }} className="input" placeholder="Street address" />
+            <div className="grid grid-cols-3 gap-2">
+              <input value={origin.city} onChange={e => { setOrigin(p => ({ ...p, city: e.target.value })); setOriginAddress(null); }} className="input" placeholder="City" />
+              <input value={origin.state} onChange={e => { setOrigin(p => ({ ...p, state: e.target.value })); setOriginAddress(null); }} className="input" placeholder="State" />
+              <input value={origin.zip} onChange={e => { setOrigin(p => ({ ...p, zip: e.target.value })); setOriginAddress(null); }} className="input" placeholder="Zip" />
+            </div>
           </div>
+
+          {/* Destination */}
           <div className="space-y-3">
-            <label className="label">Destination (Search by Name, Address, Zip)</label>
-            <Autocomplete<LocationResult>
-              placeholder="Search destination location..."
-              value={destAddress ? `${destAddress.street1 || ''}, ${destAddress.city || ''} ${destAddress.state || ''}` : ''}
-              onSearch={setDestSearch}
-              results={locationResults}
-              isLoading={false}
-              onSelect={(loc) => setDestAddress(loc)}
-              onClear={() => setDestAddress(null)}
-              renderItem={(loc) => (
-                <div className="text-xs">
-                  <span className="font-medium">{loc.street1}</span>
-                  <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
-                  {loc.customerName && <span className="text-slate-400 ml-2">({loc.customerName})</span>}
-                </div>
-              )}
-            />
-            {destAddress && (
-              <div className="bg-primary-50 dark:bg-primary-500/10 rounded-lg p-3 text-xs space-y-0.5">
-                <div className="font-medium text-slate-700 dark:text-slate-300">{destAddress.street1}</div>
-                <div className="text-slate-500">{destAddress.city}, {destAddress.state} {destAddress.zipCode}</div>
+            <div className="flex items-center justify-between">
+              <label className="label mb-0">Destination</label>
+              <div className="relative">
+                <Autocomplete<LocationResult>
+                  placeholder="Search saved locations..."
+                  value=""
+                  onSearch={setDestSearch}
+                  results={locationResults}
+                  isLoading={false}
+                  className="w-48"
+                  onSelect={(loc) => {
+                    setDestAddress(loc);
+                    setDestination({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
+                  }}
+                  onClear={() => {}}
+                  renderItem={(loc) => (
+                    <div className="text-xs">
+                      <span className="font-medium">{loc.street1}</span>
+                      <span className="text-slate-500"> {loc.city}, {loc.state}</span>
+                    </div>
+                  )}
+                />
               </div>
-            )}
+            </div>
+            <input value={destination.address} onChange={e => { setDestination(p => ({ ...p, address: e.target.value })); setDestAddress(null); }} className="input" placeholder="Street address" />
+            <div className="grid grid-cols-3 gap-2">
+              <input value={destination.city} onChange={e => { setDestination(p => ({ ...p, city: e.target.value })); setDestAddress(null); }} className="input" placeholder="City" />
+              <input value={destination.state} onChange={e => { setDestination(p => ({ ...p, state: e.target.value })); setDestAddress(null); }} className="input" placeholder="State" />
+              <input value={destination.zip} onChange={e => { setDestination(p => ({ ...p, zip: e.target.value })); setDestAddress(null); }} className="input" placeholder="Zip" />
+            </div>
           </div>
         </div>
       </section>
