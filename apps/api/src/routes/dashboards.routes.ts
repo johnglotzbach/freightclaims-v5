@@ -10,7 +10,7 @@ dashboardsRouter.get('/', async (req, res, next) => {
   try {
     const user = (req as any).user;
     const dashboards = await prisma.savedDashboard.findMany({
-      where: { OR: [{ userId: user.id }, { corporateId: user.corporateId, isCompanyDefault: true }] },
+      where: { OR: [{ userId: user.userId }, { corporateId: user.corporateId, isCompanyDefault: true }] },
       orderBy: { createdAt: 'desc' },
     });
     res.json(dashboards);
@@ -23,7 +23,7 @@ dashboardsRouter.post('/', async (req, res, next) => {
     const user = (req as any).user;
     const { name, filters, isDefault, isCompanyDefault } = req.body;
     const dashboard = await prisma.savedDashboard.create({
-      data: { userId: user.id, corporateId: user.corporateId, name, filters: filters || {}, isDefault: isDefault || false, isCompanyDefault: isCompanyDefault || false },
+      data: { userId: user.userId, corporateId: user.corporateId, name, filters: filters || {}, isDefault: isDefault || false, isCompanyDefault: isCompanyDefault || false },
     });
     res.status(201).json(dashboard);
   } catch (err) { next(err); }
@@ -33,7 +33,7 @@ dashboardsRouter.post('/', async (req, res, next) => {
 dashboardsRouter.put('/:id', async (req, res, next) => {
   try {
     const user = (req as any).user;
-    const existing = await prisma.savedDashboard.findFirst({ where: { id: req.params.id, userId: user.id } });
+    const existing = await prisma.savedDashboard.findFirst({ where: { id: req.params.id, userId: user.userId } });
     if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
     const updated = await prisma.savedDashboard.update({ where: { id: req.params.id }, data: req.body });
     res.json(updated);
@@ -44,7 +44,7 @@ dashboardsRouter.put('/:id', async (req, res, next) => {
 dashboardsRouter.delete('/:id', async (req, res, next) => {
   try {
     const user = (req as any).user;
-    const existing = await prisma.savedDashboard.findFirst({ where: { id: req.params.id, userId: user.id } });
+    const existing = await prisma.savedDashboard.findFirst({ where: { id: req.params.id, userId: user.userId } });
     if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
     await prisma.savedDashboard.delete({ where: { id: req.params.id } });
     res.json({ success: true });

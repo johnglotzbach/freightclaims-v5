@@ -4,11 +4,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { get, getList } from '@/lib/api-client';
+import { get, getList, put, del, apiClient } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, CLAIM_TYPES } from 'shared';
 import type { Claim, PaginatedResponse } from 'shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   Search, Plus, X, ChevronLeft, ChevronRight,
   ArrowUpDown, ArrowUp, ArrowDown,
@@ -212,6 +214,52 @@ export default function ClaimsListPage() {
   };
 
   const hasFilters = !!(debouncedSearch || claimType || carrierId || dateFrom || dateTo);
+
+  const queryClient = useQueryClient();
+  const [bulkStatusModal, setBulkStatusModal] = useState(false);
+  const [bulkNewStatus, setBulkNewStatus] = useState('pending');
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      await Promise.all(ids.map(cid => put(`/claims/${cid}/status`, { status })));
+    },
+    onSuccess: (_d, vars) => {
+      toast.success(`${vars.ids.length} claim(s) updated to ${vars.status}`);
+      setSelectedIds(new Set());
+      setBulkStatusModal(false);
+      queryClient.invalidateQueries({ queryKey: ['claims'] });
+    },
+    onError: () => toast.error('Failed to update some claims'),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(cid => del(`/claims/${cid}`)));
+    },
+    onSuccess: (_d, ids) => {
+      toast.success(`${ids.length} claim(s) deleted`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['claims'] });
+    },
+    onError: () => toast.error('Failed to delete some claims'),
+  });
+
+  function handleBulkExport() {
+    const ids = Array.from(selectedIds);
+    apiClient.get('/reports/export/claims', { responseType: 'blob', params: { ids: ids.join(','), format: 'csv' } })
+      .then(res => {
+        const url = URL.createObjectURL(res.data as Blob);
+        const a = document.createElement('a'); a.href = url; a.download = `claims-export-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+        URL.revokeObjectURL(url);
+        toast.success('Claims exported');
+      })
+      .catch(() => toast.error('Export failed'));
+  }
+
+  function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} claim(s)? This action cannot be undone.`)) return;
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+  }
 
   /* ── Helpers ── */
   const claimAge = (c: Claim) => {
@@ -444,9 +492,9 @@ export default function ClaimsListPage() {
             {selectedIds.size} selected
           </span>
           <div className="h-4 w-px bg-blue-200 dark:bg-blue-800" />
-          <BulkButton icon={RefreshCw}>Change Status</BulkButton>
-          <BulkButton icon={Download}>Export</BulkButton>
-          <BulkButton icon={Trash2} danger>Delete</BulkButton>
+          <BulkButton icon={RefreshCw} onClick={() => setBulkStatusModal(true)}>Change Status</BulkButton>
+          <BulkButton icon={Download} onClick={handleBulkExport}>Export</BulkButton>
+          <BulkButton icon={Trash2} danger onClick={handleBulkDelete}>Delete</BulkButton>
           <button
             onClick={() => setSelectedIds(new Set())}
             className="ml-auto text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
@@ -619,6 +667,33 @@ export default function ClaimsListPage() {
           Updating…
         </div>
       )}
+
+      {/* Bulk Status Change Modal */}
+      {bulkStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Change Status</h3>
+            <p className="text-sm text-slate-500 mb-4">Update {selectedIds.size} claim(s) to:</p>
+            <select
+              value={bulkNewStatus}
+              onChange={e => setBulkNewStatus(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm mb-4"
+            >
+              {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <div className="flex gap-3">
+              <button onClick={() => setBulkStatusModal(false)} className="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Cancel</button>
+              <button
+                onClick={() => bulkStatusMutation.mutate({ ids: Array.from(selectedIds), status: bulkNewStatus })}
+                disabled={bulkStatusMutation.isPending}
+                className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition disabled:opacity-50"
+              >
+                {bulkStatusMutation.isPending ? 'Updating…' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -689,14 +764,16 @@ function FilterBadge({
 }
 
 function BulkButton({
-  icon: Icon, danger, children,
+  icon: Icon, danger, children, onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   danger?: boolean;
   children: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
     <button
+      onClick={onClick}
       className={cn(
         'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition',
         danger

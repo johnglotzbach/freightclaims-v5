@@ -368,8 +368,16 @@ function StatusTab({ claim, claimId }: { claim: Claim; claimId: string }) {
                   <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{party.lastEmailActivity || '—'}</td>
                   <td className="px-4 py-3 font-medium">{formatCurrency(party.amountPaid)}</td>
                   <td className="px-4 py-3 text-right">
-                    <button className="text-xs text-primary-500 hover:text-primary-600 font-medium">
-                      Invoice Status
+                    <button
+                      onClick={() => {
+                        const newStatus = party.status === 'invoiced' ? 'pending' : 'invoiced';
+                        put(`/claims/${claimId}/parties/${party.id}`, { status: newStatus })
+                          .then(() => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); toast.success(`Party status updated to ${newStatus}`); })
+                          .catch(() => toast.error('Failed to update status'));
+                      }}
+                      className="text-xs text-primary-500 hover:text-primary-600 font-medium"
+                    >
+                      {party.status === 'invoiced' ? 'Mark Pending' : 'Mark Invoiced'}
                     </button>
                   </td>
                 </tr>

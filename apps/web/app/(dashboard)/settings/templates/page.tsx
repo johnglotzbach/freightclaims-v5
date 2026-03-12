@@ -228,6 +228,18 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving 
   const [body, setBody] = useState(template.body);
   const [showVars, setShowVars] = useState(false);
   const varsRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  function applyFormat(prefix: string, suffix: string) {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = body.substring(start, end);
+    const newText = body.substring(0, start) + prefix + selected + suffix + body.substring(end);
+    setBody(newText);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, end + prefix.length); }, 0);
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -264,10 +276,10 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving 
       <div className="flex items-center gap-1 border-b border-slate-100 dark:border-slate-700 pb-2">
         {template.type !== 'automation' && (
           <>
-            <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Bold className="w-4 h-4 text-slate-500" /></button>
-            <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Italic className="w-4 h-4 text-slate-500" /></button>
-            <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Underline className="w-4 h-4 text-slate-500" /></button>
-            <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><List className="w-4 h-4 text-slate-500" /></button>
+            <button onClick={() => applyFormat('**', '**')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Bold"><Bold className="w-4 h-4 text-slate-500" /></button>
+            <button onClick={() => applyFormat('_', '_')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Italic"><Italic className="w-4 h-4 text-slate-500" /></button>
+            <button onClick={() => applyFormat('<u>', '</u>')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Underline"><Underline className="w-4 h-4 text-slate-500" /></button>
+            <button onClick={() => applyFormat('\n- ', '')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="List"><List className="w-4 h-4 text-slate-500" /></button>
           </>
         )}
         <div className="relative" ref={varsRef}>
@@ -282,7 +294,7 @@ function TemplateEditor({ template, isNew, variables, onClose, onSave, isSaving 
         </div>
       </div>
 
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 resize-none font-mono" />
+      <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={12} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 resize-none font-mono" />
 
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 font-medium">Cancel</button>

@@ -158,8 +158,15 @@ export const documentsService = {
         };
 
         const catId = req.body.categoryId;
-        if (catId && typeof catId === 'string' && catId.length > 10) {
-          createPayload.categoryId = catId;
+        if (catId && typeof catId === 'string') {
+          if (catId.length > 10) {
+            createPayload.categoryId = catId;
+          } else {
+            const cat = await prisma.documentCategory.findFirst({
+              where: { OR: [{ code: catId }, { name: { equals: catId, mode: 'insensitive' } }] },
+            }).catch(() => null);
+            if (cat) createPayload.categoryId = cat.id;
+          }
         }
 
         if (req.body.claimId) {

@@ -137,12 +137,15 @@ Return: { senderEmail, senderName, subject, claimReferences (array of claim/PRO/
 /**
  * Check if a similar claim already exists to detect duplicates.
  */
-async function checkDuplicates(extraction: IntakeExtraction): Promise<Array<{ claimId: string; claimNumber: string; matchScore: number }>> {
+async function checkDuplicates(extraction: IntakeExtraction, corporateId?: string | null): Promise<Array<{ claimId: string; claimNumber: string; matchScore: number }>> {
   if (!extraction.proNumber && !extraction.bolNumber) return [];
 
   const where: Record<string, unknown> = {};
   if (extraction.proNumber) {
     where.proNumber = { contains: extraction.proNumber, mode: 'insensitive' };
+  }
+  if (corporateId) {
+    where.corporateId = corporateId;
   }
 
   const existing = await prisma.claim.findMany({
@@ -350,7 +353,7 @@ Return: { carrierName, scacCode, proNumber, bolNumber, poNumbers (array), shippe
     results.carrier = carrierData;
 
     // Check for duplicate claims
-    const duplicates = await checkDuplicates(extraction);
+    const duplicates = await checkDuplicates(extraction, ctx.corporateId);
     results.duplicates = duplicates;
 
     // Auto-create claim if confidence is high and no duplicates

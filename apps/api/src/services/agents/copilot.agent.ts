@@ -52,9 +52,9 @@ Guidelines:
 - Be professional but conversational — you're a helpful colleague, not a robot`;
 
 async function loadUserDataSnapshot(ctx: AgentContext): Promise<string> {
-  const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { createdById: ctx.userId };
-  const customerFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { OR: [{ id: ctx.corporateId }, { corporateId: ctx.corporateId }] } : {};
-  const shipmentFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : {};
+  const corpFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { corporateId: '__none__' };
+  const customerFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { OR: [{ id: ctx.corporateId }, { corporateId: ctx.corporateId }] } : { corporateId: '__none__' };
+  const shipmentFilter = ctx.isSuperAdmin ? {} : ctx.corporateId ? { corporateId: ctx.corporateId } : { corporateId: '__none__' };
 
   const [
     user,

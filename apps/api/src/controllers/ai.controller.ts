@@ -41,8 +41,17 @@ export const aiController = {
   // Copilot (conversational)
   chat: asyncHandler(async (req, res) => { res.json(await aiService.chat(req.body, getUser(req))); }),
   getConversations: asyncHandler(async (req, res) => { res.json(await aiService.getConversations(getUser(req).userId)); }),
-  getConversation: asyncHandler(async (req, res) => { res.json(await aiService.getConversation(req.params.id as string)); }),
-  deleteConversation: asyncHandler(async (req, res) => { await aiService.deleteConversation(req.params.id as string); res.status(204).send(); }),
+  getConversation: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const convo = await aiService.getConversation(req.params.id as string, user.userId);
+    if (!convo) { res.status(404).json({ error: 'Conversation not found' }); return; }
+    res.json(convo);
+  }),
+  deleteConversation: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    await aiService.deleteConversation(req.params.id as string, user.userId);
+    res.status(204).send();
+  }),
 
   // AI-processed documents for the AI Entry page
   getAIDocuments: asyncHandler(async (req, res) => {
@@ -138,6 +147,6 @@ export const aiController = {
   }),
 
   // Agent status
-  getAgentStatus: asyncHandler(async (_req, res) => { res.json(await aiService.getAgentStatus()); }),
-  getAgentHistory: asyncHandler(async (req, res) => { res.json(await aiService.getAgentHistory(req.query)); }),
+  getAgentStatus: asyncHandler(async (req, res) => { res.json(await aiService.getAgentStatus(getUser(req))); }),
+  getAgentHistory: asyncHandler(async (req, res) => { res.json(await aiService.getAgentHistory(req.query, getUser(req))); }),
 };

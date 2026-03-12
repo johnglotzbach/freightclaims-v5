@@ -148,7 +148,26 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  const chartData = [42, 58, 65, 53, 71, 88, 76, 94, 82, 105, 97, 120];
+  const { data: monthlyData } = useQuery({
+    queryKey: ['admin-monthly-claims'],
+    queryFn: async () => {
+      const months: number[] = [];
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const from = d.toISOString().split('T')[0];
+        const to = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+        try {
+          const res = await get<{ pagination?: { total?: number } }>(`/claims?dateFrom=${from}&dateTo=${to}&limit=1`);
+          months.push(res?.pagination?.total ?? 0);
+        } catch { months.push(0); }
+      }
+      return months;
+    },
+    enabled: !!user?.isSuperAdmin,
+    staleTime: 300_000,
+  });
+  const chartData = monthlyData ?? Array(12).fill(0);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">

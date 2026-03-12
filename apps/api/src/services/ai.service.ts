@@ -97,20 +97,28 @@ export const aiService = {
     });
   },
 
-  async getConversation(id: string) {
-    return prisma.aiConversation.findUnique({
+  async getConversation(id: string, userId: string) {
+    const convo = await prisma.aiConversation.findUnique({
       where: { id },
       include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
+    if (convo && convo.userId !== userId) return null;
+    return convo;
   },
 
-  async deleteConversation(id: string) {
+  async deleteConversation(id: string, userId: string) {
+    const convo = await prisma.aiConversation.findUnique({ where: { id } });
+    if (!convo || convo.userId !== userId) {
+      throw new Error('Conversation not found');
+    }
     await prisma.aiConversation.delete({ where: { id } });
   },
 
-  async getAgentStatus() {
+  async getAgentStatus(user?: JwtPayload) {
+    const where = user?.isSuperAdmin ? {} : user?.userId ? { userId: user.userId } : {};
     const [recentRuns, agents] = await Promise.all([
       prisma.aiAgentRun.findMany({
+        where: where as any,
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: { agentType: true, status: true, createdAt: true, duration: true },
@@ -127,17 +135,19 @@ export const aiService = {
     };
   },
 
-  async getAgentHistory(query: Record<string, unknown>) {
+  async getAgentHistory(query: Record<string, unknown>, user?: JwtPayload) {
     const page = Number(query.page) || 1;
     const limit = Math.min(Number(query.limit) || 25, 100);
+    const where = user?.isSuperAdmin ? {} : user?.userId ? { userId: user.userId } : {};
 
     const [data, total] = await Promise.all([
       prisma.aiAgentRun.findMany({
+        where: where as any,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.aiAgentRun.count(),
+      prisma.aiAgentRun.count({ where: where as any }),
     ]);
 
     return { data, total, page, limit };

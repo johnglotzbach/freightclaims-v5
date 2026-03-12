@@ -162,8 +162,34 @@ export const claimsService = {
     if (data.bolNumber) identifiers.push({ type: 'bol', value: data.bolNumber as string });
     if (data.poNumber) identifiers.push({ type: 'po', value: data.poNumber as string });
     if (data.referenceNumber) identifiers.push({ type: 'ref', value: data.referenceNumber as string });
+    if (data.claimMode) identifiers.push({ type: 'claim_mode', value: String(data.claimMode) });
+    if (data.companyDivision) identifiers.push({ type: 'division', value: String(data.companyDivision) });
+    if (data.salvageAllowance) identifiers.push({ type: 'salvage_allowance', value: String(data.salvageAllowance) });
 
     const promises: Promise<unknown>[] = [];
+
+    const originAddr = data.originAddress as Record<string, string> | undefined;
+    if (originAddr && (originAddr.address || originAddr.city)) {
+      promises.push(claimsRepository.addParty(claim.id, {
+        type: 'origin',
+        name: [originAddr.address, originAddr.city, originAddr.state, originAddr.zipCode].filter(Boolean).join(', '),
+        address: originAddr.address || null,
+        city: originAddr.city || null,
+        state: originAddr.state || null,
+        zipCode: originAddr.zipCode || null,
+      }));
+    }
+    const destAddr = data.destinationAddress as Record<string, string> | undefined;
+    if (destAddr && (destAddr.address || destAddr.city)) {
+      promises.push(claimsRepository.addParty(claim.id, {
+        type: 'destination',
+        name: [destAddr.address, destAddr.city, destAddr.state, destAddr.zipCode].filter(Boolean).join(', '),
+        address: destAddr.address || null,
+        city: destAddr.city || null,
+        state: destAddr.state || null,
+        zipCode: destAddr.zipCode || null,
+      }));
+    }
 
     for (const party of parties) {
       promises.push(claimsRepository.addParty(claim.id, {

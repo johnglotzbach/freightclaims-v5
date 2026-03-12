@@ -7,8 +7,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getList } from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { getList, post, del, put } from '@/lib/api-client';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
 import {
   Users, Plus, Search, Shield, Mail, MoreHorizontal,
@@ -39,11 +40,48 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('Claims Handler');
+  const queryClient = useQueryClient();
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: () => getList<User>('/users'),
   });
+
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string; role: string }) => post('/users/invite', data),
+    onSuccess: () => {
+      toast.success('Invitation sent');
+      setShowInviteModal(false);
+      setInviteEmail('');
+      setInviteRole('Claims Handler');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to send invitation'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => del(`/users/${userId}`),
+    onSuccess: () => { toast.success('User removed'); queryClient.invalidateQueries({ queryKey: ['users'] }); },
+    onError: () => toast.error('Failed to remove user'),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) => post(`/users/${userId}/reset-password`, {}),
+    onSuccess: () => toast.success('Password reset email sent'),
+    onError: () => toast.error('Failed to send password reset'),
+  });
+
+  function handleInvite() {
+    if (!inviteEmail.trim()) { toast.error('Email is required'); return; }
+    inviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
+  }
+
+  function handleDeleteUser(userId: string) {
+    if (!confirm('Remove this user? They will lose access.')) return;
+    deleteMutation.mutate(userId);
+  }
 
   const filtered = users.filter((u) => {
     const matchesSearch = `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(search.toLowerCase());
@@ -186,13 +224,10 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 transition-colors" title="Edit">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 transition-colors" title="Reset Password">
+                      <button onClick={() => resetPasswordMutation.mutate(user.id)} disabled={resetPasswordMutation.isPending} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 transition-colors disabled:opacity-50" title="Reset Password">
                         <Key className="w-4 h-4" />
                       </button>
-                      <button className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 transition-colors" title="Remove">
+                      <button onClick={() => handleDeleteUser(user.id)} disabled={deleteMutation.isPending} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50" title="Remove">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -239,18 +274,20 @@ export default function UsersPage() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="email" placeholder="colleague@company.com" className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
+                  <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="colleague@company.com" className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Role</label>
-                <select className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
-                  {ROLES.filter((r) => r !== 'Super Admin').map((r) => <option key={r}>{r}</option>)}
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+                  {ROLES.filter((r) => r !== 'Super Admin').map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowInviteModal(false)} className="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
-                <button onClick={() => setShowInviteModal(false)} className="flex-1 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-colors">Send Invite</button>
+                <button onClick={handleInvite} disabled={inviteMutation.isPending} className="flex-1 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                  {inviteMutation.isPending ? 'Sending…' : 'Send Invite'}
+                </button>
               </div>
             </div>
           </div>

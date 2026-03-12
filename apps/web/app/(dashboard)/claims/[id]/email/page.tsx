@@ -55,6 +55,18 @@ export default function ClaimEmailPage() {
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  function applyFormat(prefix: string, suffix: string) {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = body.substring(start, end);
+    const newText = body.substring(0, start) + prefix + selected + suffix + body.substring(end);
+    setBody(newText);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, end + prefix.length); }, 0);
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -232,18 +244,18 @@ export default function ClaimEmailPage() {
 
             {/* Toolbar */}
             <div className="flex items-center gap-0.5 border-b border-slate-100 dark:border-slate-700 pb-2">
-              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Bold className="w-4 h-4 text-slate-500" /></button>
-              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Italic className="w-4 h-4 text-slate-500" /></button>
-              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Underline className="w-4 h-4 text-slate-500" /></button>
-              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><List className="w-4 h-4 text-slate-500" /></button>
-              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><Link2 className="w-4 h-4 text-slate-500" /></button>
+              <button onClick={() => applyFormat('**', '**')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Bold"><Bold className="w-4 h-4 text-slate-500" /></button>
+              <button onClick={() => applyFormat('_', '_')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Italic"><Italic className="w-4 h-4 text-slate-500" /></button>
+              <button onClick={() => applyFormat('<u>', '</u>')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Underline"><Underline className="w-4 h-4 text-slate-500" /></button>
+              <button onClick={() => applyFormat('\n- ', '')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Bullet List"><List className="w-4 h-4 text-slate-500" /></button>
+              <button onClick={() => { const url = prompt('Enter URL:'); if (url) applyFormat('[', `](${url})`); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded" title="Insert Link"><Link2 className="w-4 h-4 text-slate-500" /></button>
               <div className="flex-1" />
               <button onClick={handleAiDraft} disabled={aiDraftMutation.isPending} className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 font-medium px-2 py-1 rounded hover:bg-purple-50 dark:hover:bg-purple-500/10 disabled:opacity-50">
                 {aiDraftMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} AI Draft
               </button>
             </div>
 
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={10} placeholder="Write your email..." className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 resize-none font-sans" />
+            <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={10} placeholder="Write your email..." className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 resize-none font-sans" />
 
             {/* Attachments */}
             {attachments.length > 0 && (
