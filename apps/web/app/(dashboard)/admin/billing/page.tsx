@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
+import { toast } from 'sonner';
 import {
   CreditCard, Crown, Zap, ArrowRight,
   CheckCircle2,
@@ -123,7 +124,7 @@ export default function AdminBillingPage() {
                 </li>
               ))}
             </ul>
-            <button className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            <button onClick={() => toast.info(`Plan management for ${plan.name} will be available once Stripe is connected`)} className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
               Manage
               <ArrowRight className="w-4 h-4" />
             </button>

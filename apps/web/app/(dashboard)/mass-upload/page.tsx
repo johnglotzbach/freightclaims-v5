@@ -6,6 +6,7 @@ import { getList, uploadFile } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, EmptyState } from '@/components/ui/loading';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import {
   Upload, FileText, Users, Truck, MapPin, Package,
   Download, CheckCircle, AlertCircle, X, Clock,
@@ -268,7 +269,7 @@ export default function MassUploadPage() {
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">{new Date(h.uploadedAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => toast.info('Download not available for this upload')} className="text-xs text-primary-500 hover:text-primary-600 font-medium"><Download className="w-4 h-4 inline" /></button>
+                      <Link href={`/claims/list?status=draft`} className="text-xs text-primary-500 hover:text-primary-600 font-medium inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> View Claims</Link>
                     </td>
                   </tr>
                 ))}

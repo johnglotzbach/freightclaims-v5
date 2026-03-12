@@ -53,6 +53,7 @@ export default function ClaimEmailPage() {
   const [showCc, setShowCc] = useState(false);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -88,6 +89,12 @@ export default function ClaimEmailPage() {
     queryKey: ['documents', 'claim', id],
     queryFn: () => getList<ClaimDocument>(`/documents?claimId=${id}&limit=50`),
     enabled: !!id && showAttachmentMenu,
+  });
+
+  const { data: emailTemplates = [] } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: () => getList<{ id: string; name: string; subject: string; body: string }>('/users/templates/email'),
+    enabled: showTemplateMenu,
   });
 
   const sendMutation = useMutation({
@@ -300,7 +307,20 @@ export default function ClaimEmailPage() {
                       ))
                     )}
                     <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
-                    <button onClick={() => { setShowAttachmentMenu(false); toast.info('Template attachments coming soon'); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"><Mail className="w-4 h-4" /> From Templates</button>
+                    <div className="relative">
+                      <button onClick={() => setShowTemplateMenu(!showTemplateMenu)} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"><Mail className="w-4 h-4" /> From Templates</button>
+                      {showTemplateMenu && (
+                        <div className="absolute left-full top-0 ml-1 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20 py-1 max-h-48 overflow-auto">
+                          {emailTemplates.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-slate-400">No templates saved yet</div>
+                          ) : (
+                            emailTemplates.map(t => (
+                              <button key={t.id} onClick={() => { setSubject(t.subject || subject); setBody(t.body || body); setShowAttachmentMenu(false); setShowTemplateMenu(false); toast.success(`Template "${t.name}" applied`); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 truncate">{t.name}</button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileAttach} />

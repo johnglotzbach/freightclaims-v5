@@ -71,6 +71,7 @@ export default function RecategorizePage() {
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [originalCategories, setOriginalCategories] = useState<DocCategory[]>([]);
+  const [zoom, setZoom] = useState(100);
 
   useEffect(() => {
     if (aiDocs.length > 0) {
@@ -207,20 +208,28 @@ export default function RecategorizePage() {
         </div>
       )}
 
-      {selectedDoc && (
-        <div className="card p-6 flex items-center justify-center bg-slate-50 dark:bg-slate-800 min-h-[300px]">
-          <div className="text-center">
-            <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Document preview</p>
-            <p className="text-xs text-slate-400 mb-3">Select a document to see its classification details</p>
-            <div className="flex items-center justify-center gap-2">
-              <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><ZoomOut className="w-4 h-4 text-slate-500" /></button>
-              <span className="text-xs text-slate-400">100%</span>
-              <button className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><ZoomIn className="w-4 h-4 text-slate-500" /></button>
+      {selectedDoc && (() => {
+        const doc = aiDocs.find(d => d.id === selectedDoc);
+        return (
+          <div className="card p-6 bg-slate-50 dark:bg-slate-800 min-h-[300px] flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{doc?.documentName || 'Document'}</p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700" title="Zoom out"><ZoomOut className="w-4 h-4 text-slate-500" /></button>
+                <span className="text-xs text-slate-400 w-10 text-center">{zoom}%</span>
+                <button onClick={() => setZoom(z => Math.min(200, z + 25))} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700" title="Zoom in"><ZoomIn className="w-4 h-4 text-slate-500" /></button>
+              </div>
+            </div>
+            <div className="flex-1 flex items-center justify-center overflow-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+              <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center', transition: 'transform 0.2s' }}>
+                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400 text-center">{doc?.category?.replace(/_/g, ' ') || 'Unclassified'}</p>
+                <p className="text-xs text-slate-400 text-center mt-1">Confidence: {doc?.confidence ? `${Math.round(doc.confidence * 100)}%` : 'N/A'}</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
