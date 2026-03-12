@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ import {
   FileText, Users, Package, Upload,
   Plus, Trash2, DollarSign,
   X, Loader2, CheckCircle, AlertCircle,
-  Search, ChevronDown,
+  Search, ChevronDown, Sparkles, Wand2,
 } from 'lucide-react';
 
 /* ────────────────────────── Types ────────────────────────── */
@@ -216,6 +216,8 @@ function Autocomplete<T extends { id: string }>({
 
 export default function NewClaimPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const aiDocIdParam = searchParams.get('aiDocId');
 
   const [identifierType, setIdentifierType] = useState('pro');
   const [primaryIdentifier, setPrimaryIdentifier] = useState('');
@@ -253,6 +255,26 @@ export default function NewClaimPage() {
   const [documents, setDocuments] = useState<DocFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+  const aiFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!aiDocIdParam) return;
+    (async () => {
+      try {
+        setAiProcessing(true);
+        const aiDocs = await getList<any>('/ai/documents');
+        const aiDoc = aiDocs.find((d: any) => d.id === aiDocIdParam);
+        if (aiDoc && aiDoc.status === 'completed') {
+          applyExtractedData(aiDoc);
+          setAiFilled(true);
+          toast.success('Claim form pre-filled from AI Entry document');
+        }
+      } catch { /* ignore */ } finally { setAiProcessing(false); }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiDocIdParam]);
 
   /* ── API search queries ── */
   const { data: carrierResults = [], isFetching: isCarrierLoading } = useQuery({
@@ -465,6 +487,139 @@ export default function NewClaimPage() {
     ).slice(0, 10);
   };
 
+  async function handleAiAutofill(file: File) {
+    setAiProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append('files', file);
+      formData.append('documentName', file.name);
+      const uploadRes = await uploadFile('/documents/upload', formData);
+      const uploaded = uploadRes?.data?.uploaded || (Array.isArray(uploadRes) ? uploadRes : [uploadRes]);
+      const doc = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+      if (!doc?.id) throw new Error('Upload failed');
+
+      setDocuments(prev => [...prev, { file, category: 'other' }]);
+
+      let attempts = 0;
+      const maxAttempts = 20;
+      while (attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 2000));
+        attempts++;
+        try {
+          const aiDocs = await getList<any>('/ai/documents');
+          const aiDoc = aiDocs.find((d: any) => d.documentId === doc.id);
+          if (aiDoc && aiDoc.status === 'completed') {
+            applyExtractedData(aiDoc);
+            setAiFilled(true);
+            toast.success('AI extracted data from your document and filled the form');
+            break;
+          }
+          if (aiDoc && aiDoc.status === 'failed') {
+            toast.error('AI could not extract data from this document. Fill the form manually.');
+            break;
+          }
+        } catch { break; }
+      }
+      if (attempts >= maxAttempts) {
+        toast.error('AI extraction timed out. You can fill the form manually.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to upload document for AI analysis');
+    } finally {
+      setAiProcessing(false);
+    }
+  }
+
+  function applyExtractedData(aiDoc: any) {
+    const fields: Array<{ key: string; value: string }> = aiDoc.extractedFields || [];
+    const fieldMap: Record<string, string> = {};
+    for (const f of fields) {
+      fieldMap[f.key.toLowerCase().replace(/[\s_-]+/g, '_')] = f.value;
+    }
+
+    if (fieldMap.pro_number || fieldMap.pro) {
+      setPrimaryIdentifier(fieldMap.pro_number || fieldMap.pro);
+      setIdentifierType('pro');
+    }
+    if (fieldMap.bol_number || fieldMap.bol) setBolNumber(fieldMap.bol_number || fieldMap.bol);
+    if (fieldMap.po_number || fieldMap.purchase_order) setPoNumber(fieldMap.po_number || fieldMap.purchase_order);
+    if (fieldMap.reference_number) setReferenceNumber(fieldMap.reference_number);
+
+    if (fieldMap.ship_date) setShipDate(fieldMap.ship_date);
+    if (fieldMap.delivery_date) setDeliveryDate(fieldMap.delivery_date);
+
+    if (fieldMap.description || fieldMap.damage_description) {
+      setDescription(fieldMap.description || fieldMap.damage_description);
+    }
+
+    const category = (aiDoc.category || '').toLowerCase();
+    if (category.includes('damage') || fieldMap.damage_description) setClaimType('damage');
+    else if (category.includes('shortage') || category.includes('short')) setClaimType('shortage');
+    else if (category.includes('loss') || category.includes('lost')) setClaimType('loss');
+    else if (category.includes('concealed')) setClaimType('concealed_damage');
+
+    if (fieldMap.carrier_name || fieldMap.carrier) {
+      const carrierName = fieldMap.carrier_name || fieldMap.carrier;
+      setParties(prev => {
+        if (prev.some(p => p.type === 'carrier')) return prev;
+        return [...prev, {
+          type: 'carrier',
+          name: carrierName,
+          scacCode: fieldMap.scac || fieldMap.carrier_scac || fieldMap.scac_code || '',
+          email: fieldMap.carrier_email || '',
+          phone: fieldMap.carrier_phone || '',
+          contactName: fieldMap.carrier_contact || '',
+          address: '', city: '', state: '', zipCode: '',
+        }];
+      });
+    }
+
+    if (fieldMap.shipper || fieldMap.shipper_name) {
+      const name = fieldMap.shipper || fieldMap.shipper_name;
+      setParties(prev => {
+        if (prev.some(p => p.type === 'shipper')) return prev;
+        return [...prev, {
+          type: 'shipper', name, scacCode: '', email: '', phone: '', contactName: '',
+          address: fieldMap.shipper_address || fieldMap.origin_address || '',
+          city: fieldMap.shipper_city || fieldMap.origin_city || '',
+          state: fieldMap.shipper_state || fieldMap.origin_state || '',
+          zipCode: fieldMap.shipper_zip || fieldMap.origin_zip || '',
+        }];
+      });
+    }
+
+    if (fieldMap.consignee || fieldMap.consignee_name) {
+      const name = fieldMap.consignee || fieldMap.consignee_name;
+      setParties(prev => {
+        if (prev.some(p => p.type === 'consignee')) return prev;
+        return [...prev, {
+          type: 'consignee', name, scacCode: '', email: '', phone: '', contactName: '',
+          address: fieldMap.consignee_address || fieldMap.destination_address || '',
+          city: fieldMap.consignee_city || fieldMap.destination_city || '',
+          state: fieldMap.consignee_state || fieldMap.destination_state || '',
+          zipCode: fieldMap.consignee_zip || fieldMap.destination_zip || '',
+        }];
+      });
+    }
+
+    if (fieldMap.commodity || fieldMap.product || fieldMap.description) {
+      const amount = parseFloat(fieldMap.amount || fieldMap.claim_amount || fieldMap.value || '0');
+      const weight = fieldMap.weight || fieldMap.total_weight || '';
+      const pieces = parseInt(fieldMap.pieces || fieldMap.quantity || '1', 10);
+      setProducts([{
+        productName: fieldMap.commodity || fieldMap.product || fieldMap.description || '',
+        claimType: claimType || 'damage',
+        claimCondition: fieldMap.damage_severity || fieldMap.damage_type || '',
+        quantity: pieces,
+        weight,
+        unitCost: amount > 0 ? (amount / Math.max(pieces, 1)).toFixed(2) : '',
+        claimAmount: amount > 0 ? amount.toFixed(2) : '',
+        sku: fieldMap.sku || '',
+        poNumber: fieldMap.po_number || '',
+      }]);
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <nav className="flex items-center gap-2 text-sm text-slate-500">
@@ -477,6 +632,54 @@ export default function NewClaimPage() {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Create New Claim</h1>
         <div className="text-xs text-slate-400">* Required fields</div>
       </div>
+
+      {/* ── AI Auto-fill Banner ── */}
+      <section className="relative overflow-hidden rounded-2xl border border-primary-200 dark:border-primary-500/20 bg-gradient-to-r from-primary-50 via-blue-50 to-indigo-50 dark:from-primary-500/5 dark:via-blue-500/5 dark:to-indigo-500/5 p-5">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-primary-500/10 dark:bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+            <Wand2 className="w-6 h-6 text-primary-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">AI Auto-Fill</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Upload a BOL, invoice, POD, or any shipping document — AI will extract the data and fill the form for you.
+            </p>
+          </div>
+          <div className="flex-shrink-0">
+            {aiProcessing ? (
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-primary-500/10 rounded-xl">
+                <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
+                <span className="text-sm font-medium text-primary-600 dark:text-primary-400">Analyzing document...</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => aiFileRef.current?.click()}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                Upload & Auto-Fill
+              </button>
+            )}
+            <input
+              ref={aiFileRef}
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.tiff,.webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAiAutofill(file);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        </div>
+        {aiFilled && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            <CheckCircle className="w-3.5 h-3.5" />
+            AI filled form fields from your document. Review and edit before submitting.
+          </div>
+        )}
+      </section>
 
       {/* ── SECTION: Claim Identification ── */}
       <section className="card p-6 space-y-4">

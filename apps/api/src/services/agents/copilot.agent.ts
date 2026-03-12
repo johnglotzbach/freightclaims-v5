@@ -66,6 +66,7 @@ async function loadUserDataSnapshot(ctx: AgentContext): Promise<string> {
     pendingTasks,
     recentDocs,
     corporateAccount,
+    aiDocuments,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: ctx.userId },
@@ -126,6 +127,12 @@ async function loadUserDataSnapshot(ctx: AgentContext): Promise<string> {
       where: { id: ctx.corporateId },
       select: { name: true, industry: true, isCorporate: true },
     }) : null,
+    prisma.aiDocument.findMany({
+      where: ctx.isSuperAdmin ? {} : { claim: corpFilter as any },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+      include: { claim: { select: { claimNumber: true } } },
+    }).catch(() => []),
   ]);
 
   const totalClaims = claimStats.reduce((s: number, g: any) => s + g._count, 0);
@@ -184,6 +191,31 @@ async function loadUserDataSnapshot(ctx: AgentContext): Promise<string> {
     snapshot += `\nRECENT DOCUMENTS:\n`;
     for (const d of recentDocs) {
       snapshot += `- ${d.documentName} (${d.mimeType}) — Claim: ${(d as any).claim?.claimNumber || 'N/A'}\n`;
+    }
+  }
+
+  if (aiDocuments.length > 0) {
+    const docIds = aiDocuments.map(ad => ad.documentId).filter(Boolean) as string[];
+    const claimDocs = docIds.length > 0
+      ? await prisma.claimDocument.findMany({ where: { id: { in: docIds } }, select: { id: true, documentName: true } }).catch(() => [])
+      : [];
+    const docNameMap = new Map(claimDocs.map((d: any) => [d.id, d.documentName]));
+
+    snapshot += `\nAI-PROCESSED DOCUMENTS (AI Entry uploads with extracted data):\n`;
+    for (const ad of aiDocuments) {
+      const extracted = ad.extractedData as any;
+      const fields = extracted?.extractedFields || [];
+      const docName = (ad.documentId && docNameMap.get(ad.documentId)) || 'Unknown';
+      snapshot += `- "${docName}" | Status: ${ad.status} | Category: ${extracted?.category || 'unknown'} | Confidence: ${Math.round(Number(ad.confidence) * 100)}%`;
+      if (ad.claim) snapshot += ` | Claim: ${(ad.claim as any).claimNumber}`;
+      snapshot += `\n`;
+      if (extracted?.summary) snapshot += `  Summary: ${extracted.summary}\n`;
+      if (fields.length > 0) {
+        snapshot += `  Extracted fields:\n`;
+        for (const f of fields.slice(0, 20)) {
+          snapshot += `    • ${f.label || f.key}: ${f.value}\n`;
+        }
+      }
     }
   }
 

@@ -7,11 +7,12 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { TableSkeleton, StatsSkeleton, EmptyState } from '@/components/ui/loading';
+import Link from 'next/link';
 import {
   Upload, FileText, CheckCircle, AlertCircle, ChevronRight,
   Sparkles, Eye, RotateCcw, Check, X as XIcon, Search,
   ArrowLeft, ZoomIn, ZoomOut, ChevronLeft, Link2, Plus,
-  Image as ImageIcon, FileSpreadsheet, File, Trash2,
+  Image as ImageIcon, FileSpreadsheet, File, Trash2, Edit,
 } from 'lucide-react';
 
 interface ExtractedField {
@@ -667,18 +668,27 @@ function ReviewDataCapture({
             <button onClick={onBack} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
               Cancel
             </button>
-            <button
-              onClick={onApprove}
-              disabled={isApproving}
-              className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isApproving ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-              Approve & Create Claim
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/claims/new?aiDocId=${doc.id}`}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border border-primary-300 dark:border-primary-500/30 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-lg transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+                Fill Form & Edit
+              </Link>
+              <button
+                onClick={onApprove}
+                disabled={isApproving}
+                className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isApproving ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                Quick Create
+              </button>
+            </div>
           </div>
         </div>
       </div>
