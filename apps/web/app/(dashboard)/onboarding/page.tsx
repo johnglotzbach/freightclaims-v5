@@ -80,7 +80,7 @@ export default function OnboardingPage() {
       toast.success('Workspace is ready! Welcome to FreightClaims.');
       router.push('/claims');
     } catch {
-      toast.success('Welcome to FreightClaims!');
+      toast.error('Setup encountered an issue, but your account is ready.');
       router.push('/claims');
     } finally {
       setIsFinishing(false);

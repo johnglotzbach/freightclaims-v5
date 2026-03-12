@@ -170,7 +170,10 @@ export default function TasksPage() {
                 <div key={task.id} className="card p-4 hover:shadow-card-hover transition-all">
                   <div className="flex items-start gap-3">
                     <button
-                      onClick={() => task.claimId && toggleComplete.mutate({ claimId: task.claimId, taskId: task.id, completed: task.status !== 'completed' })}
+                      onClick={() => {
+                        if (!task.claimId) { toast.error('This task is not linked to a claim'); return; }
+                        toggleComplete.mutate({ claimId: task.claimId, taskId: task.id, completed: task.status !== 'completed' });
+                      }}
                       className={cn(
                         'mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer',
                         task.status === 'completed' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 dark:border-slate-600 hover:border-primary-500'

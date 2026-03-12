@@ -93,9 +93,9 @@ export default function NewReportPage() {
   async function handleGenerate() {
     if (!reportName.trim()) { toast.error('Report name is required'); return; }
     try {
-      const res = await apiClient.get(`/reports/export/${format}`, {
+      const res = await apiClient.get(`/reports/export/${reportType}`, {
         responseType: 'blob',
-        params: { reportName, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+        params: { format, reportName, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
       });
       const blob = res.data as Blob;
       const url = URL.createObjectURL(blob);

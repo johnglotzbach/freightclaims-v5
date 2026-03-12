@@ -57,9 +57,8 @@ export default function ApiSetupPage() {
       toast.success('New API key generated');
       if (data?.key) setShowKey(prev => ({ ...prev, [data.id]: true }));
     },
-    onError: (err: Error) => {
-      console.warn('[API Setup] Generate key failed:', err);
-      toast.info('API key management coming soon');
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to generate API key');
     },
   });
 
@@ -69,9 +68,8 @@ export default function ApiSetupPage() {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       toast.success('API key revoked');
     },
-    onError: (err: Error) => {
-      console.warn('[API Setup] Revoke key failed:', err);
-      toast.info('API key management coming soon');
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to revoke API key');
     },
   });
 
@@ -79,9 +77,8 @@ export default function ApiSetupPage() {
     mutationFn: (config: { url: string; secret: string; events: string[] }) =>
       put('/users/webhook-config', config),
     onSuccess: () => toast.success('Webhook saved'),
-    onError: (err: Error) => {
-      console.warn('[API Setup] Save webhook failed:', err);
-      toast.error(err.message || 'Failed to save webhook');
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to save webhook');
     },
   });
 
@@ -195,8 +192,8 @@ export default function ApiSetupPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><RefreshCw className="w-3.5 h-3.5" /></button>
-                      <button className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><Key className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { queryClient.invalidateQueries({ queryKey: ['integrated-carriers'] }); toast.success('Refreshed'); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Refresh status"><RefreshCw className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => toast.info(`Manage API keys for ${carrier.name} in the carrier settings`)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Manage keys"><Key className="w-3.5 h-3.5" /></button>
                     </td>
                   </tr>
                 ))}
