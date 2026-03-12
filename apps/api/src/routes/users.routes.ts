@@ -32,6 +32,8 @@ usersRouter.post('/register', authLimiter, validate(registerSchema), usersContro
 usersRouter.post('/refresh-token', validate(refreshTokenSchema), usersController.refreshToken);
 usersRouter.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), usersController.forgotPassword);
 usersRouter.post('/reset-password', authLimiter, validate(resetPasswordSchema), usersController.resetPassword);
+usersRouter.post('/verify-email', usersController.verifyEmail);
+usersRouter.post('/resend-verification', authLimiter, usersController.resendVerification);
 
 // --- Protected routes ---
 usersRouter.use(authenticate);

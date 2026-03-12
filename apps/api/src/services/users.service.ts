@@ -154,19 +154,28 @@ export const usersService = {
       if (adminRole) roleId = adminRole.id;
     }
 
+    const verificationToken = jwt.sign(
+      { email: data.email as string, purpose: 'email-verification' },
+      env.JWT_SECRET,
+      { expiresIn: '24h' },
+    );
+
     const { password: _pw, companyName: _cn, jobTitle: _jt, companySize: _cs, ...rest } = data;
     const user = await usersRepository.create({
       ...rest,
       passwordHash,
       corporateId,
       roleId,
+      emailVerified: false,
+      verificationToken,
     });
 
-    await smtpService.sendWelcome({
+    const verifyUrl = `${env.NEXT_PUBLIC_APP_URL}/verify-email?token=${verificationToken}`;
+    await smtpService.sendVerification({
       to: data.email as string,
       userName: (data.firstName as string) || (data.email as string),
-      loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
-    }).catch((err) => logger.error({ err }, 'Failed to send welcome email'));
+      verifyUrl,
+    }).catch((err) => logger.error({ err }, 'Failed to send verification email'));
 
     logger.info({ userId: (user as any).id, corporateId, companyName }, 'New user registered with workspace');
 
@@ -217,27 +226,84 @@ export const usersService = {
     logger.info({ email }, 'Password reset token generated');
   },
 
-  /** Resets password using a valid reset token */
+  /** Resets password using a valid reset token (single-use) */
   async resetPassword(token: string, newPassword: string) {
+    let decoded: { userId: string; purpose: string };
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string; purpose: string };
-      if (decoded.purpose !== 'password-reset') throw new UnauthorizedError('Invalid reset token');
-
-      const user = await usersRepository.findById(decoded.userId);
-      if (!user) throw new NotFoundError('User not found');
-
-      validatePasswordComplexity(newPassword);
-      const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-      await usersRepository.update(user.id, {
-        passwordHash,
-        resetToken: null,
-        resetTokenExpiresAt: null,
-      });
-
-      logger.info({ userId: user.id }, 'Password reset completed');
+      decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string; purpose: string };
     } catch {
       throw new UnauthorizedError('Invalid or expired reset token');
     }
+    if (decoded.purpose !== 'password-reset') throw new UnauthorizedError('Invalid reset token');
+
+    const user = await usersRepository.findById(decoded.userId);
+    if (!user) throw new NotFoundError('User not found');
+
+    if ((user as any).resetToken !== token) {
+      throw new UnauthorizedError('This reset link has already been used');
+    }
+
+    validatePasswordComplexity(newPassword);
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await usersRepository.update(user.id, {
+      passwordHash,
+      resetToken: null,
+      resetTokenExpiresAt: null,
+    });
+
+    logger.info({ userId: user.id }, 'Password reset completed');
+  },
+
+  async verifyEmail(token: string) {
+    let decoded: { email: string; purpose: string };
+    try {
+      decoded = jwt.verify(token, env.JWT_SECRET) as { email: string; purpose: string };
+    } catch {
+      throw new UnauthorizedError('Invalid or expired verification link');
+    }
+    if (decoded.purpose !== 'email-verification') throw new UnauthorizedError('Invalid verification token');
+
+    const user = await usersRepository.findByEmail(decoded.email);
+    if (!user) throw new NotFoundError('User not found');
+
+    if ((user as any).emailVerified) {
+      return { message: 'Email already verified' };
+    }
+
+    await usersRepository.update(user.id, {
+      emailVerified: true,
+      verificationToken: null,
+    });
+
+    await smtpService.sendWelcome({
+      to: user.email,
+      userName: (user as any).firstName || user.email,
+      loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
+    }).catch((err) => logger.error({ err }, 'Failed to send welcome email'));
+
+    logger.info({ userId: user.id, email: user.email }, 'Email verified');
+    return { message: 'Email verified successfully' };
+  },
+
+  async resendVerification(email: string) {
+    const user = await usersRepository.findByEmail(email);
+    if (!user) return;
+    if ((user as any).emailVerified) return;
+
+    const verificationToken = jwt.sign(
+      { email: user.email, purpose: 'email-verification' },
+      env.JWT_SECRET,
+      { expiresIn: '24h' },
+    );
+
+    await usersRepository.update(user.id, { verificationToken });
+
+    const verifyUrl = `${env.NEXT_PUBLIC_APP_URL}/verify-email?token=${verificationToken}`;
+    await smtpService.sendVerification({
+      to: user.email,
+      userName: (user as any).firstName || user.email,
+      verifyUrl,
+    }).catch((err) => logger.error({ err }, 'Failed to resend verification email'));
   },
 
   async getById(id: string) {

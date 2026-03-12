@@ -80,7 +80,7 @@ export default function UsersPage() {
 
   const inviteMutation = useMutation({
     mutationFn: (data: { email: string; role: string; firstName: string; lastName: string }) =>
-      post('/users', data),
+      post('/users/invite', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success(`Invitation sent to ${inviteEmail}`);

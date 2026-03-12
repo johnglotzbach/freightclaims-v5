@@ -149,6 +149,34 @@ export const smtpService = {
     });
   },
 
+  async sendVerification(params: { to: string; userName: string; verifyUrl: string }) {
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #1e40af; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">FreightClaims</h1>
+        </div>
+        <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb;">
+          <h2 style="color: #111827; margin-top: 0;">Verify Your Email</h2>
+          <p style="color: #374151; font-size: 14px; line-height: 1.6;">
+            Hi ${params.userName},<br><br>
+            Thanks for signing up! Please verify your email address by clicking the button below.
+          </p>
+          <a href="${params.verifyUrl}" style="display: inline-block; margin-top: 16px; padding: 12px 24px; background: #1e40af; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;">Verify Email</a>
+          <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">
+            If you didn't create an account, you can ignore this email.
+          </p>
+        </div>
+      </div>
+    `;
+
+    return this.sendEmail({
+      to: params.to,
+      subject: 'Verify Your Email - FreightClaims',
+      html,
+      text: `Verify your email: ${params.verifyUrl}`,
+    });
+  },
+
   async sendWelcome(params: { to: string; userName: string; loginUrl: string }) {
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">

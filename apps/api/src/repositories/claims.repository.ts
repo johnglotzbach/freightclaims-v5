@@ -227,7 +227,17 @@ export const claimsRepository = {
     return results;
   },
 
-  async getMassUploadHistory(_customerId?: string) { return []; },
+  async getMassUploadHistory(customerId?: string) {
+    const where: Record<string, unknown> = { status: 'draft' };
+    if (customerId) where.customerId = customerId;
+    const recentDrafts = await prisma.claim.findMany({
+      where: where as any,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { id: true, claimNumber: true, proNumber: true, claimAmount: true, createdAt: true, status: true },
+    });
+    return recentDrafts;
+  },
 
   // Settings
   async getSettings() { return prisma.claimSetting.findMany(); },

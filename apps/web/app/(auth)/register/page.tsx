@@ -350,8 +350,8 @@ export default function RegisterPage() {
               Your FreightClaims account has been created.
             </p>
             <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">
-              Check your email at <strong className="text-slate-700 dark:text-slate-200">{form.email}</strong> to
-              verify your address, then sign in to start your onboarding.
+              We&apos;ve sent a verification link to <strong className="text-slate-700 dark:text-slate-200">{form.email}</strong>.
+              Please check your inbox and verify your email, then sign in to get started.
             </p>
             <button
               onClick={() => router.push('/login')}

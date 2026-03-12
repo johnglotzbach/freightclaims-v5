@@ -56,6 +56,16 @@ export const usersController = {
     res.json({ message: 'Password updated successfully' });
   }),
 
+  verifyEmail: asyncHandler(async (req, res) => {
+    const result = await usersService.verifyEmail(req.body.token);
+    res.json(result);
+  }),
+
+  resendVerification: asyncHandler(async (req, res) => {
+    await usersService.resendVerification(req.body.email);
+    res.json({ message: 'If that email exists, a verification link has been sent' });
+  }),
+
   getCurrentUser: asyncHandler(async (req, res) => {
     const user = await usersService.getById(getUser(req).userId);
     res.json(user);

@@ -284,6 +284,8 @@ async function ensureSchemaSync() {
   ON CONFLICT (plan_type) DO NOTHING`, 'plan_limits seeded');
 
   await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`, 'users.avatar_url added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`, 'users.email_verified added');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT`, 'users.verification_token added');
 
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
