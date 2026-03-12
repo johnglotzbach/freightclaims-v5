@@ -55,7 +55,18 @@ export default function FraudDetectionPage() {
   const fraudMutation = useMutation({
     mutationFn: (data: { claimId: string }) => post<any>('/ai/agents/fraud', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Fraud check failed. The claim may not exist or you may not have access.');
+        setResult(null);
+        return;
+      }
+      if (!data?.structuredOutput?.analysis) {
+        toast.error('AI returned an incomplete response. Please try again.');
+        setResult(null);
+        return;
+      }
       setResult(data.structuredOutput);
+      toast.success(`Fraud scan complete — ${data.structuredOutput.analysis.riskLevel.toUpperCase()} risk`);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Fraud check failed. Make sure you have a valid claim ID.'),
   });

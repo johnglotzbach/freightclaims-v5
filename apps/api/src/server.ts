@@ -287,6 +287,21 @@ async function ensureSchemaSync() {
   await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`, 'users.email_verified added');
   await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT`, 'users.verification_token added');
 
+  await run(`CREATE TABLE IF NOT EXISTS fraud_flags (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'medium',
+    description TEXT NOT NULL,
+    evidence JSONB,
+    status TEXT NOT NULL DEFAULT 'open',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'fraud_flags table created');
+  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_claim ON fraud_flags(claim_id)`, 'fraud_flags.claim_id index');
+  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_status ON fraud_flags(status)`, 'fraud_flags.status index');
+
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
   }

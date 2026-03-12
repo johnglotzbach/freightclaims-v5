@@ -27,6 +27,11 @@ export default function AIPredictPage() {
   const predictMutation = useMutation({
     mutationFn: (data: { claimId: string }) => post<any>('/ai/agents/predictor', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Prediction failed. Verify the claim ID and try again.');
+        setResult(null);
+        return;
+      }
       setResult({
         prediction: data.structuredOutput?.prediction || data.result,
         summary: typeof data.result === 'string' ? data.result : data.summary || '',

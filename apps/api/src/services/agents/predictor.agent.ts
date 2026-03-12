@@ -40,11 +40,11 @@ export const predictorAgent: BaseAgent = {
   async run(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
 
-    // Get the claim details
+    const claimId = ctx.claimId || (ctx.input.claimId as string);
     let claimData: any = null;
-    if (ctx.claimId) {
-      const result = await executeTool('getClaim', { claimId: ctx.claimId }, ctx);
-      if (result.success) claimData = result.data;
+    if (claimId) {
+      const result = await executeTool('getClaim', { claimId }, ctx);
+      if (result.success && result.data) claimData = result.data;
     }
 
     // Get historical settlement data

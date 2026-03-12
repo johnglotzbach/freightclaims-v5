@@ -41,6 +41,11 @@ export default function CarrierCommunicationPage() {
   const commMutation = useMutation({
     mutationFn: (data: any) => post<any>('/ai/agents/communication', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Communication plan failed. Verify the claim ID and try again.');
+        setResult(null);
+        return;
+      }
       setResult(data.structuredOutput?.plan || data.result);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Communication plan generation failed. Make sure you have a valid claim ID.'),

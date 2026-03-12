@@ -85,6 +85,11 @@ export default function RootCauseAnalysisPage() {
   const rcMutation = useMutation({
     mutationFn: (data: any) => post<any>('/ai/agents/rootcause', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Root cause analysis failed. Verify the claim ID and try again.');
+        setResult(null);
+        return;
+      }
       setResult(data.structuredOutput);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Root cause analysis failed. Try again later.'),

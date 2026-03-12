@@ -32,10 +32,14 @@ export const fraudAgent: BaseAgent = {
   async run(ctx: AgentContext): Promise<AgentResult> {
     const start = Date.now();
 
+    const claimId = ctx.claimId || (ctx.input.claimId as string);
     let claimData: any = null;
-    if (ctx.claimId) {
-      const result = await executeTool('getClaim', { claimId: ctx.claimId }, ctx);
-      if (result.success) claimData = result.data;
+
+    if (claimId) {
+      const result = await executeTool('getClaim', { claimId }, ctx);
+      if (result.success && result.data) {
+        claimData = result.data;
+      }
     }
 
     if (!claimData && ctx.input.claimData) {
@@ -46,7 +50,9 @@ export const fraudAgent: BaseAgent = {
       return {
         agentType: 'fraud',
         status: 'failed',
-        result: 'No claim data provided for fraud analysis',
+        result: claimId
+          ? `Claim "${claimId}" not found or you do not have access to it. Please verify the claim ID.`
+          : 'No claim ID provided. Please enter a valid claim ID to run fraud analysis.',
         durationMs: Date.now() - start,
       };
     }
@@ -132,10 +138,10 @@ Return: { riskLevel, overallScore (0-100 where 0=no risk, 100=definite fraud), f
     );
 
     // Persist fraud flags
-    if (analysis.flags.length > 0 && ctx.claimId) {
+    if (analysis.flags.length > 0 && claimId) {
       await prisma.fraudFlag.createMany({
         data: analysis.flags.map((f) => ({
-          claimId: ctx.claimId!,
+          claimId: claimId!,
           type: f.type,
           severity: f.severity,
           description: f.description,

@@ -52,6 +52,11 @@ export default function DenialResponsePage() {
   const denialMutation = useMutation({
     mutationFn: (data: any) => post<any>('/ai/agents/denial', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Denial response failed. Verify the claim ID and try again.');
+        setResult(null);
+        return;
+      }
       const output = data.structuredOutput || data.result;
       setResult(output);
     },

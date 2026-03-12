@@ -52,6 +52,11 @@ export default function CarrierRiskPage() {
   const riskMutation = useMutation({
     mutationFn: (data: { carrierScac: string }) => post<any>('/ai/agents/risk', data),
     onSuccess: (data) => {
+      if (data?.status === 'failed') {
+        toast.error(data.result || 'Risk analysis failed. Check the SCAC code and try again.');
+        setResult(null);
+        return;
+      }
       setResult(data.structuredOutput as RiskResult);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Carrier analysis failed. Check the SCAC code and try again.'),
