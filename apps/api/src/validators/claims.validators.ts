@@ -52,7 +52,7 @@ export const updateClaimSchema = z.object({
 
 export const listClaimsQuerySchema = z.object({
   page: z.coerce.number().positive().default(1),
-  limit: z.coerce.number().positive().max(100).default(25),
+  limit: z.coerce.number().positive().max(500).default(25),
   status: z.string().optional(),
   customerId: z.string().optional(),
   search: z.string().optional(),

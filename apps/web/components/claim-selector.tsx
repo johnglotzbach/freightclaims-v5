@@ -39,7 +39,8 @@ export function ClaimSelector({
       const params = new URLSearchParams({ limit: '20', sortBy: 'createdAt', sortDir: 'desc' });
       if (search.trim()) params.set('search', search.trim());
       const res = await get<any>(`/claims?${params}`);
-      return (res?.data || res || []) as ClaimOption[];
+      const arr = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return arr as ClaimOption[];
     },
     staleTime: 15_000,
   });
@@ -166,7 +167,8 @@ export function CarrierSelector({
       const params = new URLSearchParams({ limit: '25' });
       if (search.trim()) params.set('search', search.trim());
       const res = await get<any>(`/carriers?${params}`);
-      return (res?.data || res || []) as CarrierOption[];
+      const arr = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return arr as CarrierOption[];
     },
     staleTime: 30_000,
   });

@@ -470,7 +470,7 @@ function SupervisorSection() {
     queryFn: () => {
       const monthAgo = new Date();
       monthAgo.setDate(monthAgo.getDate() - 30);
-      return getList<any>(`/claims?status=settled&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=200`);
+      return getList<any>(`/claims?status=settled&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=100`);
     },
     staleTime: 120_000,
   });
@@ -480,7 +480,7 @@ function SupervisorSection() {
     queryFn: () => {
       const monthAgo = new Date();
       monthAgo.setDate(monthAgo.getDate() - 30);
-      return getList<any>(`/claims?status=denied&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=200`);
+      return getList<any>(`/claims?status=denied&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=100`);
     },
     staleTime: 120_000,
   });

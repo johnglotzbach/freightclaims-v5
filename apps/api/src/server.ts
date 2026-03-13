@@ -444,6 +444,55 @@ async function ensureSchemaSync() {
   await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_claim ON fraud_flags(claim_id)`, 'fraud_flags.claim_id idx');
   await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_status ON fraud_flags(status)`, 'fraud_flags.status idx');
 
+  await run(`CREATE TABLE IF NOT EXISTS product_catalog (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id TEXT NOT NULL REFERENCES customers(id),
+    name TEXT NOT NULL,
+    sku TEXT,
+    description TEXT,
+    value DECIMAL(12,2),
+    weight DECIMAL(10,2),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'product_catalog table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_product_catalog_customer ON product_catalog(customer_id)`, 'product_catalog.customer_id idx');
+
+  await run(`CREATE TABLE IF NOT EXISTS customer_contacts (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id TEXT NOT NULL REFERENCES customers(id),
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    title TEXT,
+    is_primary BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'customer_contacts table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_customer_contacts_customer ON customer_contacts(customer_id)`, 'customer_contacts.customer_id idx');
+
+  await run(`CREATE TABLE IF NOT EXISTS customer_addresses (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id TEXT NOT NULL REFERENCES customers(id),
+    type TEXT NOT NULL DEFAULT 'billing',
+    street1 TEXT NOT NULL,
+    street2 TEXT,
+    city TEXT NOT NULL,
+    state TEXT NOT NULL,
+    zip_code TEXT NOT NULL,
+    country TEXT NOT NULL DEFAULT 'US',
+    is_primary BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'customer_addresses table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id)`, 'customer_addresses.customer_id idx');
+
+  await run(`CREATE TABLE IF NOT EXISTS customer_notes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id TEXT NOT NULL REFERENCES customers(id),
+    content TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'customer_notes table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_customer_notes_customer ON customer_notes(customer_id)`, 'customer_notes.customer_id idx');
+
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');
   }
