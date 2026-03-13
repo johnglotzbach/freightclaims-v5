@@ -375,15 +375,14 @@ export default function DocumentsPage() {
     ? Math.round(aiProcessedDocs.reduce((acc, d) => acc + (d.confidence || 0), 0) / aiProcessedDocs.length * 100)
     : 0;
 
-  const filtered = docs.filter((d) => {
-    const matchSearch = (d.name || '').toLowerCase().includes(search.toLowerCase()) || (d.claimNumber || '').toLowerCase().includes(search.toLowerCase());
-    const matchCat = category === 'All' || d.category === category;
-    return matchSearch && matchCat;
-  });
-
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
+  const { filtered, sorted } = useMemo(() => {
+    const f = docs.filter((d) => {
+      const matchSearch = (d.name || '').toLowerCase().includes(search.toLowerCase()) || (d.claimNumber || '').toLowerCase().includes(search.toLowerCase());
+      const matchCat = category === 'All' || d.category === category;
+      return matchSearch && matchCat;
+    });
+    const s = [...f];
+    s.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case 'name':
@@ -401,8 +400,8 @@ export default function DocumentsPage() {
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
+    return { filtered: f, sorted: s };
+  }, [docs, search, category, sortKey, sortDir]);
 
   function toggleSelect(id: string) {
     setSelected((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);

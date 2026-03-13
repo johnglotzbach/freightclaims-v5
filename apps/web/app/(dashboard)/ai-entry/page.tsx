@@ -88,6 +88,32 @@ function getFileIcon(mimeType?: string) {
   return <File className="w-5 h-5 text-primary-500 flex-shrink-0" />;
 }
 
+function DocThumb({ docId, mimeType }: { docId: string; mimeType?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const isImage = mimeType?.startsWith('image/');
+  const isPdf = mimeType?.includes('pdf');
+  if (!isImage && !isPdf) return null;
+
+  useEffect(() => {
+    let revoke: string | null = null;
+    const token = localStorage.getItem('accessToken');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const corpId = localStorage.getItem('fc-impersonate-corporate');
+    if (corpId) headers['X-Corporate-Id'] = corpId;
+
+    fetch(`/api/v1/documents/${docId}/thumbnail`, { headers })
+      .then(res => { if (!res.ok) throw new Error('fail'); return res.blob(); })
+      .then(blob => { revoke = URL.createObjectURL(blob); setSrc(revoke); })
+      .catch(() => {});
+
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [docId]);
+
+  if (!src) return null;
+  return <img src={src} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 border border-slate-200 dark:border-slate-700" />;
+}
+
 function getStatusIcon(status: string) {
   if (status === 'approved' || status === 'completed') return <CheckCircle className="w-4 h-4 text-emerald-500" />;
   if (status === 'review') return <Eye className="w-4 h-4 text-amber-500" />;
@@ -158,7 +184,8 @@ function GroupDocumentsModal({
                   checked={selected.has(doc.id)}
                   onChange={() => toggle(doc.id)}
                 />
-                {getFileIcon(doc.mimeType)}
+                <DocThumb docId={doc.documentId || doc.id} mimeType={doc.mimeType} />
+                {!doc.mimeType?.startsWith('image/') && !doc.mimeType?.includes('pdf') && getFileIcon(doc.mimeType)}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                     {doc.documentName || doc.fileName || 'Document'}
@@ -537,7 +564,8 @@ export default function AIEntryPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          {getFileIcon(doc.mimeType)}
+                          <DocThumb docId={doc.documentId || doc.id} mimeType={doc.mimeType} />
+                          {!doc.mimeType?.startsWith('image/') && !doc.mimeType?.includes('pdf') && getFileIcon(doc.mimeType)}
                           <div className="min-w-0">
                             <div className="font-medium text-slate-900 dark:text-white truncate max-w-[200px] lg:max-w-xs">{doc.documentName || doc.fileName || 'Document'}</div>
                             <div className="text-xs text-slate-400 mt-0.5">{doc.mimeType?.split('/').pop() || 'file'}</div>
