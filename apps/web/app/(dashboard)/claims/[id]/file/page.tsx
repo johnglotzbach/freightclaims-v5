@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -110,7 +110,7 @@ export default function FileClaimPage() {
   const documents = claim?.documents || [];
 
   // Initialize party states when claim loads
-  useMemo(() => {
+  useEffect(() => {
     if (carrierParties.length > 0 && Object.keys(partyStates).length === 0) {
       const initial: Record<string, PartyFilingState> = {};
       carrierParties.forEach((p) => {

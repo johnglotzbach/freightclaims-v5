@@ -352,7 +352,7 @@ workflowsRouter.post('/:id/trigger', authorize(['admin', 'manager']), async (req
         claimId: claimId ?? null,
         currentStep: 0,
         status: dryRun ? 'dry_run' : 'running',
-        log: executionLog,
+        log: executionLog as any,
       },
     });
 
@@ -395,7 +395,7 @@ async function runWorkflowSteps(executionId: string, steps: any[], claimId: stri
     data: {
       status: failed ? 'failed' : 'completed',
       completedAt: new Date(),
-      log: log,
+      log: log as any,
     },
   });
 }

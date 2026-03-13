@@ -149,7 +149,7 @@ export default function ClaimEmailPage() {
 
   const uniqueRecipients = Array.from(new Set(emails.flatMap((e) => {
     const addrs: string[] = [];
-    if (e.to) addrs.push(e.to);
+    if (e.to) addrs.push(...e.to);
     if (e.from) addrs.push(e.from);
     return addrs;
   }).filter(Boolean)));

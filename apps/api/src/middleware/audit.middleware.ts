@@ -106,7 +106,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction) {
             action: methodToAction(req.method),
             entity: extractEntity(req.path),
             entityId: extractEntityId(req.path),
-            metadata,
+            metadata: metadata as any,
             ipAddress: req.ip || req.socket.remoteAddress || null,
             userAgent: req.headers['user-agent'] || null,
           },

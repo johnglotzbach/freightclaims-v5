@@ -325,15 +325,19 @@ export const claimsService = {
 
     if (data.mentionedUserIds && typeof data.mentionedUserIds === 'string') {
       try {
-        const ids = data.mentionedUserIds.split(',').map((id: string) => id.trim()).filter(Boolean);
-        const claim = await prisma.claim.findUnique({ where: { id: claimId }, select: { claimNumber: true } });
+        const ids = (data.mentionedUserIds as string).split(',').map((id: string) => id.trim()).filter(Boolean);
+        const [claim, authorUser] = await Promise.all([
+          prisma.claim.findUnique({ where: { id: claimId }, select: { claimNumber: true } }),
+          prisma.user.findUnique({ where: { id: user.userId }, select: { firstName: true, lastName: true } }),
+        ]);
+        const authorName = authorUser ? `${authorUser.firstName} ${authorUser.lastName}`.trim() : user.email;
         for (const mentionedUserId of ids) {
           if (mentionedUserId === user.userId) continue;
           await prisma.notification.create({
             data: {
               userId: mentionedUserId,
               title: `Mentioned in Claim ${claim?.claimNumber || claimId}`,
-              message: `${user.firstName || ''} ${user.lastName || ''} mentioned you in a comment`.trim(),
+              message: `${authorName} mentioned you in a comment`,
               type: 'comment_mention',
               category: 'comment',
               link: `/claims/${claimId}`,
