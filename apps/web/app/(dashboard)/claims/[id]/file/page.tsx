@@ -142,15 +142,12 @@ export default function FileClaimPage() {
 
   const aiComposeMutation = useMutation({
     mutationFn: () =>
-      post<any>('/ai/run', {
-        agentType: 'communication',
-        input: { claimId, task: 'compose_email' },
-      }),
+      post<any>('/ai/compose-email', { claimId }),
     onSuccess: (data) => {
-      const result = data?.result ?? data?.structuredOutput?.plan?.draftEmail ?? data;
-      if (result?.body) setBody(result.body);
-      if (result?.subject) setSubject(result.subject);
-      toast.success('AI draft generated');
+      if (data?.body) setBody(data.body);
+      if (data?.subject) setSubject(data.subject);
+      const typeLabel = (data?.emailType || '').replace(/_/g, ' ');
+      toast.success(`AI drafted ${typeLabel || 'email'} — review before sending`);
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.error || err?.message || 'AI draft failed'),

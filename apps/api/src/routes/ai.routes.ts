@@ -122,27 +122,107 @@ aiRouter.post('/compose-email', async (req: Request, res: Response, next: NextFu
       return;
     }
     const { generateJSON } = await import('../services/agents/gemini-client');
-    const claimSummary = JSON.stringify({
+
+    const carrierParties = claim.parties.filter((p: any) => p.type === 'carrier');
+    const claimantParties = claim.parties.filter((p: any) => p.type === 'claimant' || p.type === 'shipper' || p.type === 'consignee');
+
+    const filingDate = (claim as any).filingDate ? new Date((claim as any).filingDate) : null;
+    const now = new Date();
+    const daysSinceFiling = filingDate ? Math.floor((now.getTime() - filingDate.getTime()) / 86400000) : null;
+    const claimAgeDays = Math.floor((now.getTime() - new Date(claim.createdAt).getTime()) / 86400000);
+
+    const emailHistory = claim.emailLogs.map((e: any) => ({
+      subject: e.subject,
+      direction: e.direction,
+      date: e.createdAt,
+      to: e.to,
+      from: e.from,
+    }));
+
+    const claimSnapshot = {
       claimNumber: claim.claimNumber,
       proNumber: claim.proNumber,
       status: claim.status,
       claimType: claim.claimType,
       claimAmount: Number(claim.claimAmount),
       description: claim.description,
-      parties: claim.parties.map((p: any) => ({ type: p.type, name: p.name, email: p.email })),
-      products: claim.products.map((p: any) => ({ description: p.description, quantity: p.quantity, value: p.value })),
-      recentComments: claim.comments.slice(-5).map((c: any) => c.content),
-      recentEmails: claim.emailLogs.slice(-3).map((e: any) => ({ subject: e.subject, direction: e.direction })),
-    }, null, 2);
-    const prompt = `Compose a professional freight claim email based on this claim data. ${context ? `Additional context: ${context}` : ''} ${replyTo ? `This is a reply to: ${replyTo}` : ''}
+      createdAt: claim.createdAt,
+      claimAgeDays,
+      filingDate: filingDate?.toISOString().split('T')[0] || null,
+      daysSinceFiling,
+      acknowledgmentDate: (claim as any).acknowledgmentDate || null,
+      reserveAmount: (claim as any).reserveAmount ? Number((claim as any).reserveAmount) : null,
+      customer: (claim as any).customer,
+      carrierParties: carrierParties.map((p: any) => ({
+        name: p.name, email: p.email, scacCode: p.scacCode, phone: p.phone,
+        filingStatus: p.filingStatus, carrierClaimNumber: p.carrierClaimNumber,
+        carrierResponse: p.carrierResponse,
+      })),
+      claimantParties: claimantParties.map((p: any) => ({
+        name: p.name, email: p.email, phone: p.phone,
+      })),
+      products: claim.products.map((p: any) => ({
+        description: p.description, quantity: p.quantity, weight: p.weight,
+        claimAmount: p.claimAmount ? Number(p.claimAmount) : null,
+        condition: p.condition, sku: p.sku,
+      })),
+      documents: claim.documents.map((d: any) => ({
+        name: d.documentName, category: d.category,
+      })),
+      tasks: claim.tasks.filter((t: any) => t.status !== 'completed').map((t: any) => ({
+        title: t.title, priority: t.priority, dueDate: t.dueDate,
+      })),
+      deadlines: claim.deadlines?.map((d: any) => ({
+        type: d.type, dueDate: d.dueDate,
+      })) || [],
+      recentComments: claim.comments.slice(-5).map((c: any) => ({
+        content: c.content, createdAt: c.createdAt, isInternal: c.isInternal,
+      })),
+      emailHistory: emailHistory.slice(0, 10),
+    };
 
-Claim data:
-${claimSummary}
+    const prompt = `You are an expert freight claims professional. Analyze this claim thoroughly and compose the most appropriate email.
 
-Return a JSON object with exactly: { "subject": "string", "body": "string" }
-The body should be plain text, professional, and include key claim details (PRO, amount, description).`;
-    const result = await generateJSON<{ subject: string; body: string }>(prompt);
-    res.json({ subject: result.subject || '', body: result.body || '' });
+CLAIM DATA:
+${JSON.stringify(claimSnapshot, null, 2)}
+
+${context ? `USER CONTEXT: ${context}` : ''}
+${replyTo ? `REPLYING TO: ${replyTo}` : ''}
+
+INSTRUCTIONS:
+1. Analyze the claim status, age, parties, products, documents, email history, and deadlines
+2. Determine what type of email is most appropriate right now:
+   - If no emails sent yet and claim is new: initial claim filing notification to carrier
+   - If filed but no acknowledgment after 15+ days: follow-up requesting acknowledgment
+   - If acknowledged but no resolution after 60+ days: escalation / demand for disposition
+   - If carrier denied: appeal/rebuttal citing Carmack Amendment
+   - If settlement offered: acceptance/counter-offer
+   - If claim resolved: closing confirmation
+   - If documents are missing: request for documentation
+   - Otherwise: professional status update or follow-up
+3. Address the email to the correct carrier contact(s)
+4. Include all relevant claim identifiers (claim #, PRO #, carrier claim # if available)
+5. Reference specific dollar amounts, commodities, and damage details
+6. Be firm but professional. Cite Carmack Amendment timing requirements where relevant
+7. Include a clear call to action
+
+Return JSON: { "subject": "string", "body": "string", "to": ["email@example.com"], "cc": ["optional@cc.com"], "emailType": "filing|follow_up|escalation|appeal|settlement|closing|document_request|status_update" }
+
+The body should be professional plain text with proper greeting and sign-off.`;
+
+    const result = await generateJSON<{ subject: string; body: string; to?: string[]; cc?: string[]; emailType?: string }>(prompt, {
+      systemInstruction: 'You are a senior freight claims adjuster with 20 years experience. Draft emails that are professional, assertive, and legally sound. Always reference specific claim details. Follow Carmack Amendment timing requirements.',
+    });
+
+    const toRecipients = result.to?.length ? result.to : carrierParties.map((p: any) => p.email).filter(Boolean);
+
+    res.json({
+      subject: result.subject || '',
+      body: result.body || '',
+      to: toRecipients,
+      cc: result.cc || [],
+      emailType: result.emailType || 'status_update',
+    });
   } catch (err) {
     next(err);
   }

@@ -196,19 +196,20 @@ export default function ClaimEmailPage() {
 
   const aiComposeMutation = useMutation({
     mutationFn: () =>
-      post<any>('/ai/run', {
-        agentType: 'communication',
-        input: { claimId, task: 'compose_email' },
-      }),
+      post<any>('/ai/compose-email', { claimId }),
     onSuccess: (data) => {
-      const result = data?.result ?? data?.structuredOutput?.plan?.draftEmail ?? data;
-      if (result?.body) setBody(result.body);
-      if (result?.subject) setSubject(result.subject);
-      if (result?.to) {
-        const recipients = Array.isArray(result.to) ? result.to : [result.to];
-        setTo(recipients);
+      if (data?.body) setBody(data.body);
+      if (data?.subject) setSubject(data.subject);
+      if (data?.to?.length) {
+        const recipients = Array.isArray(data.to) ? data.to : [data.to];
+        setTo(recipients.filter(Boolean));
       }
-      toast.success('AI draft generated');
+      if (data?.cc?.length) {
+        setCc(Array.isArray(data.cc) ? data.cc : [data.cc]);
+        setShowCc(true);
+      }
+      const typeLabel = (data?.emailType || '').replace(/_/g, ' ');
+      toast.success(`AI drafted ${typeLabel || 'email'} — review and send`);
     },
     onError: (err: any) =>
       toast.error(err?.response?.data?.error || err?.message || 'AI draft failed'),
@@ -240,6 +241,12 @@ export default function ClaimEmailPage() {
     resetCompose();
     setComposing(true);
     setSubject(claim?.claimNumber ? `RE: Freight Claim - ${claim.claimNumber}` : '');
+  }
+
+  function handleAiNewEmail() {
+    resetCompose();
+    setComposing(true);
+    setTimeout(() => aiComposeMutation.mutate(), 100);
   }
 
   function handleReply(email: Email) {
@@ -446,12 +453,22 @@ export default function ClaimEmailPage() {
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">{emails.length} email(s)</p>
         </div>
-        <button
-          onClick={handleNewEmail}
-          className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" /> New Email
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={handleAiNewEmail}
+            disabled={aiComposeMutation.isPending}
+            className="flex items-center gap-1.5 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
+            {aiComposeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            AI Compose
+          </button>
+          <button
+            onClick={handleNewEmail}
+            className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Blank Email
+          </button>
+        </div>
       </div>
 
       {/* Claim inbound address */}
