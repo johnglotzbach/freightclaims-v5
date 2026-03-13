@@ -193,7 +193,7 @@ export default function ApiSetupPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => { queryClient.invalidateQueries({ queryKey: ['integrated-carriers'] }); toast.success('Refreshed'); }} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Refresh status"><RefreshCw className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => toast.info(`Manage API keys for ${carrier.name} in the carrier settings`)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500" title="Manage keys"><Key className="w-3.5 h-3.5" /></button>
+                      <Link href={`/companies/carriers/${carrier.id}`} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 inline-block" title="Manage carrier settings"><Key className="w-3.5 h-3.5" /></Link>
                     </td>
                   </tr>
                 ))}

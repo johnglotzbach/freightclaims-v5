@@ -115,7 +115,7 @@ workflowsRouter.put('/:id', authorize(['admin', 'manager']), async (req: Request
   try {
     const id = req.params.id as string;
     const user = (req as any).user;
-    const { name, description, trigger, triggerConfig, isActive } = req.body;
+    const { name, description, trigger, triggerConfig, isActive, steps } = req.body;
 
     const existing = await prisma.workflow.findUnique({ where: { id } });
     if (!existing || !ensureWorkflowAccess(existing, user)) {
@@ -133,10 +133,33 @@ workflowsRouter.put('/:id', authorize(['admin', 'manager']), async (req: Request
     if (triggerConfig !== undefined) data.triggerConfig = triggerConfig;
     if (isActive !== undefined) data.isActive = !!isActive;
 
-    const workflow = await prisma.workflow.update({
-      where: { id },
-      data,
-      include: { steps: { orderBy: { stepOrder: 'asc' } } },
+    const workflow = await prisma.$transaction(async (tx) => {
+      await tx.workflow.update({ where: { id }, data });
+
+      if (Array.isArray(steps)) {
+        await tx.workflowStep.deleteMany({ where: { workflowId: id } });
+        for (let i = 0; i < steps.length; i++) {
+          const s = steps[i];
+          const actionType = s.actionType || s.action_type;
+          if (!actionType || !VALID_ACTION_TYPES.includes(actionType)) {
+            throw new Error(`Step ${i + 1}: actionType must be one of: ${VALID_ACTION_TYPES.join(', ')}`);
+          }
+          await tx.workflowStep.create({
+            data: {
+              workflowId: id,
+              stepOrder: s.stepOrder ?? s.step_order ?? s.orderIndex ?? i + 1,
+              actionType,
+              config: s.config ?? {},
+              conditionLogic: s.conditionLogic ?? s.condition_logic ?? s.condition ?? null,
+            },
+          });
+        }
+      }
+
+      return tx.workflow.findUnique({
+        where: { id },
+        include: { steps: { orderBy: { stepOrder: 'asc' } } },
+      });
     });
 
     res.json({ success: true, data: workflow });
@@ -405,9 +428,10 @@ async function executeStep(step: any, claimId: string | null, userId: string): P
 
   switch (step.actionType) {
     case 'change_status': {
-      if (!claimId || !config.status) return 'skipped: no claimId or status';
-      await prisma.claim.update({ where: { id: claimId }, data: { status: config.status } });
-      return `Status changed to ${config.status}`;
+      const newStatus = config.newStatus || config.status;
+      if (!claimId || !newStatus) return 'skipped: no claimId or status';
+      await prisma.claim.update({ where: { id: claimId }, data: { status: newStatus } });
+      return `Status changed to ${newStatus}`;
     }
     case 'create_task': {
       if (!claimId) return 'skipped: no claimId';
@@ -444,11 +468,12 @@ async function executeStep(step: any, claimId: string | null, userId: string): P
       return `Email step queued: to=${config.to || 'claim parties'}, template=${config.template || 'none'}`;
     }
     case 'wait_delay': {
-      const delayMs = (config.minutes || 0) * 60000;
+      const minutes = (config.delayDays || 0) * 1440 + (config.delayHours || 0) * 60 + (config.minutes || 0);
+      const delayMs = minutes * 60000;
       if (delayMs > 0 && delayMs <= 300000) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
-      return `Waited ${config.minutes || 0} minutes`;
+      return `Waited ${minutes} minutes`;
     }
     case 'ai_action': {
       return `AI action "${config.action || 'analyze'}" queued for processing`;

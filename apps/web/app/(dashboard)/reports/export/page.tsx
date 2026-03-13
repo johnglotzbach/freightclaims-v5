@@ -18,12 +18,12 @@ interface ReportType {
 }
 
 const REPORT_TYPES: ReportType[] = [
-  { id: 'collection', title: 'Collection Percentage', description: 'Track settlement collection rates across carriers and time periods', icon: BarChart3, formats: ['PDF', 'CSV', 'Excel'] },
-  { id: 'customers', title: 'Top Customers', description: 'View customers with the highest claim volumes and amounts', icon: Table, formats: ['PDF', 'CSV', 'Excel'] },
-  { id: 'carriers', title: 'Top Carriers', description: 'Carriers with the most claims, denials, and settlement delays', icon: Table, formats: ['PDF', 'CSV', 'Excel'] },
-  { id: 'metrics-carrier', title: 'Metrics by Carrier', description: 'Detailed performance breakdown per carrier', icon: PieChart, formats: ['PDF', 'CSV', 'Excel'] },
-  { id: 'metrics-dest', title: 'Metrics by Destination', description: 'Claim frequency and severity by destination', icon: PieChart, formats: ['PDF', 'CSV', 'Excel'] },
-  { id: 'writeoff', title: 'Write-Off Amount', description: 'Track total write-offs and identify trends', icon: FileText, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'collection-percentage', title: 'Collection Percentage', description: 'Track settlement collection rates across carriers and time periods', icon: BarChart3, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'top-customers', title: 'Top Customers', description: 'View customers with the highest claim volumes and amounts', icon: Table, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'top-carriers', title: 'Top Carriers', description: 'Carriers with the most claims, denials, and settlement delays', icon: Table, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'metrics-by-carrier', title: 'Metrics by Carrier', description: 'Detailed performance breakdown per carrier', icon: PieChart, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'metrics-by-destination', title: 'Metrics by Destination', description: 'Claim frequency and severity by destination', icon: PieChart, formats: ['PDF', 'CSV', 'Excel'] },
+  { id: 'write-off', title: 'Write-Off Amount', description: 'Track total write-offs and identify trends', icon: FileText, formats: ['PDF', 'CSV', 'Excel'] },
   { id: 'aging', title: 'Aging Report', description: 'Claims grouped by age brackets (30, 60, 90, 120+ days)', icon: BarChart3, formats: ['PDF', 'CSV', 'Excel'] },
   { id: 'insurance', title: 'Insurance Report', description: 'Claims filed with insurance providers and recovery rates', icon: FileText, formats: ['PDF', 'CSV', 'Excel'] },
 ];

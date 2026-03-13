@@ -278,7 +278,7 @@ export default function ClaimDetailPage() {
       <div className="animate-fade-in">
         {activeTab === 'status' && <StatusTab claim={claim} claimId={id} />}
         {activeTab === 'transportation' && <TransportationTab claim={claim} />}
-        {activeTab === 'form-data' && <FormDataTab claim={claim} />}
+        {activeTab === 'form-data' && <FormDataTab claim={claim} claimId={claimId} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
         {activeTab === 'tasks' && <TasksTab tasks={claim.tasks || []} claimId={id} />}
         {activeTab === 'deadlines' && <DeadlinesTab claimId={id} />}
@@ -479,7 +479,64 @@ function TransportationTab({ claim }: { claim: Claim }) {
   );
 }
 
-function FormDataTab({ claim }: { claim: Claim }) {
+function FormDataTab({ claim, claimId }: { claim: Claim; claimId: string }) {
+  const queryClient = useQueryClient();
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editProductId, setEditProductId] = useState<string | null>(null);
+  const [pForm, setPForm] = useState({ description: '', quantity: '1', weight: '', value: '', damageType: '' });
+
+  const addProductMut = useMutation({
+    mutationFn: (data: any) => post(`/claims/${claimId}/products`, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); setShowAddProduct(false); resetPForm(); toast.success('Product added'); },
+    onError: () => toast.error('Failed to add product'),
+  });
+
+  const updateProductMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => put(`/claims/${claimId}/products/${id}`, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); setEditProductId(null); toast.success('Product updated'); },
+    onError: () => toast.error('Failed to update product'),
+  });
+
+  const deleteProductMut = useMutation({
+    mutationFn: (id: string) => del(`/claims/${claimId}/products/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); toast.success('Product deleted'); },
+    onError: () => toast.error('Failed to delete product'),
+  });
+
+  function resetPForm() { setPForm({ description: '', quantity: '1', weight: '', value: '', damageType: '' }); }
+  function startEditProduct(p: any) {
+    setEditProductId(p.id);
+    setPForm({ description: p.description || '', quantity: String(p.quantity ?? 1), weight: String(p.weight ?? ''), value: String(p.value ?? ''), damageType: p.damageType || '' });
+  }
+  function submitProduct() {
+    const data = { description: pForm.description, quantity: Number(pForm.quantity) || 1, weight: pForm.weight ? Number(pForm.weight) : undefined, claimAmount: pForm.value ? Number(pForm.value) : undefined, damageType: pForm.damageType || undefined };
+    if (editProductId) { updateProductMut.mutate({ id: editProductId, data }); }
+    else { addProductMut.mutate(data); }
+  }
+
+  const productForm = (
+    <tr className="bg-primary-50/50 dark:bg-primary-500/5">
+      <td className="px-4 py-2"><input value={pForm.description} onChange={e => setPForm(f => ({ ...f, description: e.target.value }))} className="input text-xs w-full" placeholder="Description *" /></td>
+      <td className="px-4 py-2"><input value={pForm.quantity} onChange={e => setPForm(f => ({ ...f, quantity: e.target.value }))} className="input text-xs w-16" type="number" min="1" /></td>
+      <td className="px-4 py-2"><input value={pForm.weight} onChange={e => setPForm(f => ({ ...f, weight: e.target.value }))} className="input text-xs w-20" type="number" placeholder="lbs" /></td>
+      <td className="px-4 py-2"><input value={pForm.value} onChange={e => setPForm(f => ({ ...f, value: e.target.value }))} className="input text-xs w-24" type="number" placeholder="$" /></td>
+      <td className="px-4 py-2">
+        <select value={pForm.damageType} onChange={e => setPForm(f => ({ ...f, damageType: e.target.value }))} className="input text-xs">
+          <option value="">Select...</option>
+          <option value="damage">Damage</option>
+          <option value="shortage">Shortage</option>
+          <option value="loss">Loss</option>
+          <option value="contamination">Contamination</option>
+          <option value="theft">Theft</option>
+        </select>
+      </td>
+      <td className="px-4 py-2 text-right">
+        <button onClick={submitProduct} disabled={!pForm.description} className="text-xs bg-primary-500 text-white px-2 py-1 rounded font-medium disabled:opacity-50 mr-1">{editProductId ? 'Save' : 'Add'}</button>
+        <button onClick={() => { setShowAddProduct(false); setEditProductId(null); resetPForm(); }} className="text-xs text-slate-500 px-2 py-1">Cancel</button>
+      </td>
+    </tr>
+  );
+
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card p-6 space-y-4">
@@ -504,36 +561,45 @@ function FormDataTab({ claim }: { claim: Claim }) {
         </dl>
       </div>
 
-      {/* Products */}
-      {claim.products && claim.products.length > 0 && (
-        <div className="card overflow-hidden md:col-span-2">
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Products / Line Items</h3>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Description</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Qty</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Weight</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Value</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Damage Type</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-              {claim.products.map((p) => (
-                <tr key={p.id}>
-                  <td className="px-4 py-3 font-medium">{p.description}</td>
-                  <td className="px-4 py-3">{p.quantity}</td>
-                  <td className="px-4 py-3">{p.weight ? `${p.weight} lbs` : '-'}</td>
-                  <td className="px-4 py-3">{p.value ? formatCurrency(p.value) : '-'}</td>
-                  <td className="px-4 py-3 capitalize">{p.damageType || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="card overflow-hidden md:col-span-2">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Products / Line Items</h3>
+          <button onClick={() => { setShowAddProduct(true); setEditProductId(null); resetPForm(); }} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium">
+            <Plus className="w-3.5 h-3.5" /> Add Product
+          </button>
         </div>
-      )}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-slate-700">
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Description</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Qty</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Weight</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Value</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Damage Type</th>
+              <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+            {claim.products?.map((p) => editProductId === p.id ? productForm : (
+              <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                <td className="px-4 py-3 font-medium">{p.description}</td>
+                <td className="px-4 py-3">{p.quantity}</td>
+                <td className="px-4 py-3">{p.weight ? `${p.weight} lbs` : '-'}</td>
+                <td className="px-4 py-3">{p.value ? formatCurrency(p.value) : '-'}</td>
+                <td className="px-4 py-3 capitalize">{p.damageType || '-'}</td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => startEditProduct(p)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3 h-3" /></button>
+                  <button onClick={() => { if (confirm('Delete this product?')) deleteProductMut.mutate(p.id); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                </td>
+              </tr>
+            ))}
+            {showAddProduct && !editProductId && productForm}
+            {(!claim.products || claim.products.length === 0) && !showAddProduct && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">No products yet. Click "Add Product" to add line items.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {claim.description && (
         <div className="card p-6 md:col-span-2">
@@ -612,7 +678,7 @@ function DocumentsTab({ documents, claimId }: { documents: Claim['documents']; c
         <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleUpload} />
       </div>
       {!documents?.length ? (
-        <EmptyState message="No documents uploaded yet" action="Upload Document" />
+        <EmptyState message="No documents uploaded yet" action="Upload Document" onActionClick={() => fileInputRef.current?.click()} />
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
@@ -1511,26 +1577,7 @@ function AdditionalInfoTab({ claim }: { claim: Claim }) {
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
-      <div className="card p-6 space-y-4">
-        <h3 className="font-semibold text-slate-900 dark:text-white">Parties</h3>
-        {claim.parties && claim.parties.length > 0 ? (
-          <div className="space-y-3">
-            {claim.parties.map((party) => (
-              <div key={party.id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="badge badge-info capitalize text-xs">{party.type}</span>
-                  {party.scacCode && <span className="badge badge-neutral font-mono text-xs">{party.scacCode}</span>}
-                </div>
-                <p className="font-medium text-sm text-slate-900 dark:text-white">{party.name}</p>
-                {party.email && <p className="text-xs text-slate-500">{party.email}</p>}
-                {party.phone && <p className="text-xs text-slate-500">{party.phone}</p>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">No additional party information.</p>
-        )}
-      </div>
+      <PartiesCard claim={claim} claimId={claimId} />
 
       <div className="card p-6 space-y-4">
         <h3 className="font-semibold text-slate-900 dark:text-white">Payment History</h3>
@@ -2094,6 +2141,121 @@ function ActivityTab({ claimId }: { claimId: string }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function PartiesCard({ claim, claimId }: { claim: Claim; claimId: string }) {
+  const queryClient = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ type: 'carrier', name: '', email: '', phone: '', scacCode: '' });
+
+  const addMutation = useMutation({
+    mutationFn: (data: typeof form) => post(`/claims/${claimId}/parties`, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); setShowAdd(false); resetForm(); toast.success('Party added'); },
+    onError: () => toast.error('Failed to add party'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: typeof form }) => put(`/claims/${claimId}/parties/${id}`, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); setEditingId(null); toast.success('Party updated'); },
+    onError: () => toast.error('Failed to update party'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (partyId: string) => del(`/claims/${claimId}/parties/${partyId}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['claim', claimId] }); toast.success('Party deleted'); },
+    onError: () => toast.error('Failed to delete party'),
+  });
+
+  function resetForm() { setForm({ type: 'carrier', name: '', email: '', phone: '', scacCode: '' }); }
+
+  function startEdit(party: any) {
+    setEditingId(party.id);
+    setForm({ type: party.type || 'carrier', name: party.name || '', email: party.email || '', phone: party.phone || '', scacCode: party.scacCode || '' });
+  }
+
+  return (
+    <div className="card p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-slate-900 dark:text-white">Parties</h3>
+        <button onClick={() => { setShowAdd(true); resetForm(); }} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium">
+          <Plus className="w-3.5 h-3.5" /> Add Party
+        </button>
+      </div>
+      {showAdd && (
+        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="input text-xs">
+              <option value="carrier">Carrier</option>
+              <option value="claimant">Claimant</option>
+              <option value="shipper">Shipper</option>
+              <option value="consignee">Consignee</option>
+              <option value="broker">Broker</option>
+            </select>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="input text-xs" placeholder="Name *" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="input text-xs" placeholder="Email" />
+            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="input text-xs" placeholder="Phone" />
+            <input value={form.scacCode} onChange={e => setForm(f => ({ ...f, scacCode: e.target.value }))} className="input text-xs" placeholder="SCAC Code" />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowAdd(false)} className="text-xs text-slate-500 px-3 py-1.5">Cancel</button>
+            <button onClick={() => addMutation.mutate(form)} disabled={!form.name || addMutation.isPending} className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">
+              {addMutation.isPending ? 'Adding...' : 'Add'}
+            </button>
+          </div>
+        </div>
+      )}
+      {claim.parties && claim.parties.length > 0 ? (
+        <div className="space-y-3">
+          {claim.parties.map((party) => editingId === party.id ? (
+            <div key={party.id} className="p-3 bg-primary-50 dark:bg-primary-500/10 rounded-lg space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="input text-xs">
+                  <option value="carrier">Carrier</option>
+                  <option value="claimant">Claimant</option>
+                  <option value="shipper">Shipper</option>
+                  <option value="consignee">Consignee</option>
+                  <option value="broker">Broker</option>
+                </select>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="input text-xs" placeholder="Name *" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="input text-xs" placeholder="Email" />
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="input text-xs" placeholder="Phone" />
+                <input value={form.scacCode} onChange={e => setForm(f => ({ ...f, scacCode: e.target.value }))} className="input text-xs" placeholder="SCAC Code" />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setEditingId(null)} className="text-xs text-slate-500 px-3 py-1.5">Cancel</button>
+                <button onClick={() => updateMutation.mutate({ id: party.id, data: form })} disabled={!form.name || updateMutation.isPending} className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">
+                  {updateMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div key={party.id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <span className="badge badge-info capitalize text-xs">{party.type}</span>
+                  {party.scacCode && <span className="badge badge-neutral font-mono text-xs">{party.scacCode}</span>}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => startEdit(party)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Edit2 className="w-3 h-3" /></button>
+                  <button onClick={() => { if (confirm('Delete this party?')) deleteMutation.mutate(party.id); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                </div>
+              </div>
+              <p className="font-medium text-sm text-slate-900 dark:text-white">{party.name}</p>
+              {party.email && <p className="text-xs text-slate-500">{party.email}</p>}
+              {party.phone && <p className="text-xs text-slate-500">{party.phone}</p>}
+            </div>
+          ))}
+        </div>
+      ) : !showAdd ? (
+        <p className="text-sm text-slate-400">No parties. Click "Add Party" to get started.</p>
+      ) : null}
     </div>
   );
 }

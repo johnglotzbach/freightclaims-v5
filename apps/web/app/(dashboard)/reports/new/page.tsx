@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-type ReportType = 'weekly' | 'carrier' | 'insurance' | 'corporate' | '3pl' | 'custom';
+type ReportType = 'collection-percentage' | 'top-customers' | 'top-carriers' | 'metrics-by-carrier' | 'metrics-by-destination' | 'write-off' | 'aging' | 'insurance';
 type OutputFormat = 'pdf' | 'csv' | 'excel';
 
 interface ReportColumn {
@@ -47,7 +47,7 @@ const AVAILABLE_COLUMNS: ReportColumn[] = [
 export default function NewReportPage() {
   const router = useRouter();
   const [reportName, setReportName] = useState('');
-  const [reportType, setReportType] = useState<ReportType>('weekly');
+  const [reportType, setReportType] = useState<ReportType>('collection-percentage');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [format, setFormat] = useState<OutputFormat>('pdf');
@@ -134,12 +134,14 @@ export default function NewReportPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Report Type</label>
             <select value={reportType} onChange={(e) => setReportType(e.target.value as ReportType)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
-              <option value="weekly">Weekly Claims Report</option>
-              <option value="carrier">Carrier Report</option>
+              <option value="collection-percentage">Collection Percentage</option>
+              <option value="top-customers">Top Customers</option>
+              <option value="top-carriers">Top Carriers</option>
+              <option value="metrics-by-carrier">Metrics by Carrier</option>
+              <option value="metrics-by-destination">Metrics by Destination</option>
+              <option value="write-off">Write-Off</option>
+              <option value="aging">Aging Report</option>
               <option value="insurance">Insurance Report</option>
-              <option value="corporate">Corporate Report</option>
-              <option value="3pl">3PL Report</option>
-              <option value="custom">Custom Report</option>
             </select>
           </div>
           <div>

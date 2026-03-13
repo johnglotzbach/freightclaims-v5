@@ -476,7 +476,7 @@ function EmailSubmissionSection() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => { const newVal = prompt('Edit domain:', domain.domain); if (newVal?.trim()) { setDomains(prev => prev.map(d => d.id === domain.id ? { ...d, domain: newVal.trim() } : d)); } }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600" title="Edit domain">
+                    <button onClick={() => { const newVal = prompt('Edit domain:', domain.domain); if (newVal?.trim()) { const updated = domains.map(d => d.id === domain.id ? { ...d, domain: newVal.trim() } : d); setDomains(updated); saveConfigMutation.mutate({ domains: updated, senders, submissionPrefix, companyDomain }); } }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600" title="Edit domain">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => removeDomain(domain.id)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500">

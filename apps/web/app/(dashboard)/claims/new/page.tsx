@@ -1100,29 +1100,27 @@ export default function NewClaimPage() {
         <div className="grid md:grid-cols-2 gap-6">
           {/* Origin */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="label mb-0">Origin</label>
-              <div className="relative">
-                <Autocomplete<LocationResult>
-                  placeholder="Search saved locations..."
-                  value=""
-                  onSearch={setOriginSearch}
-                  results={locationResults}
-                  isLoading={false}
-                  className="w-48"
-                  onSelect={(loc) => {
-                    setOriginAddress(loc);
-                    setOrigin({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
-                  }}
-                  onClear={() => {}}
-                  renderItem={(loc) => (
-                    <div className="text-xs">
-                      <span className="font-medium">{loc.street1}</span>
-                      <span className="text-slate-500"> {loc.city}, {loc.state}</span>
-                    </div>
-                  )}
-                />
-              </div>
+            <label className="label mb-0">Origin</label>
+            <div className="relative">
+              <Autocomplete<LocationResult>
+                placeholder="Search saved locations to auto-fill..."
+                value=""
+                onSearch={setOriginSearch}
+                results={locationResults}
+                isLoading={false}
+                className="w-full"
+                onSelect={(loc) => {
+                  setOriginAddress(loc);
+                  setOrigin({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
+                }}
+                onClear={() => { setOriginAddress(null); setOrigin({ address: '', city: '', state: '', zip: '' }); }}
+                renderItem={(loc) => (
+                  <div className="text-xs">
+                    <span className="font-medium">{loc.street1}</span>
+                    <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
+                  </div>
+                )}
+              />
             </div>
             <input value={origin.address} onChange={e => { setOrigin(p => ({ ...p, address: e.target.value })); setOriginAddress(null); }} className="input" placeholder="Street address" />
             <div className="grid grid-cols-3 gap-2">
@@ -1134,29 +1132,27 @@ export default function NewClaimPage() {
 
           {/* Destination */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="label mb-0">Destination</label>
-              <div className="relative">
-                <Autocomplete<LocationResult>
-                  placeholder="Search saved locations..."
-                  value=""
-                  onSearch={setDestSearch}
-                  results={locationResults}
-                  isLoading={false}
-                  className="w-48"
-                  onSelect={(loc) => {
-                    setDestAddress(loc);
-                    setDestination({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
-                  }}
-                  onClear={() => {}}
-                  renderItem={(loc) => (
-                    <div className="text-xs">
-                      <span className="font-medium">{loc.street1}</span>
-                      <span className="text-slate-500"> {loc.city}, {loc.state}</span>
-                    </div>
-                  )}
-                />
-              </div>
+            <label className="label mb-0">Destination</label>
+            <div className="relative">
+              <Autocomplete<LocationResult>
+                placeholder="Search saved locations to auto-fill..."
+                value=""
+                onSearch={setDestSearch}
+                results={locationResults}
+                isLoading={false}
+                className="w-full"
+                onSelect={(loc) => {
+                  setDestAddress(loc);
+                  setDestination({ address: loc.street1 || '', city: loc.city || '', state: loc.state || '', zip: loc.zipCode || '' });
+                }}
+                onClear={() => { setDestAddress(null); setDestination({ address: '', city: '', state: '', zip: '' }); }}
+                renderItem={(loc) => (
+                  <div className="text-xs">
+                    <span className="font-medium">{loc.street1}</span>
+                    <span className="text-slate-500"> {loc.city}, {loc.state} {loc.zipCode}</span>
+                  </div>
+                )}
+              />
             </div>
             <input value={destination.address} onChange={e => { setDestination(p => ({ ...p, address: e.target.value })); setDestAddress(null); }} className="input" placeholder="Street address" />
             <div className="grid grid-cols-3 gap-2">

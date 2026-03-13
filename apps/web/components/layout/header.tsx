@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from 'next-themes';
-import { get } from '@/lib/api-client';
+import { get, put } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import {
@@ -81,9 +81,11 @@ export function Header({ onMenuClick }: HeaderProps) {
   const userRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const queryClient = useQueryClient();
+
   const { data: rawNotifications } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => get<unknown>('/email/notifications'),
+    queryFn: () => get<unknown>('/notifications'),
     refetchInterval: 30_000,
   });
 
@@ -117,6 +119,16 @@ export function Header({ onMenuClick }: HeaderProps) {
   }
 
   const unreadCount = notifications.filter(n => !n.readAt).length;
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => put('/notifications/read-all', {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => put(`/notifications/${id}/read`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -218,7 +230,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div className="absolute right-0 top-full mt-1 w-80 sm:w-96 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 max-h-[480px] flex flex-col">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-700">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h3>
-                  <button className="text-xs text-primary-500 font-medium hover:text-primary-600">Mark all read</button>
+                  <button onClick={() => markAllReadMutation.mutate()} className="text-xs text-primary-500 font-medium hover:text-primary-600">Mark all read</button>
                 </div>
                 <div className="overflow-y-auto flex-1">
                   {notifications.length === 0 ? (
@@ -227,7 +239,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     const Icon = typeIcons[notif.type] || Bell;
                     const isRead = !!notif.readAt;
                     return (
-                      <button key={notif.id} onClick={() => { if (notif.link) router.push(notif.link); setNotifOpen(false); }} className={cn('w-full flex gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0', !isRead && 'bg-primary-50/50 dark:bg-primary-500/5')}>
+                      <button key={notif.id} onClick={() => { if (!isRead) markReadMutation.mutate(notif.id); if (notif.link) router.push(notif.link); setNotifOpen(false); }} className={cn('w-full flex gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-50 dark:border-slate-700/50 last:border-0', !isRead && 'bg-primary-50/50 dark:bg-primary-500/5')}>
                         <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', !isRead ? 'bg-primary-100 dark:bg-primary-900' : 'bg-slate-100 dark:bg-slate-700')}>
                           <Icon className={cn('w-4 h-4', !isRead ? 'text-primary-500' : 'text-slate-400')} />
                         </div>

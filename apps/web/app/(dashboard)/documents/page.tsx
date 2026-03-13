@@ -185,9 +185,10 @@ export default function DocumentsPage() {
   const [linkClaimId, setLinkClaimId] = useState('');
   const [showLinkModal, setShowLinkModal] = useState(false);
 
-  const { data: docs = [], isLoading } = useQuery({
+  const { data: docs = [], isLoading, isError } = useQuery({
     queryKey: ['documents'],
     queryFn: () => getList<Document>('/documents'),
+    retry: 2,
   });
 
   const { data: rawClaims } = useQuery({
@@ -354,6 +355,17 @@ export default function DocumentsPage() {
       <div className="space-y-6">
         <StatsSkeleton count={2} />
         <TableSkeleton />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div className="card p-12 text-center">
+          <p className="text-slate-400 text-sm mb-3">Failed to load documents. Please try again.</p>
+          <button onClick={() => window.location.reload()} className="text-sm text-primary-500 hover:text-primary-600 font-medium">Reload Page</button>
+        </div>
       </div>
     );
   }

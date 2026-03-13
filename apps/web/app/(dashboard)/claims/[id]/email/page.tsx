@@ -314,7 +314,7 @@ export default function ClaimEmailPage() {
     }
   }
 
-  function handleSend() {
+  async function handleSend() {
     if (to.length === 0) {
       toast.error('At least one recipient is required');
       return;
@@ -330,6 +330,25 @@ export default function ClaimEmailPage() {
       ...(attachmentIds.length > 0 && { attachmentIds }),
       ...(replyTo?.inReplyTo && { inReplyTo: replyTo.inReplyTo }),
       ...(replyTo?.threadId && { threadId: replyTo.threadId }),
+    }, {
+      onSuccess: async () => {
+        if (createFollowUp && followUpDate && claimId) {
+          try {
+            await post(`/claims/${claimId}/tasks`, {
+              title: `Follow up: ${subject || 'Email sent'}`,
+              description: `Follow up on email sent to ${to.join(', ')}`,
+              priority: 'medium',
+              dueDate: followUpDate,
+              status: 'pending',
+            });
+          } catch { /* task creation is best-effort */ }
+        }
+        if (selectedWorkflow && claimId) {
+          try {
+            await post(`/workflows/${selectedWorkflow}/trigger`, { claimId });
+          } catch { /* workflow trigger is best-effort */ }
+        }
+      },
     });
   }
 

@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { put } from '@/lib/api-client';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import {
   BarChart3, Settings, Save, RotateCcw,
@@ -58,6 +56,19 @@ export default function InsightsSettingsPage() {
   const [categories, setCategories] = useState(DEFAULT_SETTINGS);
   const [hasChanges, setHasChanges] = useState(false);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('insights-settings');
+      if (stored) {
+        const prefs: Record<string, boolean> = JSON.parse(stored);
+        setCategories(cats => cats.map(cat => ({
+          ...cat,
+          toggles: cat.toggles.map(t => t.key in prefs ? { ...t, enabled: prefs[t.key] } : t),
+        })));
+      }
+    } catch { /* ignore corrupt data */ }
+  }, []);
+
   function toggleSetting(categoryIdx: number, toggleKey: string) {
     setCategories(cats => cats.map((cat, i) =>
       i === categoryIdx ? { ...cat, toggles: cat.toggles.map(t => t.key === toggleKey ? { ...t, enabled: !t.enabled } : t) } : cat,
@@ -65,20 +76,16 @@ export default function InsightsSettingsPage() {
     setHasChanges(true);
   }
 
-  const saveMutation = useMutation({
-    mutationFn: (preferences: Record<string, boolean>) =>
-      put('/reports/settings', { preferences }),
-    onSuccess: () => {
-      toast.success('Insights settings saved');
-      setHasChanges(false);
-    },
-    onError: () => toast.error('Failed to save settings'),
-  });
-
   function save() {
     const preferences: Record<string, boolean> = {};
     categories.forEach(cat => cat.toggles.forEach(t => { preferences[t.key] = t.enabled; }));
-    saveMutation.mutate(preferences);
+    try {
+      localStorage.setItem('insights-settings', JSON.stringify(preferences));
+      toast.success('Insights settings saved');
+      setHasChanges(false);
+    } catch {
+      toast.error('Failed to save settings');
+    }
   }
 
   function reset() {
