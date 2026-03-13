@@ -289,6 +289,18 @@ export default function AIEntryPage() {
     onError: () => toast.error('Upload failed'),
   });
 
+  const retryMutation = useMutation({
+    mutationFn: async (doc: ProcessedDocument) => {
+      const docId = doc.documentId || doc.id;
+      return post<any>(`/documents/${docId}/process`);
+    },
+    onSuccess: () => {
+      toast.success('Retrying AI extraction...');
+      queryClient.invalidateQueries({ queryKey: ['ai-documents'] });
+    },
+    onError: () => toast.error('Failed to retry extraction'),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (docId: string) => del(`/ai/documents/${docId}`),
     onSuccess: () => {
@@ -381,6 +393,8 @@ export default function AIEntryPage() {
         onApprove={() => { if (selectedDoc) createClaimMutation.mutate(selectedDoc); }}
         isApproving={createClaimMutation.isPending}
         onSelectDoc={setSelectedDoc}
+        onRetry={() => { if (selectedDoc) retryMutation.mutate(selectedDoc); }}
+        isRetrying={retryMutation.isPending}
       />
     );
   }
@@ -592,6 +606,8 @@ function ReviewDataCapture({
   onApprove,
   isApproving,
   onSelectDoc,
+  onRetry,
+  isRetrying,
 }: {
   document: ProcessedDocument;
   allDocuments: ProcessedDocument[];
@@ -601,6 +617,8 @@ function ReviewDataCapture({
   onApprove: () => void;
   isApproving: boolean;
   onSelectDoc: (d: ProcessedDocument) => void;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }) {
   const router = useRouter();
   const [zoom, setZoom] = useState(100);
@@ -901,12 +919,32 @@ function ReviewDataCapture({
                     <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
                     <p className="text-sm text-red-500 font-medium">Extraction failed</p>
                     <p className="text-xs text-slate-400 mt-1">AI could not extract data from this document. Try re-uploading or check the document format.</p>
+                    {onRetry && (
+                      <button
+                        onClick={onRetry}
+                        disabled={isRetrying}
+                        className="mt-3 inline-flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isRetrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                        {isRetrying ? 'Retrying...' : 'Retry Extraction'}
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm text-slate-500 font-medium">No extracted fields</p>
                     <p className="text-xs text-slate-400 mt-1">No data was found in this document.</p>
+                    {onRetry && (
+                      <button
+                        onClick={onRetry}
+                        disabled={isRetrying}
+                        className="mt-3 inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isRetrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                        Re-analyze
+                      </button>
+                    )}
                   </>
                 )}
               </div>

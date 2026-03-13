@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, getList, del, post, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
@@ -95,6 +95,33 @@ function getFileBadge(mimeType?: string): { label: string; className: string } |
   return null;
 }
 
+function AuthenticatedImage({ docId, alt, className }: { docId: string; alt: string; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let revoke: string | null = null;
+    const token = localStorage.getItem('accessToken');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const corpId = localStorage.getItem('fc-impersonate-corporate');
+    if (corpId) headers['X-Corporate-Id'] = corpId;
+
+    fetch(`/api/v1/documents/${docId}/thumbnail`, { headers })
+      .then(res => { if (!res.ok) throw new Error('401'); return res.blob(); })
+      .then(blob => {
+        revoke = URL.createObjectURL(blob);
+        setSrc(revoke);
+      })
+      .catch(() => setFailed(true));
+
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [docId]);
+
+  if (failed || !src) return null;
+  return <img src={src} alt={alt} className={className} />;
+}
+
 function DocumentThumbnail({ doc, size = 'lg' }: { doc: Document; size?: 'sm' | 'lg' }) {
   const badge = getFileBadge(doc.mimeType);
   const isImage = doc.mimeType?.startsWith('image/');
@@ -105,13 +132,7 @@ function DocumentThumbnail({ doc, size = 'lg' }: { doc: Document; size?: 'sm' | 
   if (isImage && doc.thumbnailKey) {
     return (
       <div className={cn(dim, 'bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden')}>
-        <img
-          src={`/api/v1/documents/${doc.id}/thumbnail`}
-          alt={doc.name}
-          loading="lazy"
-          className="w-full h-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="flex items-center justify-center w-full h-full"><svg class="${iconSize} text-violet-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>`; }}
-        />
+        <AuthenticatedImage docId={doc.id} alt={doc.name} className="w-full h-full object-cover" />
       </div>
     );
   }

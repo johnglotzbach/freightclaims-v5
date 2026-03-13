@@ -291,21 +291,27 @@ export const documentsService = {
 
   async _runAIExtraction(id: string, doc: Record<string, any>) {
     const existing = await prisma.aiDocument.findFirst({ where: { documentId: id } });
-    if (existing) {
-      logger.info({ docId: id }, 'AI document record already exists, skipping duplicate extraction');
+    let aiDocRecord;
+    if (existing && existing.status === 'completed') {
+      logger.info({ docId: id }, 'AI document record already completed, skipping duplicate extraction');
       return;
+    } else if (existing) {
+      aiDocRecord = await prisma.aiDocument.update({
+        where: { id: existing.id },
+        data: { status: 'processing', extractedData: {} as any, confidence: 0 },
+      });
+    } else {
+      aiDocRecord = await prisma.aiDocument.create({
+        data: {
+          documentId: id,
+          claimId: doc.claimId || null,
+          agentType: 'intake',
+          extractedData: {} as any,
+          confidence: 0,
+          status: 'processing',
+        },
+      });
     }
-
-    const aiDocRecord = await prisma.aiDocument.create({
-      data: {
-        documentId: id,
-        claimId: doc.claimId || null,
-        agentType: 'intake',
-        extractedData: {} as any,
-        confidence: 0,
-        status: 'processing',
-      },
-    });
 
     try {
       const { body } = await storageService.downloadDocument(doc.s3Key);
