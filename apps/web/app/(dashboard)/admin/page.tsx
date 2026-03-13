@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { get, getList } from '@/lib/api-client';
@@ -8,7 +9,8 @@ import {
   Crown, Globe, Users, FileText, DollarSign,
   TrendingUp, ArrowUpRight, ArrowDownRight, Building2,
   ChevronRight, BarChart3, Zap, Shield, HardDrive,
-  Activity, CreditCard,
+  Activity, CreditCard, AlertTriangle, Clock, CheckCircle,
+  UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -387,6 +389,9 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
+      {/* Supervisor Features */}
+      <SupervisorSection />
+
       {/* Quick Navigation */}
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
@@ -420,6 +425,218 @@ export default function AdminDashboardPage() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Supervisor Section ---------- */
+
+function SupervisorSection() {
+  const { data: overdueClaims = [] } = useQuery({
+    queryKey: ['admin-overdue-claims'],
+    queryFn: () => getList<any>('/claims?hasOverdueTasks=true&limit=10'),
+    staleTime: 120_000,
+  });
+
+  const { data: pendingAckClaims = [] } = useQuery({
+    queryKey: ['admin-pending-ack'],
+    queryFn: () => getList<any>('/claims?status=pending&limit=10'),
+    staleTime: 120_000,
+  });
+
+  const { data: staleClaims = [] } = useQuery({
+    queryKey: ['admin-stale-claims'],
+    queryFn: () => {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const to = thirtyDaysAgo.toISOString().split('T')[0];
+      return getList<any>(`/claims?status=in_review&dateTo=${to}&limit=10`);
+    },
+    staleTime: 120_000,
+  });
+
+  const { data: resolvedThisWeek = [] } = useQuery({
+    queryKey: ['admin-resolved-week'],
+    queryFn: () => {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return getList<any>(`/claims?status=settled&dateFrom=${weekAgo.toISOString().split('T')[0]}&limit=50`);
+    },
+    staleTime: 120_000,
+  });
+
+  const { data: resolvedThisMonth = [] } = useQuery({
+    queryKey: ['admin-resolved-month'],
+    queryFn: () => {
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      return getList<any>(`/claims?status=settled&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=200`);
+    },
+    staleTime: 120_000,
+  });
+
+  const { data: deniedThisMonth = [] } = useQuery({
+    queryKey: ['admin-denied-month'],
+    queryFn: () => {
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      return getList<any>(`/claims?status=denied&dateFrom=${monthAgo.toISOString().split('T')[0]}&limit=200`);
+    },
+    staleTime: 120_000,
+  });
+
+  const totalResolvedMonth = resolvedThisMonth.length + deniedThisMonth.length;
+  const denialRate = totalResolvedMonth > 0
+    ? ((deniedThisMonth.length / totalResolvedMonth) * 100).toFixed(1)
+    : '0.0';
+
+  const avgResolutionDays = resolvedThisMonth.length > 0
+    ? (resolvedThisMonth.reduce((sum: number, c: any) => {
+        const created = new Date(c.createdAt).getTime();
+        const updated = new Date(c.updatedAt || c.createdAt).getTime();
+        return sum + (updated - created) / (1000 * 60 * 60 * 24);
+      }, 0) / resolvedThisMonth.length).toFixed(1)
+    : '—';
+
+  const workloadMap: Record<string, { name: string; count: number }> = {};
+  [...overdueClaims, ...pendingAckClaims].forEach((c: any) => {
+    const assigneeId = c.assignedToId || 'unassigned';
+    const assigneeName = c.assignedTo
+      ? `${c.assignedTo.firstName || ''} ${c.assignedTo.lastName || ''}`.trim() || c.assignedTo.email || 'Unknown'
+      : 'Unassigned';
+    if (!workloadMap[assigneeId]) workloadMap[assigneeId] = { name: assigneeName, count: 0 };
+    workloadMap[assigneeId].count++;
+  });
+  const workloadEntries = Object.values(workloadMap).sort((a, b) => b.count - a.count);
+  const maxWorkload = Math.max(...workloadEntries.map((e) => e.count), 1);
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <UserCheck className="w-4 h-4 text-primary-500" />
+        Supervisor Dashboard
+      </h2>
+
+      {/* Performance Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Resolved This Week', value: resolvedThisWeek.length, icon: CheckCircle, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
+          { label: 'Resolved This Month', value: resolvedThisMonth.length, icon: TrendingUp, color: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' },
+          { label: 'Avg Resolution (days)', value: avgResolutionDays, icon: Clock, color: 'text-violet-500 bg-violet-50 dark:bg-violet-500/10' },
+          { label: 'Denial Rate', value: `${denialRate}%`, icon: AlertTriangle, color: 'text-red-500 bg-red-50 dark:bg-red-500/10' },
+        ].map((m) => (
+          <div key={m.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center mb-3', m.color)}>
+              <m.icon className="w-5 h-5" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{m.value}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{m.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Workload Distribution */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary-500" />
+            Workload Distribution
+          </h3>
+          {workloadEntries.length === 0 ? (
+            <p className="text-sm text-slate-400">No active claim assignments</p>
+          ) : (
+            <div className="space-y-3">
+              {workloadEntries.slice(0, 10).map((entry) => (
+                <div key={entry.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-700 dark:text-slate-300 truncate">{entry.name}</span>
+                    <span className="font-semibold text-slate-900 dark:text-white ml-2">{entry.count}</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full transition-all"
+                      style={{ width: `${(entry.count / maxWorkload) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Queue Management */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-red-500" />
+            Queue Management
+          </h3>
+          <div className="space-y-4">
+            <QueueItem
+              label="Overdue Tasks"
+              count={overdueClaims.length}
+              color="text-red-600 bg-red-50 dark:bg-red-500/10"
+              claims={overdueClaims}
+            />
+            <QueueItem
+              label="Pending Acknowledgment"
+              count={pendingAckClaims.length}
+              color="text-amber-600 bg-amber-50 dark:bg-amber-500/10"
+              claims={pendingAckClaims}
+            />
+            <QueueItem
+              label="Stale Claims (30+ days)"
+              count={staleClaims.length}
+              color="text-slate-600 bg-slate-100 dark:bg-slate-700"
+              claims={staleClaims}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QueueItem({ label, count, color, claims }: {
+  label: string;
+  count: number;
+  color: string;
+  claims: any[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div>
+      <button
+        onClick={() => count > 0 && setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', color)}>{count}</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
+        </div>
+        {count > 0 && (
+          <ChevronRight className={cn('w-4 h-4 text-slate-400 transition-transform', expanded && 'rotate-90')} />
+        )}
+      </button>
+      {expanded && claims.length > 0 && (
+        <div className="ml-12 mt-1 space-y-1">
+          {claims.slice(0, 5).map((c: any) => (
+            <Link
+              key={c.id}
+              href={`/claims/${c.id}`}
+              className="flex items-center justify-between py-1.5 px-2 rounded text-xs hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+            >
+              <span className="font-mono font-medium text-slate-900 dark:text-white">{c.claimNumber}</span>
+              <span className="text-slate-400">{c.customerName || '—'}</span>
+            </Link>
+          ))}
+          {claims.length > 5 && (
+            <Link href="/claims/list" className="block text-xs text-primary-500 hover:underline px-2 py-1">
+              View all {claims.length} &rarr;
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }

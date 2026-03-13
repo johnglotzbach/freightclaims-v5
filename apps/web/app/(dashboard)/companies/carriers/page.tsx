@@ -13,6 +13,7 @@ import {
   Edit2, Trash2, ToggleLeft, ToggleRight,
   ChevronDown, Globe, Phone, Mail, MapPin,
   Shield, Database, ExternalLink, X,
+  CheckCircle, XCircle, ChevronRight,
 } from 'lucide-react';
 
 interface Carrier {
@@ -37,27 +38,41 @@ export default function CarriersPage() {
     queryFn: () => getList<Carrier>('/shipments/carriers/all'),
   });
   const [search, setSearch] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: '', scacCode: '', dotNumber: '', mcNumber: '', email: '', phone: '' });
 
   const createMutation = useMutation({
     mutationFn: (data: typeof form) => post<any>('/shipments/carriers', data),
-    onSuccess: () => { toast.success('Carrier created'); setShowAdd(false); setForm({ name: '', scacCode: '', dotNumber: '', mcNumber: '', email: '', phone: '' }); queryClient.invalidateQueries({ queryKey: ['carriers'] }); },
+    onSuccess: () => {
+      toast.success('Carrier created');
+      setShowAdd(false);
+      setForm({ name: '', scacCode: '', dotNumber: '', mcNumber: '', email: '', phone: '' });
+      queryClient.invalidateQueries({ queryKey: ['carriers'] });
+    },
     onError: () => toast.error('Failed to create carrier'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => del(`/shipments/carriers/${id}`),
-    onSuccess: () => { toast.success('Carrier deleted'); queryClient.invalidateQueries({ queryKey: ['carriers'] }); },
+    onSuccess: () => {
+      toast.success('Carrier deleted');
+      queryClient.invalidateQueries({ queryKey: ['carriers'] });
+    },
     onError: () => toast.error('Failed to delete carrier'),
   });
 
   function handleExport() {
-    const csv = ['Name,SCAC,DOT,MC,Email,Phone', ...carriers.map(c => `"${c.name}","${c.scacCode || ''}","${c.dotNumber || ''}","${c.mcNumber || ''}","${c.email || ''}","${c.phone || ''}"`)].join('\n');
+    const csv = [
+      'Name,SCAC,DOT,MC,Email,Phone',
+      ...carriers.map(c => `"${c.name}","${c.scacCode || ''}","${c.dotNumber || ''}","${c.mcNumber || ''}","${c.email || ''}","${c.phone || ''}"`)
+    ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'carriers.csv'; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'carriers.csv';
+    a.click();
+    URL.revokeObjectURL(url);
     toast.success('Carriers exported');
   }
 
@@ -83,7 +98,7 @@ export default function CarriersPage() {
 
   const filtered = carriers.filter(c => {
     const searchLower = search.toLowerCase();
-    return [c.name, c.scacCode, c.dotNumber, c.mcNumber].some(v => (v || '').toLowerCase().includes(searchLower));
+    return [c.name, c.scacCode, c.dotNumber, c.mcNumber, c.email, c.phone].some(v => (v || '').toLowerCase().includes(searchLower));
   });
 
   const activeCount = carriers.filter(c => c.isActive !== false).length;
@@ -133,74 +148,96 @@ export default function CarriersPage() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, SCAC, DOT, MC..." className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, SCAC, DOT, MC, email, phone..." className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
         </div>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState icon={Truck} title="No carriers found" description={carriers.length === 0 ? 'Add your first carrier to get started.' : 'Try adjusting your search terms.'} />
       ) : (
-        <div className="space-y-3">
-          {filtered.map(carrier => (
-            <div key={carrier.id} className="card overflow-hidden">
-              <div className="p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => setExpandedId(expandedId === carrier.id ? null : carrier.id)}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-                      <Truck className="w-5 h-5 text-primary-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-slate-900 dark:text-white">{carrier.name}</p>
-                        {carrier.isInternational && <span className="text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 px-1.5 py-0.5 rounded">INTL</span>}
-                        {carrier.isActive === false && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">INACTIVE</span>}
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">SCAC Code</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">DOT #</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">MC #</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Email</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">Phone</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Active</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                {filtered.map(carrier => (
+                  <tr
+                    key={carrier.id}
+                    onClick={() => router.push(`/companies/carriers/${carrier.id}`)}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center flex-shrink-0">
+                          <Truck className="w-4 h-4 text-primary-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-white truncate">{carrier.name}</p>
+                          {carrier.isInternational && (
+                            <span className="text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 px-1.5 py-0.5 rounded">INTL</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
-                        {carrier.scacCode && <span className="font-mono font-semibold text-slate-600 dark:text-slate-400">{carrier.scacCode}</span>}
-                        {carrier.dotNumber && <span>DOT: {carrier.dotNumber}</span>}
-                        {carrier.mcNumber && <span>MC: {carrier.mcNumber}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono font-semibold text-slate-600 dark:text-slate-400">{carrier.scacCode || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="font-mono text-slate-500">{carrier.dotNumber || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="font-mono text-slate-500">{carrier.mcNumber || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <span className="text-slate-500 truncate max-w-[180px] block">{carrier.email || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <span className="text-slate-500">{carrier.phone || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {carrier.isActive !== false ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400 px-2 py-1 rounded-full">
+                          <CheckCircle className="w-3 h-3" /> Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-500 bg-red-50 dark:bg-red-500/10 dark:text-red-400 px-2 py-1 rounded-full">
+                          <XCircle className="w-3 h-3" /> Inactive
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => router.push(`/companies/carriers/${carrier.id}`)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary-500 hover:text-primary-600 px-2 py-1.5 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors"
+                        >
+                          <Edit2 className="w-3 h-3" /> Edit
+                        </button>
+                        <button
+                          onClick={() => { if (window.confirm(`Delete carrier ${carrier.name}?`)) deleteMutation.mutate(carrier.id); }}
+                          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors"
+                          title="Delete carrier"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {carrier.email && <Mail className="w-4 h-4 text-slate-400" />}
-                    {carrier.phone && <Phone className="w-4 h-4 text-slate-400" />}
-                    <ChevronDown className={cn('w-4 h-4 text-slate-400 transition-transform', expandedId === carrier.id && 'rotate-180')} />
-                  </div>
-                </div>
-              </div>
-
-              {expandedId === carrier.id && (
-                <div className="border-t border-slate-100 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/30">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-slate-500 uppercase">Contact</h4>
-                      <div className="text-sm space-y-1">
-                        {carrier.email && <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-slate-400" /> <a href={`mailto:${carrier.email}`} className="text-primary-500 hover:underline">{carrier.email}</a></p>}
-                        {carrier.phone && <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-slate-400" /> {carrier.phone}</p>}
-                        {carrier.website && <p className="flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-slate-400" /> <a href={`https://${carrier.website}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">{carrier.website}</a></p>}
-                        {!carrier.email && !carrier.phone && !carrier.website && <p className="text-slate-400">No contact info on file</p>}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-slate-500 uppercase">Details</h4>
-                      <div className="text-sm space-y-1">
-                        {carrier.scacCode && <div className="flex justify-between"><span className="text-slate-500">SCAC:</span><span className="font-mono font-semibold">{carrier.scacCode}</span></div>}
-                        {carrier.dotNumber && <div className="flex justify-between"><span className="text-slate-500">DOT #:</span><span className="font-mono">{carrier.dotNumber}</span></div>}
-                        {carrier.mcNumber && <div className="flex justify-between"><span className="text-slate-500">MC #:</span><span className="font-mono">{carrier.mcNumber}</span></div>}
-                        <div className="flex justify-between"><span className="text-slate-500">Status:</span><span className={carrier.isActive !== false ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}>{carrier.isActive !== false ? 'Active' : 'Inactive'}</span></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
-                    <Link href={`/companies/carriers?selected=${carrier.id}`} className="flex items-center gap-1 text-xs text-primary-500 hover:text-primary-600 font-medium"><ExternalLink className="w-3 h-3" /> Full Profile</Link>
-                    <Link href={`/claims/list?carrier=${carrier.scacCode || carrier.id}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"><Database className="w-3 h-3" /> View Claims</Link>
-                    <button onClick={() => { if (window.confirm(`Delete carrier ${carrier.name}?`)) deleteMutation.mutate(carrier.id); }} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium"><Trash2 className="w-3 h-3" /> Delete</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

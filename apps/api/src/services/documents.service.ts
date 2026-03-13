@@ -188,17 +188,8 @@ export const documentsService = {
         }
         const isImage = file.mimetype.startsWith('image/');
         if (isImage) {
-          try {
-            const thumbFilename = `${filename}.thumb.jpg`;
-            const { key: thumbKey } = await storageService.uploadDocument(
-              storageClaimId, storageCategory, thumbFilename,
-              file.buffer, file.mimetype, corporateId,
-            );
-            await documentsRepository.update(doc.id, { thumbnailKey: thumbKey });
-            doc.thumbnailKey = thumbKey;
-          } catch (thumbErr) {
-            logger.warn({ err: thumbErr, docId: doc.id }, 'Thumbnail generation failed (non-blocking)');
-          }
+          await documentsRepository.update(doc.id, { thumbnailKey: key });
+          doc.thumbnailKey = key;
         }
 
         logger.info({ docId: doc.id, key, size }, 'Document uploaded');
@@ -321,7 +312,7 @@ export const documentsService = {
       const isImage = doc.mimeType?.startsWith('image/');
       const isPdf = doc.mimeType === 'application/pdf' || doc.mimeType?.includes('pdf');
 
-      const ANALYSIS_PROMPT = `Analyze this freight/shipping document and extract all relevant information.
+      const ANALYSIS_PROMPT = `Analyze this freight/shipping document thoroughly and extract ALL available information.
 Document name: ${doc.documentName}
 
 Return JSON:
@@ -331,14 +322,46 @@ Return JSON:
   "extractedFields": [
     { "key": "field_name", "label": "Human Label", "value": "extracted value", "confidence": 0.0-1.0 }
   ],
+  "commodities": [
+    { "description": "item name/description", "quantity": 1, "weight": "100 lbs", "unit_cost": "50.00", "claim_amount": "50.00", "sku": "", "po_number": "", "condition": "Broken/Crushed/etc", "claim_type": "damage/shortage/loss" }
+  ],
+  "matchingIdentifiers": {
+    "pro_number": "",
+    "bol_number": "",
+    "po_number": "",
+    "reference_number": "",
+    "tracking_number": ""
+  },
   "summary": "Brief description of what this document is and key information found"
 }
 
-Be very specific with the category. A BOL is bill_of_lading. A signed delivery is proof_of_delivery. An invoice for goods is product_invoice. A freight carrier invoice is freight_bill. A claim filing form is claim_form. Photos showing damage are damage_photos. A rate quote/confirmation is rate_confirmation. A letter notifying of a claim is notice_of_claim. Do NOT default to product_invoice unless the document is truly a product/commercial invoice.
+CATEGORY RULES: A BOL is bill_of_lading. A signed delivery is proof_of_delivery. An invoice for goods is product_invoice. A freight carrier invoice is freight_bill. A claim filing form is claim_form. Photos showing damage are damage_photos. A rate quote/confirmation is rate_confirmation. A letter notifying of a claim is notice_of_claim. Do NOT default to product_invoice unless it truly is one.
 
-Extract fields like: carrier_name, pro_number, bol_number, shipper, consignee, ship_date, delivery_date, weight, pieces, commodity, amount, damage_description, damage_severity, visible_damage, etc. Only include fields that are present.`;
+EXTRACT EVERY FIELD YOU CAN FIND. Use these exact keys:
+- Identifiers: pro_number, bol_number, po_number, reference_number, tracking_number
+- Dates: ship_date, delivery_date, filing_date, incident_date, received_date (use YYYY-MM-DD format)
+- Carrier: carrier_name, carrier_scac, carrier_phone, carrier_email, carrier_contact, carrier_address
+- Shipper: shipper_name, shipper_address, shipper_city, shipper_state, shipper_zip, shipper_phone, shipper_email
+- Consignee: consignee_name, consignee_address, consignee_city, consignee_state, consignee_zip, consignee_phone, consignee_email
+- Shipment: weight, pieces, freight_class, nmfc_number, commodity, description, packaging_type, transport_mode
+- Financial: amount, claim_amount, freight_charges, invoice_total, unit_cost, salvage_value
+- Damage: damage_description, damage_type, damage_severity, visible_damage, concealed_damage, damage_location
+- Other: special_instructions, notes, seal_number, trailer_number, driver_name, temperature_range
 
-      let extraction: { category: string; confidence: number; extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>; summary: string };
+For the "commodities" array, extract EVERY line item you can find — each product/commodity as a separate entry with as many fields filled as possible. If only one item exists, still return it as an array.
+
+For "matchingIdentifiers", extract ANY reference numbers that could link this document to an existing claim.
+
+Be exhaustive. Extract everything visible in the document. Do not skip fields.`;
+
+      let extraction: {
+        category: string;
+        confidence: number;
+        extractedFields: Array<{ key: string; label: string; value: string; confidence: number }>;
+        commodities?: Array<{ description: string; quantity?: number; weight?: string; unit_cost?: string; claim_amount?: string; sku?: string; po_number?: string; condition?: string; claim_type?: string }>;
+        matchingIdentifiers?: { pro_number?: string; bol_number?: string; po_number?: string; reference_number?: string; tracking_number?: string };
+        summary: string;
+      };
 
       if (isImage || isPdf) {
         extraction = await generateMultimodalJSON(

@@ -80,10 +80,12 @@ carriersRouter.put('/:id', authorize(['admin', 'manager']), async (req: Request,
 carriersRouter.delete('/:id', authorize(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    await prisma.carrierContact.deleteMany({ where: { carrierId: id } });
     await prisma.carrier.delete({ where: { id } });
     res.json({ success: true, message: 'Carrier deleted' });
   } catch (err: any) {
     if (err.code === 'P2025') return res.status(404).json({ success: false, error: 'Carrier not found' });
+    if (err.code === 'P2003') return res.status(409).json({ success: false, error: 'Cannot delete carrier — it is referenced by existing claims or shipments. Remove those associations first.' });
     res.status(500).json({ success: false, error: err.message });
   }
 });

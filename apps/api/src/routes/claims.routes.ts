@@ -49,6 +49,7 @@ claimsRouter.post('/tasks', claimsController.createGlobalTask);
 claimsRouter.get('/:id', claimsController.getById);
 claimsRouter.put('/:id', validate(updateClaimSchema), claimsController.update);
 claimsRouter.delete('/:id', authorize(['admin', 'manager']), claimsController.delete);
+claimsRouter.post('/:id/restore', authorize(['admin', 'manager']), claimsController.restore);
 
 // --- Claim status workflow ---
 claimsRouter.put('/:id/status', authorize(['admin', 'manager']), claimsController.updateStatus);
@@ -71,6 +72,9 @@ claimsRouter.get('/:id/activity', claimsController.getActivity);
 // --- Claim comments / activity log ---
 claimsRouter.get('/:id/comments', claimsController.getComments);
 claimsRouter.post('/:id/comments', claimsController.addComment);
+claimsRouter.put('/:id/comments/:commentId', claimsController.updateComment);
+claimsRouter.delete('/:id/comments/:commentId', claimsController.deleteComment);
+claimsRouter.post('/:id/comments/:commentId/pin', claimsController.pinComment);
 
 // --- Claim tasks ---
 claimsRouter.get('/:id/tasks', claimsController.getTasks);
@@ -82,6 +86,9 @@ claimsRouter.delete('/:id/tasks/:taskId', claimsController.deleteTask);
 claimsRouter.get('/:id/payments', claimsController.getPayments);
 claimsRouter.post('/:id/payments', authorize(['admin', 'manager']), claimsController.addPayment);
 claimsRouter.put('/:id/payments/:paymentId', authorize(['admin', 'manager']), claimsController.updatePayment);
+claimsRouter.delete('/:id/payments/:paymentId', authorize(['admin', 'manager']), claimsController.deletePayment);
+claimsRouter.get('/:id/payments/summary', claimsController.getPaymentSummary);
+claimsRouter.get('/:id/payments/by-type/:type', claimsController.getPaymentsByType);
 
 // --- Claim custom identifiers ---
 claimsRouter.get('/:id/identifiers', claimsController.getIdentifiers);

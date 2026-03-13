@@ -52,6 +52,7 @@ export const claimsService = {
       hasTasks: query.hasTasks === true,
       hasOverdueTasks: query.hasOverdueTasks === true,
       unreadEmails: query.unreadEmails === true,
+      parentClaimId: query.parentClaimId as string | undefined,
     };
 
     const [claims, total] = await claimsRepository.findMany(filters, { limit, offset });
@@ -256,6 +257,12 @@ export const claimsService = {
     return claimsRepository.softDelete(id);
   },
 
+  /** Restores a soft-deleted claim */
+  async restore(id: string, user: JwtPayload) {
+    await this.getById(id, user);
+    return claimsRepository.restore(id);
+  },
+
   /**
    * Updates claim status with validation of allowed transitions.
    * For example, a "closed" claim can't go back to "pending" without admin override.
@@ -314,7 +321,45 @@ export const claimsService = {
   // --- Comments ---
   async getComments(claimId: string) { return claimsRepository.getComments(claimId); },
   async addComment(claimId: string, data: Record<string, unknown>, user: JwtPayload) {
-    return claimsRepository.addComment(claimId, { ...data, userId: user.userId });
+    const comment = await claimsRepository.addComment(claimId, { ...data, userId: user.userId });
+
+    if (data.mentionedUserIds && typeof data.mentionedUserIds === 'string') {
+      try {
+        const ids = data.mentionedUserIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+        const claim = await prisma.claim.findUnique({ where: { id: claimId }, select: { claimNumber: true } });
+        for (const mentionedUserId of ids) {
+          if (mentionedUserId === user.userId) continue;
+          await prisma.notification.create({
+            data: {
+              userId: mentionedUserId,
+              title: `Mentioned in Claim ${claim?.claimNumber || claimId}`,
+              message: `${user.firstName || ''} ${user.lastName || ''} mentioned you in a comment`.trim(),
+              type: 'comment_mention',
+              category: 'comment',
+              link: `/claims/${claimId}`,
+            },
+          });
+        }
+      } catch (e) {
+        logger.warn({ err: e }, 'Failed to create mention notifications');
+      }
+    }
+    return comment;
+  },
+
+  async updateComment(claimId: string, commentId: string, data: Record<string, unknown>, user: JwtPayload) {
+    await this.getById(claimId, user);
+    return claimsRepository.updateComment(commentId, data);
+  },
+
+  async deleteComment(claimId: string, commentId: string, user: JwtPayload) {
+    await this.getById(claimId, user);
+    return claimsRepository.deleteComment(commentId);
+  },
+
+  async pinComment(claimId: string, commentId: string, isPinned: boolean, user: JwtPayload) {
+    await this.getById(claimId, user);
+    return claimsRepository.pinComment(commentId, isPinned);
   },
 
   // --- Tasks ---
@@ -353,13 +398,35 @@ export const claimsService = {
   async addTask(claimId: string, data: Record<string, unknown>, user: JwtPayload) {
     return claimsRepository.addTask(claimId, { ...data, createdById: user.userId });
   },
-  async updateTask(claimId: string, taskId: string, data: Record<string, unknown>) { return claimsRepository.updateTask(claimId, taskId, data); },
+  async updateTask(claimId: string, taskId: string, data: Record<string, unknown>) {
+    if (data.status === 'completed' && !data.completedAt) {
+      data.completedAt = new Date().toISOString();
+    }
+    if (data.status && data.status !== 'completed') {
+      data.completedAt = null;
+    }
+    return claimsRepository.updateTask(claimId, taskId, data);
+  },
   async deleteTask(claimId: string, taskId: string) { return claimsRepository.deleteTask(claimId, taskId); },
 
   // --- Payments ---
   async getPayments(claimId: string) { return claimsRepository.getPayments(claimId); },
   async addPayment(claimId: string, data: Record<string, unknown>) { return claimsRepository.addPayment(claimId, data); },
   async updatePayment(claimId: string, paymentId: string, data: Record<string, unknown>) { return claimsRepository.updatePayment(claimId, paymentId, data); },
+
+  async deletePayment(claimId: string, paymentId: string, user: JwtPayload) {
+    await this.getById(claimId, user);
+    return claimsRepository.deletePayment(claimId, paymentId);
+  },
+
+  async getPaymentSummary(claimId: string, user: JwtPayload) {
+    await this.getById(claimId, user);
+    return claimsRepository.getPaymentSummary(claimId);
+  },
+
+  async getPaymentsByType(claimId: string, type: string) {
+    return claimsRepository.getPaymentsByType(claimId, type);
+  },
 
   // --- Identifiers ---
   async getIdentifiers(claimId: string) { return claimsRepository.getIdentifiers(claimId); },

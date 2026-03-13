@@ -539,6 +539,103 @@ All exported files are available in your browser's download history. The system 
     ],
   },
   {
+    id: 'email-setup',
+    title: 'Email & SendGrid Setup',
+    icon: MessageCircle,
+    color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10',
+    description: 'Configure email sending with SendGrid for claim communications.',
+    articles: [
+      {
+        title: 'SendGrid Setup Guide',
+        icon: ExternalLink,
+        content: `Follow these steps to configure SendGrid for sending and receiving claim emails.
+
+**Step 1 — Create a SendGrid Account**
+Go to sendgrid.com and create an account. Choose the plan that fits your sending volume. The free tier allows 100 emails/day which is fine for testing.
+
+**Step 2 — Verify Your Sending Domain**
+In the SendGrid dashboard, go to Settings > Sender Authentication > Domain Authentication. Add your domain (e.g., freightclaims.com) and follow the DNS setup:
+• Add the CNAME records for DKIM authentication
+• Add the TXT record for SPF verification
+• Wait for DNS propagation (can take up to 48 hours, usually faster)
+• Verify the domain in SendGrid once DNS is propagated
+
+**Step 3 — Create an API Key**
+Go to Settings > API Keys > Create API Key. Select "Restricted Access" and enable only "Mail Send" permission. Copy the key — it starts with "SG." and you won't be able to see it again.
+
+**Step 4 — Set Environment Variables**
+On your Render dashboard (or .env file for local dev), set these variables:
+• SMTP_HOST=smtp.sendgrid.net
+• SMTP_PORT=587
+• SMTP_USER=apikey
+• SMTP_PASSWORD=SG.your-api-key-here
+• SMTP_FROM=claims@yourdomain.com (must be from verified domain)
+
+**Step 5 — Configure Inbound Email (Per-Claim Addresses)**
+For the per-claim email addresses (claim-FC001@inbound.yourdomain.com), set up SendGrid Inbound Parse:
+• Go to Settings > Inbound Parse
+• Add your inbound domain (e.g., inbound.freightclaims.com)
+• Set the destination URL to your API endpoint: https://your-api-url/api/v1/webhooks/inbound-email
+• Add an MX record for your inbound domain pointing to mx.sendgrid.net
+
+**Step 6 — MX Record Setup**
+Add this DNS record:
+• Type: MX
+• Host: inbound.yourdomain.com
+• Value: mx.sendgrid.net
+• Priority: 10
+
+**Step 7 — Test**
+Send a test email from the platform and verify it's received. Send an email to a claim address and verify the inbound webhook processes it. Check the email logs in Settings > Email Submission.
+
+**Troubleshooting**
+• If emails aren't sending: Check SMTP_PASSWORD is the full API key (starts with SG.)
+• If domain isn't verified: Ensure CNAME and TXT records match exactly what SendGrid shows
+• If inbound emails don't work: Verify MX record is correct and webhook URL is reachable
+• Check Render logs for SMTP connection errors`,
+      },
+      {
+        title: 'Email Templates & Placeholders',
+        icon: FileText,
+        content: `FreightClaims supports dynamic email templates with placeholder variables.
+
+**Available Placeholders**
+Use these in email subjects and bodies. They get replaced with actual claim data when sending:
+• $[claim_number] — The unique claim number (e.g., FC-2024-0042)
+• $[pro_number] — PRO tracking number
+• $[bol_number] — Bill of Lading number
+• $[carrier_name] — Primary carrier name
+• $[carrier_scac] — Carrier SCAC code
+• $[claimant_name] — Claimant/customer name
+• $[claim_amount] — Filed claim amount (formatted as currency)
+• $[settled_amount] — Settlement amount
+• $[claim_type] — Type of claim (Damage, Shortage, etc.)
+• $[filing_date] — Date the claim was filed
+• $[ship_date] — Shipment date
+• $[delivery_date] — Delivery date
+• $[claim_email_address] — The unique email for this claim
+• $[claim_status] — Current claim status
+• $[primary_identifier] — Primary identifier (PRO or BOL)
+• $[origin] — Origin city/state
+• $[destination] — Destination city/state
+
+**Creating Templates**
+Go to Settings > Templates to create reusable email templates. Each template has a name, subject line, and body, all supporting placeholders.
+
+**Using Templates**
+When composing an email from a claim, click the template picker dropdown to select a template. The subject and body will auto-fill with placeholders resolved to the actual claim data.
+
+**Template Types**
+• claim_filed — Initial filing notification to carrier
+• claim_acknowledged — Acknowledgment receipt
+• follow_up — Follow-up on pending claims
+• settlement_offer — Presenting a settlement
+• denial_appeal — Appealing a denied claim
+• general — General correspondence`,
+      },
+    ],
+  },
+  {
     id: 'account-settings',
     title: 'Account & Settings',
     icon: UserCog,

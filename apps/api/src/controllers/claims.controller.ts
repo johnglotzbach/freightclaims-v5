@@ -83,6 +83,16 @@ export const claimsController = {
     res.status(204).send();
   }),
 
+  /**
+   * POST /api/v1/claims/:id/restore
+   * Restore a soft-deleted claim (admin/manager only)
+   */
+  restore: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const claim = await claimsService.restore(req.params.id as string, user);
+    res.json(claim);
+  }),
+
   /** PUT /api/v1/claims/:id/status - Update claim status */
   updateStatus: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
@@ -234,6 +244,24 @@ export const claimsController = {
     res.status(201).json(comment);
   }),
 
+  updateComment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const comment = await claimsService.updateComment(req.params.id as string, req.params.commentId as string, req.body, user);
+    res.json(comment);
+  }),
+
+  deleteComment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.deleteComment(req.params.id as string, req.params.commentId as string, user);
+    res.json({ success: true });
+  }),
+
+  pinComment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const comment = await claimsService.pinComment(req.params.id as string, req.params.commentId as string, req.body.isPinned, user);
+    res.json(comment);
+  }),
+
   // --- Global tasks (all tasks across claims) ---
   getAllTasks: asyncHandler(async (req: Request, res: Response) => {
     const user = getUser(req);
@@ -296,6 +324,25 @@ export const claimsController = {
     await claimsService.getById(req.params.id as string, user);
     const payment = await claimsService.updatePayment(req.params.id as string, req.params.paymentId as string, req.body);
     res.json(payment);
+  }),
+
+  deletePayment: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.deletePayment(req.params.id as string, req.params.paymentId as string, user);
+    res.json({ success: true });
+  }),
+
+  getPaymentSummary: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    const summary = await claimsService.getPaymentSummary(req.params.id as string, user);
+    res.json(summary);
+  }),
+
+  getPaymentsByType: asyncHandler(async (req: Request, res: Response) => {
+    const user = getUser(req);
+    await claimsService.getById(req.params.id as string, user);
+    const payments = await claimsService.getPaymentsByType(req.params.id as string, req.params.type as string);
+    res.json(payments);
   }),
 
   // --- Identifiers (verify claim ownership first) ---

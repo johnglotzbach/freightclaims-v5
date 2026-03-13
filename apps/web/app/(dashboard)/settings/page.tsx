@@ -144,57 +144,193 @@ function ProfileSection({ user }: { user: any }) {
   );
 }
 
-const NOTIFICATION_KEYS = [
-  { label: 'Email notifications for new claims', key: 'newClaims', defaultChecked: true },
-  { label: 'Email notifications for status changes', key: 'statusChanges', defaultChecked: true },
-  { label: 'Email notifications for task assignments', key: 'taskAssignments', defaultChecked: true },
-  { label: 'Email notifications for overdue tasks', key: 'overdueTasks', defaultChecked: true },
-  { label: 'Push notifications', key: 'push', defaultChecked: true },
-  { label: 'Daily digest email', key: 'dailyDigest', defaultChecked: false },
-  { label: 'Weekly summary report', key: 'weeklyReport', defaultChecked: true },
-  { label: 'AI agent completion alerts', key: 'aiAlerts', defaultChecked: true },
-] as const;
+type NotificationSetting = 'none' | 'my_claims' | 'all_claims';
+
+interface NotificationPreference {
+  eventType: string;
+  inAppSetting: NotificationSetting;
+  emailSetting: NotificationSetting;
+}
+
+const EVENT_TYPES: { key: string; label: string; description: string }[] = [
+  { key: 'claim_created', label: 'Claim Created', description: 'When a new claim is filed' },
+  { key: 'claim_assigned', label: 'Claim Assigned', description: 'When a claim is assigned to someone' },
+  { key: 'claim_status_change', label: 'Claim Status Change', description: 'When a claim status is updated' },
+  { key: 'task_assigned', label: 'Task Assigned', description: 'When a task is assigned to someone' },
+  { key: 'task_completed', label: 'Task Completed', description: 'When a task is marked complete' },
+  { key: 'comment_mention', label: 'Comment / Mention', description: 'When you are mentioned in a comment' },
+  { key: 'email_received', label: 'Email Received', description: 'When an email is received on a claim' },
+  { key: 'document_upload', label: 'Document Upload', description: 'When a document is uploaded' },
+  { key: 'filing_party_stagnant', label: 'Filing Party Stagnant', description: 'When a filing party has no activity' },
+  { key: 'filing_party_status_update', label: 'Filing Party Status Update', description: 'When a filing party updates their status' },
+];
+
+const SETTING_OPTIONS: { value: NotificationSetting; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'my_claims', label: 'My claims' },
+  { value: 'all_claims', label: 'All claims' },
+];
+
+const DEFAULT_PREFS: NotificationPreference[] = EVENT_TYPES.map(e => ({
+  eventType: e.key,
+  inAppSetting: 'my_claims',
+  emailSetting: 'none',
+}));
 
 function NotificationsSection() {
   const queryClient = useQueryClient();
-  const { data: prefs, isLoading } = useQuery({
-    queryKey: ['user-preferences'],
-    queryFn: () => get<Record<string, boolean>>('/users/me/preferences'),
+
+  const { data: serverPrefs, isLoading } = useQuery({
+    queryKey: ['notification-preferences'],
+    queryFn: () => get<NotificationPreference[]>('/notifications/preferences'),
   });
 
-  const preferences = NOTIFICATION_KEYS.reduce((acc, item) => {
-    acc[item.key] = prefs?.[item.key] ?? item.defaultChecked;
-    return acc;
-  }, {} as Record<string, boolean>);
+  const preferences: NotificationPreference[] = EVENT_TYPES.map(e => {
+    const existing = serverPrefs?.find(p => p.eventType === e.key);
+    return existing || { eventType: e.key, inAppSetting: 'my_claims', emailSetting: 'none' };
+  });
 
-  const updatePrefsMutation = useMutation({
-    mutationFn: (preferences: Record<string, boolean>) => put('/users/me/preferences', preferences),
+  const saveMutation = useMutation({
+    mutationFn: (prefs: NotificationPreference[]) => post('/notifications/preferences', prefs),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
-      toast.success('Preferences updated');
+      queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
+      toast.success('Notification preferences saved');
     },
-    onError: (err: Error) => toast.error(err.message || 'Failed to update preferences'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to save preferences'),
   });
 
-  function handlePrefChange(key: string, checked: boolean) {
-    const next = { ...preferences, [key]: checked };
-    updatePrefsMutation.mutate(next);
+  function handleChange(
+    eventType: string,
+    channel: 'inAppSetting' | 'emailSetting',
+    value: NotificationSetting,
+  ) {
+    const updated = preferences.map(p =>
+      p.eventType === eventType ? { ...p, [channel]: value } : p,
+    );
+    saveMutation.mutate(updated);
   }
 
-  if (isLoading) return <div className="card p-6"><p className="text-sm text-slate-500">Loading preferences...</p></div>;
+  function setAllChannel(channel: 'inAppSetting' | 'emailSetting', value: NotificationSetting) {
+    const updated = preferences.map(p => ({ ...p, [channel]: value }));
+    saveMutation.mutate(updated);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="card p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="card p-6">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Notification Preferences</h2>
-        <div className="space-y-4">
-          {NOTIFICATION_KEYS.map(item => (
-            <label key={item.key} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
-              <span className="text-sm text-slate-700 dark:text-slate-300">{item.label}</span>
-              <input type="checkbox" checked={preferences[item.key] ?? item.defaultChecked} onChange={(e) => handlePrefChange(item.key, e.target.checked)} className="rounded border-slate-300 text-primary-500 focus:ring-primary-500" />
-            </label>
-          ))}
+        <div className="mb-5">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary-500" /> Notification Preferences
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Choose how you want to be notified for each event type. Select &quot;My claims&quot; for claims assigned to you, or &quot;All claims&quot; for every claim.
+          </p>
         </div>
+
+        {/* Grid header */}
+        <div className="grid grid-cols-[1fr,140px,140px] gap-2 items-end pb-3 border-b-2 border-slate-200 dark:border-slate-600">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Event Type
+          </div>
+          <div className="text-center">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">In-app</span>
+            <div className="mt-1">
+              <select
+                onChange={e => setAllChannel('inAppSetting', e.target.value as NotificationSetting)}
+                value=""
+                className="text-[10px] text-primary-500 bg-transparent border-none cursor-pointer p-0 focus:ring-0"
+              >
+                <option value="" disabled>Set all...</option>
+                {SETTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="text-center">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email</span>
+            <div className="mt-1">
+              <select
+                onChange={e => setAllChannel('emailSetting', e.target.value as NotificationSetting)}
+                value=""
+                className="text-[10px] text-primary-500 bg-transparent border-none cursor-pointer p-0 focus:ring-0"
+              >
+                <option value="" disabled>Set all...</option>
+                {SETTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+          {EVENT_TYPES.map(event => {
+            const pref = preferences.find(p => p.eventType === event.key)!;
+            return (
+              <div
+                key={event.key}
+                className="grid grid-cols-[1fr,140px,140px] gap-2 items-center py-3 group hover:bg-slate-50/50 dark:hover:bg-slate-800/30 -mx-2 px-2 rounded-lg transition-colors"
+              >
+                <div>
+                  <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{event.label}</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500">{event.description}</div>
+                </div>
+
+                <div className="flex justify-center">
+                  <select
+                    value={pref.inAppSetting}
+                    onChange={e => handleChange(event.key, 'inAppSetting', e.target.value as NotificationSetting)}
+                    className={cn(
+                      'text-xs rounded-lg border px-2 py-1.5 font-medium transition-colors w-[120px] text-center',
+                      pref.inAppSetting === 'none'
+                        ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                        : pref.inAppSetting === 'all_claims'
+                          ? 'border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400'
+                          : 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+                    )}
+                  >
+                    {SETTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex justify-center">
+                  <select
+                    value={pref.emailSetting}
+                    onChange={e => handleChange(event.key, 'emailSetting', e.target.value as NotificationSetting)}
+                    className={cn(
+                      'text-xs rounded-lg border px-2 py-1.5 font-medium transition-colors w-[120px] text-center',
+                      pref.emailSetting === 'none'
+                        ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                        : pref.emailSetting === 'all_claims'
+                          ? 'border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400'
+                          : 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+                    )}
+                  >
+                    {SETTING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {saveMutation.isPending && (
+          <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
+            <div className="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            Saving...
+          </div>
+        )}
       </div>
     </div>
   );

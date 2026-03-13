@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { get, post } from '@/lib/api-client';
+import { CarrierSelector } from '@/components/claim-selector';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
 import {
@@ -80,17 +81,9 @@ export default function CarrierRiskPage() {
 
       {/* Search */}
       <div className="card p-6">
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Carrier SCAC Code</label>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Select Carrier</label>
         <div className="flex gap-3">
-          <input
-            type="text"
-            value={carrierScac}
-            onChange={(e) => setCarrierScac(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-            placeholder="Enter carrier SCAC code (e.g., SEFL, XPOL, CNWY)..."
-            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm uppercase"
-            maxLength={6}
-          />
+          <CarrierSelector value={carrierScac} onChange={(scac) => setCarrierScac(scac)} placeholder="Search or select a carrier..." />
           <button
             onClick={handleAnalyze}
             disabled={riskMutation.isPending || !carrierScac.trim()}

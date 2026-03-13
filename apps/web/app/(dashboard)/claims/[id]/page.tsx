@@ -15,6 +15,7 @@ import type { Claim, ClaimComment, ClaimTask, ClaimPayment } from 'shared';
   Plus, AlertTriangle, CheckCircle, Clock, Send,
   FileDown, Trash2, Eye, Download, CalendarClock,
   Activity, MessageSquare, FileText, CreditCard, ListTodo, RefreshCw, Upload, UserCheck, Zap, Bell,
+  RotateCcw,
 } from 'lucide-react';
 
 type Tab = 'status' | 'transportation' | 'form-data' | 'documents' | 'tasks' | 'deadlines' | 'emails-automation' | 'transactions' | 'additional' | 'comments' | 'activity';
@@ -63,6 +64,16 @@ export default function ClaimDetailPage() {
       router.push('/claims/list');
     },
     onError: () => toast.error('Failed to delete claim'),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: () => post(`/claims/${id}/restore`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', id] });
+      queryClient.invalidateQueries({ queryKey: ['claims'] });
+      toast.success('Claim restored');
+    },
+    onError: () => toast.error('Failed to restore claim'),
   });
 
   async function handleExportPdf() {
@@ -134,6 +145,27 @@ export default function ClaimDetailPage() {
         <span>/</span>
         <span className="text-slate-900 dark:text-white font-medium">{claim.claimNumber}</span>
       </nav>
+
+      {/* Deleted banner */}
+      {claim.deletedAt && (
+        <div className="flex items-center justify-between px-5 py-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl">
+          <div className="flex items-center gap-3">
+            <Trash2 className="w-5 h-5 text-red-500" />
+            <div>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">This claim has been deleted</p>
+              <p className="text-xs text-red-500 dark:text-red-400/70">Deleted on {formatDate(claim.deletedAt)}. Data is preserved for reporting. You can restore this claim at any time.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => restoreMutation.mutate()}
+            disabled={restoreMutation.isPending}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-white dark:bg-slate-800 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="w-4 h-4" />
+            {restoreMutation.isPending ? 'Restoring...' : 'Restore Claim'}
+          </button>
+        </div>
+      )}
 
       {/* Claim header */}
       <div className="card p-6">
@@ -641,33 +673,55 @@ function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskReminder, setTaskReminder] = useState('');
+  const today = new Date();
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [calYear, setCalYear] = useState(today.getFullYear());
+
+  const { data: liveTasks = tasks } = useQuery({
+    queryKey: ['claim-tasks', claimId],
+    queryFn: () => getList<ClaimTask>(`/claims/${claimId}/tasks`),
+    initialData: tasks,
+  });
 
   const addTaskMutation = useMutation({
-    mutationFn: (data: { title: string; description?: string; priority?: string; dueDate?: string }) =>
-      post(`/claims/${claimId}/tasks`, data),
+    mutationFn: (data: any) => post(`/claims/${claimId}/tasks`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      queryClient.invalidateQueries({ queryKey: ['claim-tasks', claimId] });
       setShowTaskForm(false);
-      setTaskTitle('');
-      setTaskDescription('');
-      setTaskPriority('medium');
-      setTaskDueDate('');
+      setTaskTitle(''); setTaskDescription(''); setTaskPriority('medium'); setTaskDueDate(''); setTaskReminder('');
       toast.success('Task added');
     },
     onError: () => toast.error('Failed to add task'),
   });
 
+  const completeMutation = useMutation({
+    mutationFn: (taskId: string) => put(`/claims/${claimId}/tasks/${taskId}`, { status: 'completed' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      queryClient.invalidateQueries({ queryKey: ['claim-tasks', claimId] });
+      toast.success('Task completed');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: string) => del(`/claims/${claimId}/tasks/${taskId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      queryClient.invalidateQueries({ queryKey: ['claim-tasks', claimId] });
+      toast.success('Task deleted');
+    },
+  });
+
   function handleSubmitTask(e: React.FormEvent) {
     e.preventDefault();
-    if (!taskTitle.trim()) {
-      toast.error('Title is required');
-      return;
-    }
+    if (!taskTitle.trim()) { toast.error('Title is required'); return; }
+    const reminderMap: Record<string, number> = { 'at_event': 0, '1_day': 1440, '2_days': 2880, '3_days': 4320, '1_week': 10080, '2_weeks': 20160, '1_month': 43200 };
     addTaskMutation.mutate({
-      title: taskTitle.trim(),
-      description: taskDescription.trim() || undefined,
-      priority: taskPriority,
-      dueDate: taskDueDate || undefined,
+      title: taskTitle.trim(), description: taskDescription.trim() || undefined,
+      priority: taskPriority, dueDate: taskDueDate || undefined,
+      reminderMinutes: taskReminder ? reminderMap[taskReminder] ?? undefined : undefined,
     });
   }
 
@@ -678,65 +732,132 @@ function TasksTab({ tasks, claimId }: { tasks: ClaimTask[]; claimId: string }) {
     low: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   };
 
-  if (tasks.length === 0 && !showTaskForm) {
+  const nowMs = Date.now();
+  const outstanding = liveTasks.filter((t: any) => t.status !== 'completed' && (!t.dueDate || new Date(t.dueDate).getTime() >= nowMs));
+  const overdue = liveTasks.filter((t: any) => t.status !== 'completed' && t.dueDate && new Date(t.dueDate).getTime() < nowMs);
+  const completed = liveTasks.filter((t: any) => t.status === 'completed');
+
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const startDay = firstOfMonth.getDay();
+  const monthName = firstOfMonth.toLocaleString('default', { month: 'short' });
+  const calDays: (number | null)[] = Array(startDay).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) calDays.push(d);
+
+  const tasksByDay = new Map<number, string>();
+  liveTasks.forEach((t: any) => {
+    if (!t.dueDate) return;
+    const d = new Date(t.dueDate);
+    if (d.getMonth() === calMonth && d.getFullYear() === calYear) {
+      const day = d.getDate();
+      if (t.status === 'completed') { if (!tasksByDay.has(day)) tasksByDay.set(day, 'green'); }
+      else if (d.getTime() < nowMs) tasksByDay.set(day, 'red');
+      else tasksByDay.set(day, 'blue');
+    }
+  });
+
+  function renderTaskCard(task: any) {
+    const isOverdue = task.dueDate && new Date(task.dueDate).getTime() < nowMs && task.status !== 'completed';
     return (
-      <EmptyState
-        message="No tasks assigned to this claim yet."
-        action="Add Task"
-        onActionClick={() => setShowTaskForm(true)}
-      />
+      <div key={task.id} className={cn('card p-3 flex items-start gap-3', isOverdue && 'border-l-3 border-l-red-500')}>
+        {task.status !== 'completed' && (
+          <button onClick={() => completeMutation.mutate(task.id)} className="mt-0.5 w-5 h-5 rounded border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50 flex-shrink-0 flex items-center justify-center transition-colors">
+            <CheckCircle className="w-3 h-3 text-transparent hover:text-emerald-500" />
+          </button>
+        )}
+        {task.status === 'completed' && <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className={cn('text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full', priorityColors[task.priority] || priorityColors.medium)}>{task.priority}</span>
+            {isOverdue && <span className="text-[10px] font-bold text-red-600">OVERDUE</span>}
+          </div>
+          <h4 className={cn('text-sm font-medium', task.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900 dark:text-white')}>{task.title}</h4>
+          {task.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{task.description}</p>}
+          {task.dueDate && <p className="text-xs text-slate-400 mt-1">Due: {formatDate(task.dueDate)}</p>}
+          {task.completedAt && <p className="text-xs text-emerald-500 mt-1">Completed: {formatDate(task.completedAt)}</p>}
+        </div>
+        <button onClick={() => { if (confirm('Delete task?')) deleteMutation.mutate(task.id); }} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {showTaskForm && (
-        <form onSubmit={handleSubmitTask} className="card p-4 space-y-3">
-          <h4 className="text-sm font-medium text-slate-900 dark:text-white">Add Task</h4>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Title</label>
-            <input type="text" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Task title" />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Calendar */}
+      <div className="lg:col-span-1">
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">&lt;</button>
+            <span className="text-sm font-semibold">{monthName} {calYear}</span>
+            <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); }} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">&gt;</button>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Description (optional)</label>
-            <textarea value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Task description" />
+          <div className="grid grid-cols-7 gap-0 text-center text-[10px] font-semibold text-slate-400 mb-1">
+            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i}>{d}</div>)}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Priority</label>
-              <select value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Due Date (optional)</label>
-              <input type="date" value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" disabled={addTaskMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addTaskMutation.isPending ? 'Adding...' : 'Add Task'}</button>
-            <button type="button" onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
-          </div>
-        </form>
-      )}
-      {tasks.map((task) => (
-        <div key={task.id} className="card p-4 flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={cn('text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full', priorityColors[task.priority] || priorityColors.medium)}>
-                {task.priority}
-              </span>
-              <span className="text-xs text-slate-400 capitalize">{task.status?.replace('_', ' ')}</span>
-            </div>
-            <h4 className="text-sm font-medium text-slate-900 dark:text-white">{task.title}</h4>
-            {task.description && <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>}
-            {task.dueDate && <p className="text-xs text-slate-400 mt-1">Due: {formatDate(task.dueDate)}</p>}
+          <div className="grid grid-cols-7 gap-0 text-center text-xs">
+            {calDays.map((d, i) => {
+              if (d === null) return <div key={`e${i}`} className="h-8" />;
+              const isToday = d === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+              const dotColor = tasksByDay.get(d);
+              return (
+                <div key={d} className={cn('h-8 flex flex-col items-center justify-center rounded-lg relative', isToday && 'ring-2 ring-primary-500')}>
+                  <span className="text-slate-700 dark:text-slate-300">{d}</span>
+                  {dotColor && <div className={cn('w-1.5 h-1.5 rounded-full absolute bottom-0.5', dotColor === 'red' ? 'bg-red-500' : dotColor === 'green' ? 'bg-emerald-500' : 'bg-blue-500')} />}
+                </div>
+              );
+            })}
           </div>
         </div>
-      ))}
+      </div>
+
+      {/* Task Lists */}
+      <div className="lg:col-span-2 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Tasks</h3>
+          <button onClick={() => setShowTaskForm(!showTaskForm)} className="flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700"><Plus className="w-3.5 h-3.5" /> New Task</button>
+        </div>
+
+        {showTaskForm && (
+          <form onSubmit={handleSubmitTask} className="card p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2"><input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Task title" /></div>
+              <div className="col-span-2"><textarea value={taskDescription} onChange={e => setTaskDescription(e.target.value)} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Description (optional)" /></div>
+              <select value={taskPriority} onChange={e => setTaskPriority(e.target.value)} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+              </select>
+              <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)} className="px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+              <select value={taskReminder} onChange={e => setTaskReminder(e.target.value)} className="col-span-2 px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="">No reminder</option><option value="at_event">At time of event</option>
+                <option value="1_day">1 day before</option><option value="2_days">2 days before</option><option value="3_days">3 days before</option>
+                <option value="1_week">1 week before</option><option value="2_weeks">2 weeks before</option><option value="1_month">1 month before</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={addTaskMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addTaskMutation.isPending ? 'Adding...' : 'Add Task'}</button>
+              <button type="button" onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {overdue.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold text-red-600 uppercase mb-2">Overdue Tasks</h4>
+            <div className="space-y-2">{overdue.map(renderTaskCard)}</div>
+          </div>
+        )}
+
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Outstanding Tasks</h4>
+          {outstanding.length === 0 ? <p className="text-xs text-slate-400">There aren&apos;t any tasks.</p> : <div className="space-y-2">{outstanding.map(renderTaskCard)}</div>}
+        </div>
+
+        {completed.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold text-emerald-600 uppercase mb-2">Completed Tasks</h4>
+            <div className="space-y-2">{completed.map(renderTaskCard)}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -951,92 +1072,332 @@ function EmailsAutomationTab({ claimId }: { claimId: string }) {
   );
 }
 
+const TX_TYPES = [
+  { key: 'all', label: 'All Transactions' },
+  { key: 'inbound_payment', label: 'Inbound' },
+  { key: 'outbound_payment', label: 'Outbound' },
+  { key: 'concession', label: 'Non-cash' },
+  { key: 'direct_to_customer', label: 'Direct to Customer' },
+  { key: 'pending', label: 'Pending' },
+] as const;
+
+const TX_TYPE_OPTIONS = [
+  { value: 'inbound_payment', label: 'Inbound Payment' },
+  { value: 'outbound_payment', label: 'Outbound Payment' },
+  { value: 'concession', label: 'Concession / Carrier Offset' },
+  { value: 'write_off', label: 'Write-off' },
+  { value: 'direct_to_customer', label: 'Direct Payment to Customer' },
+];
+
 function TransactionsTab({ claim }: { claim: Claim }) {
   const queryClient = useQueryClient();
+  const [txFilter, setTxFilter] = useState('all');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [paymentReference, setPaymentReference] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [txType, setTxType] = useState('inbound_payment');
+  const [txAmount, setTxAmount] = useState('');
+  const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 10));
+  const [txRef, setTxRef] = useState('');
+  const [txMethod, setTxMethod] = useState('');
+  const [txCheck, setTxCheck] = useState('');
+  const [txGl, setTxGl] = useState('');
+  const [txPayee, setTxPayee] = useState('');
+  const [txVendor, setTxVendor] = useState('');
+  const [txNotes, setTxNotes] = useState('');
+  const [txPartyId, setTxPartyId] = useState('');
+  const [txStatus, setTxStatus] = useState('cleared');
+  const [txExpected, setTxExpected] = useState('');
 
-  const payments = claim.payments || [];
-  const totalReceived = payments.reduce((s: number, p: ClaimPayment) => s + (p.amount || 0), 0);
-  const claimAmount = claim.claimAmount ?? 0;
-  const remaining = claimAmount - totalReceived;
-
-  const addPaymentMutation = useMutation({
-    mutationFn: (data: { amount: number; type: string; method?: string; reference?: string; receivedAt?: string }) =>
-      post(`/claims/${claim.id}/payments`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['claim', claim.id] });
-      setShowPaymentForm(false);
-      setPaymentAmount('');
-      setPaymentReference('');
-      setPaymentMethod('');
-      toast.success('Payment logged');
-    },
-    onError: () => toast.error('Failed to log payment'),
+  const { data: summary } = useQuery({
+    queryKey: ['payment-summary', claim.id],
+    queryFn: () => get<any>(`/claims/${claim.id}/payments/summary`),
   });
 
-  function handleSubmitPayment(e: React.FormEvent) {
-    e.preventDefault();
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error('Enter a valid amount');
-      return;
-    }
-    addPaymentMutation.mutate({
-      amount,
-      type: 'settlement',
-      method: paymentMethod || undefined,
-      reference: paymentReference || undefined,
-      receivedAt: paymentDate || undefined,
+  const payments: any[] = claim.payments || [];
+  const filtered = txFilter === 'all'
+    ? payments
+    : txFilter === 'pending'
+      ? payments.filter((p: any) => p.paymentStatus === 'pending')
+      : payments.filter((p: any) => (p.transactionType || p.type) === txFilter);
+
+  const addMutation = useMutation({
+    mutationFn: (data: any) => post(`/claims/${claim.id}/payments`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claim.id] });
+      queryClient.invalidateQueries({ queryKey: ['payment-summary', claim.id] });
+      setShowPaymentForm(false);
+      resetForm();
+      toast.success('Transaction logged');
+    },
+    onError: () => toast.error('Failed to log transaction'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (pid: string) => del(`/claims/${claim.id}/payments/${pid}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claim.id] });
+      queryClient.invalidateQueries({ queryKey: ['payment-summary', claim.id] });
+      toast.success('Transaction deleted');
+    },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+
+  const editMutation = useMutation({
+    mutationFn: ({ paymentId, data }: { paymentId: string; data: any }) => put(`/claims/${claim.id}/payments/${paymentId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claim.id] });
+      queryClient.invalidateQueries({ queryKey: ['payment-summary', claim.id] });
+      setEditingPayment(null);
+      toast.success('Transaction updated');
+    },
+    onError: () => toast.error('Failed to update'),
+  });
+
+  function startEdit(p: any) {
+    setEditingPayment({
+      id: p.id,
+      transactionType: p.transactionType || p.type || 'inbound_payment',
+      amount: String(p.amount || ''),
+      paymentStatus: p.paymentStatus || 'cleared',
+      method: p.method || '',
+      checkNumber: p.checkNumber || '',
+      glCode: p.glCode || '',
+      payeeName: p.payeeName || '',
+      notes: p.notes || '',
+      claimPartyId: p.claimPartyId || '',
+      receivedAt: p.receivedAt ? new Date(p.receivedAt).toISOString().slice(0, 10) : '',
     });
   }
 
+  function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPayment) return;
+    const amt = parseFloat(editingPayment.amount);
+    if (isNaN(amt) || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    editMutation.mutate({
+      paymentId: editingPayment.id,
+      data: {
+        amount: amt,
+        transactionType: editingPayment.transactionType,
+        paymentStatus: editingPayment.paymentStatus,
+        method: editingPayment.method || undefined,
+        checkNumber: editingPayment.checkNumber || undefined,
+        glCode: editingPayment.glCode || undefined,
+        payeeName: editingPayment.payeeName || undefined,
+        notes: editingPayment.notes || undefined,
+        claimPartyId: editingPayment.claimPartyId || undefined,
+        receivedAt: editingPayment.receivedAt || undefined,
+      },
+    });
+  }
+
+  function resetForm() {
+    setTxType('inbound_payment'); setTxAmount(''); setTxRef(''); setTxMethod(''); setTxCheck('');
+    setTxGl(''); setTxPayee(''); setTxVendor(''); setTxNotes(''); setTxPartyId(''); setTxStatus('cleared'); setTxExpected('');
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = parseFloat(txAmount);
+    if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount'); return; }
+    addMutation.mutate({
+      amount, transactionType: txType, direction: txType.includes('outbound') || txType === 'direct_to_customer' ? 'outbound' : 'inbound',
+      paymentStatus: txStatus, method: txMethod || undefined, reference: txRef || undefined,
+      checkNumber: txCheck || undefined, glCode: txGl || undefined, payeeName: txPayee || undefined,
+      vendorName: txVendor || undefined, notes: txNotes || undefined, claimPartyId: txPartyId || undefined,
+      receivedAt: txDate || undefined, expectedDate: txExpected || undefined,
+    });
+  }
+
+  const parties = claim.parties || [];
+  const s = summary || {};
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Filed Amount</p><p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(claimAmount)}</p></div>
-        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Total Received</p><p className="text-lg font-bold text-emerald-600">{formatCurrency(totalReceived)}</p></div>
-        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Remaining</p><p className="text-lg font-bold text-amber-600">{formatCurrency(remaining)}</p></div>
-        <div className="card p-4 text-center"><p className="text-xs text-slate-500">Collection %</p><p className="text-lg font-bold text-primary-600">{claimAmount > 0 ? ((totalReceived / claimAmount) * 100).toFixed(1) : '0'}%</p></div>
+      {s.hasPendingTransactions && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg text-sm flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <span className="font-medium text-amber-800 dark:text-amber-300">Pending transaction must be completed before closing this claim.</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="card p-3 text-center"><p className="text-[10px] text-slate-500 uppercase font-semibold">Filed</p><p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(s.filedAmount || claim.claimAmount || 0)}</p></div>
+        <div className="card p-3 text-center"><p className="text-[10px] text-slate-500 uppercase font-semibold">Inbound</p><p className="text-lg font-bold text-emerald-600">{formatCurrency(s.totalInbound || 0)}</p></div>
+        <div className="card p-3 text-center"><p className="text-[10px] text-slate-500 uppercase font-semibold">Outbound</p><p className="text-lg font-bold text-red-500">{formatCurrency(s.totalOutbound || 0)}</p></div>
+        <div className="card p-3 text-center"><p className="text-[10px] text-slate-500 uppercase font-semibold">Funds Available</p><p className="text-lg font-bold text-primary-600">{formatCurrency(s.fundsAvailable || 0)}</p></div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white">Payment History</h3>
-        <button onClick={() => setShowPaymentForm(!showPaymentForm)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium"><Plus className="w-4 h-4" /> Log Payment</button>
+      {/* Per-party summary */}
+      {s.parties && s.parties.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700">
+            <h4 className="text-xs font-semibold text-slate-500 uppercase">Per-Party Summary</h4>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-slate-100 dark:border-slate-700">
+                <th className="text-left px-3 py-2 font-semibold text-slate-500">Party</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500">Inbound</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500">Outbound</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500">Concession</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500">Write-off</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500">Balance</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                {s.parties.map((p: any) => {
+                  const ps = s.perParty?.[p.id] || {};
+                  return (
+                    <tr key={p.id}>
+                      <td className="px-3 py-2 font-medium">{p.name} <span className="text-slate-400 capitalize">({p.type})</span></td>
+                      <td className="px-3 py-2 text-right text-emerald-600">{formatCurrency(ps.inbound || 0)}</td>
+                      <td className="px-3 py-2 text-right text-red-500">{formatCurrency(ps.outbound || 0)}</td>
+                      <td className="px-3 py-2 text-right text-amber-600">{formatCurrency(ps.concession || 0)}</td>
+                      <td className="px-3 py-2 text-right text-slate-500">{formatCurrency(ps.writeOff || 0)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{formatCurrency(ps.balance || 0)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-tabs */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+          {TX_TYPES.map(t => (
+            <button key={t.key} onClick={() => setTxFilter(t.key)}
+              className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                txFilter === t.key ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowPaymentForm(!showPaymentForm)} className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-xs font-semibold"><Plus className="w-3.5 h-3.5" /> Log Transaction</button>
       </div>
 
       {showPaymentForm && (
-        <form onSubmit={handleSubmitPayment} className="card p-4 space-y-3">
-          <h4 className="text-sm font-medium text-slate-900 dark:text-white">Log Payment</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <form onSubmit={handleSubmit} className="card p-4 space-y-3">
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">New Transaction</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Transaction Type</label>
+              <select value={txType} onChange={e => setTxType(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                {TX_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Amount</label>
-              <input type="number" step="0.01" min="0" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="0.00" />
+              <input type="number" step="0.01" min="0" value={txAmount} onChange={e => setTxAmount(e.target.value)} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="0.00" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
-              <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+              <label className="block text-xs font-medium text-slate-500 mb-1">Party</label>
+              <select value={txPartyId} onChange={e => setTxPartyId(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="">Unassigned</option>
+                {parties.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
+              </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Reference</label>
-              <input type="text" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" placeholder="Check #, ACH ref..." />
+              <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
+              <select value={txStatus} onChange={e => setTxStatus(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="cleared">Cleared</option>
+                <option value="pending">Pending</option>
+                <option value="voided">Voided</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Method</label>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+              <select value={txMethod} onChange={e => setTxMethod(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
                 <option value="">Select</option>
                 <option value="check">Check</option>
                 <option value="ach">ACH</option>
                 <option value="wire">Wire</option>
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Date Received</label>
+              <input type="date" value={txDate} onChange={e => setTxDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Check Number</label>
+              <input type="text" value={txCheck} onChange={e => setTxCheck(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">GL Code</label>
+              <input type="text" value={txGl} onChange={e => setTxGl(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Payee / Vendor</label>
+              <input type="text" value={txPayee} onChange={e => setTxPayee(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            {txStatus === 'pending' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Expected Date</label>
+                <input type="date" value={txExpected} onChange={e => setTxExpected(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+            <textarea value={txNotes} onChange={e => setTxNotes(e.target.value)} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={addPaymentMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addPaymentMutation.isPending ? 'Saving...' : 'Save Payment'}</button>
-            <button type="button" onClick={() => setShowPaymentForm(false)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+            <button type="submit" disabled={addMutation.isPending} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{addMutation.isPending ? 'Saving...' : 'Save Transaction'}</button>
+            <button type="button" onClick={() => { setShowPaymentForm(false); resetForm(); }} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {editingPayment && (
+        <form onSubmit={handleEditSubmit} className="card p-4 space-y-3 border-2 border-blue-200 dark:border-blue-800">
+          <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-300">Edit Transaction</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Transaction Type</label>
+              <select value={editingPayment.transactionType} onChange={e => setEditingPayment({ ...editingPayment, transactionType: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                {TX_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Amount</label>
+              <input type="number" step="0.01" min="0" value={editingPayment.amount} onChange={e => setEditingPayment({ ...editingPayment, amount: e.target.value })} required className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Party</label>
+              <select value={editingPayment.claimPartyId} onChange={e => setEditingPayment({ ...editingPayment, claimPartyId: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="">Unassigned</option>
+                {parties.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
+              <select value={editingPayment.paymentStatus} onChange={e => setEditingPayment({ ...editingPayment, paymentStatus: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600">
+                <option value="cleared">Cleared</option><option value="pending">Pending</option><option value="voided">Voided</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Check #</label>
+              <input type="text" value={editingPayment.checkNumber} onChange={e => setEditingPayment({ ...editingPayment, checkNumber: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">GL Code</label>
+              <input type="text" value={editingPayment.glCode} onChange={e => setEditingPayment({ ...editingPayment, glCode: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+              <input type="date" value={editingPayment.receivedAt} onChange={e => setEditingPayment({ ...editingPayment, receivedAt: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+            <textarea value={editingPayment.notes} onChange={e => setEditingPayment({ ...editingPayment, notes: e.target.value })} rows={2} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={editMutation.isPending} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{editMutation.isPending ? 'Saving...' : 'Update Transaction'}</button>
+            <button type="button" onClick={() => setEditingPayment(null)} className="px-4 py-2 border rounded-lg text-sm text-slate-600 dark:text-slate-400">Cancel</button>
           </div>
         </form>
       )}
@@ -1046,38 +1407,108 @@ function TransactionsTab({ claim }: { claim: Claim }) {
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-700">
               <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Type</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Method</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Reference</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden lg:table-cell">From</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Party</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Check #</th>
               <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Amount</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Date</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden sm:table-cell">Status</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase hidden md:table-cell">Date</th>
+              <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-            {payments.map((p: ClaimPayment) => (
-              <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                <td className="px-4 py-3 font-medium capitalize">{p.type}</td>
-                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500 capitalize">{p.method || '-'}</td>
-                <td className="px-4 py-3 hidden md:table-cell text-xs font-mono text-slate-500">{p.reference || '-'}</td>
-                <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-500">—</td>
-                <td className="px-4 py-3 font-medium text-emerald-600">{formatCurrency(p.amount)}</td>
-                <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500">{p.receivedAt ? formatDate(p.receivedAt) : formatDate(p.createdAt)}</td>
-              </tr>
-            ))}
+            {filtered.map((p: any) => {
+              const tt = p.transactionType || p.type || 'inbound_payment';
+              const partyName = parties.find((pp: any) => pp.id === p.claimPartyId)?.name;
+              const isOut = tt.includes('outbound') || tt === 'direct_to_customer' || tt === 'write_off';
+              return (
+                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td className="px-4 py-3">
+                    <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full capitalize',
+                      isOut ? 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                    )}>{tt.replace(/_/g, ' ')}</span>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell text-xs text-slate-500">{partyName || '—'}</td>
+                  <td className="px-4 py-3 hidden md:table-cell text-xs font-mono text-slate-500">{p.checkNumber || p.reference || '—'}</td>
+                  <td className={cn('px-4 py-3 font-semibold', isOut ? 'text-red-600' : 'text-emerald-600')}>{isOut ? '-' : '+'}{formatCurrency(p.amount)}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase',
+                      p.paymentStatus === 'pending' ? 'bg-amber-100 text-amber-700' : p.paymentStatus === 'voided' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'
+                    )}>{p.paymentStatus || 'cleared'}</span>
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell text-xs text-slate-500">{p.receivedAt ? formatDate(p.receivedAt) : formatDate(p.createdAt)}</td>
+                  <td className="px-4 py-3 text-right flex items-center justify-end gap-1">
+                    <button onClick={() => startEdit(p)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-slate-400 hover:text-blue-500"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => { if (confirm('Delete this transaction?')) deleteMutation.mutate(p.id); }} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+        {filtered.length === 0 && (
+          <div className="p-8 text-center text-sm text-slate-400">No transactions in this category</div>
+        )}
       </div>
-
-      {payments.length === 0 && !showPaymentForm && (
-        <div className="card p-12 text-center">
-          <p className="text-sm text-slate-400">No payments recorded for this claim</p>
-        </div>
-      )}
     </div>
   );
 }
 
 function AdditionalInfoTab({ claim }: { claim: Claim }) {
+  const queryClient = useQueryClient();
+  const claimId = claim.id;
+  const [showParentSearch, setShowParentSearch] = useState(false);
+  const [parentSearchTerm, setParentSearchTerm] = useState('');
+  const [showLinkChild, setShowLinkChild] = useState(false);
+  const [childSearchTerm, setChildSearchTerm] = useState('');
+
+  const { data: childClaims = [] } = useQuery({
+    queryKey: ['child-claims', claimId],
+    queryFn: () => getList<any>(`/claims?parentClaimId=${claimId}&limit=50`),
+    enabled: !!claimId,
+  });
+
+  const { data: parentSearchResults = [] } = useQuery({
+    queryKey: ['claim-search-parent', parentSearchTerm],
+    queryFn: () => getList<any>(`/claims?search=${parentSearchTerm}&limit=10`),
+    enabled: parentSearchTerm.length >= 2,
+  });
+
+  const { data: childSearchResults = [] } = useQuery({
+    queryKey: ['claim-search-child', childSearchTerm],
+    queryFn: () => getList<any>(`/claims?search=${childSearchTerm}&limit=10`),
+    enabled: childSearchTerm.length >= 2,
+  });
+
+  const setParentMutation = useMutation({
+    mutationFn: (parentId: string) => put(`/claims/${claimId}`, { parentClaimId: parentId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      setShowParentSearch(false);
+      setParentSearchTerm('');
+      toast.success('Parent claim linked');
+    },
+    onError: () => toast.error('Failed to set parent claim'),
+  });
+
+  const linkChildMutation = useMutation({
+    mutationFn: (childId: string) => put(`/claims/${childId}`, { parentClaimId: claimId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['child-claims', claimId] });
+      setShowLinkChild(false);
+      setChildSearchTerm('');
+      toast.success('Child claim linked');
+    },
+    onError: () => toast.error('Failed to link child claim'),
+  });
+
+  const removeParentMutation = useMutation({
+    mutationFn: () => put(`/claims/${claimId}`, { parentClaimId: null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
+      toast.success('Parent claim unlinked');
+    },
+  });
+
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card p-6 space-y-4">
@@ -1136,77 +1567,384 @@ function AdditionalInfoTab({ claim }: { claim: Claim }) {
           ))}
         </div>
       </div>
+
+      {/* Parent Claim */}
+      <div className="card p-6 space-y-4">
+        <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+          <ChevronRight className="w-4 h-4 text-primary-500" />
+          Parent Claim
+        </h3>
+        {(claim as any).parentClaimId ? (
+          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+            <Link
+              href={`/claims/${(claim as any).parentClaimId}`}
+              className="text-sm font-medium text-primary-500 hover:text-primary-600 hover:underline"
+            >
+              View Parent Claim &rarr;
+            </Link>
+            <button
+              onClick={() => { if (confirm('Unlink parent claim?')) removeParentMutation.mutate(); }}
+              className="text-xs text-red-500 hover:text-red-600"
+            >
+              Unlink
+            </button>
+          </div>
+        ) : showParentSearch ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={parentSearchTerm}
+              onChange={(e) => setParentSearchTerm(e.target.value)}
+              placeholder="Search by claim number or PRO..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white text-sm"
+              autoFocus
+            />
+            {parentSearchResults.length > 0 && (
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                {parentSearchResults.filter((c: any) => c.id !== claimId).map((c: any) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setParentMutation.mutate(c.id)}
+                    className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors text-sm"
+                  >
+                    <span className="font-mono font-medium text-slate-900 dark:text-white">{c.claimNumber}</span>
+                    {c.customerName && <span className="text-slate-400 ml-2">{c.customerName}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setShowParentSearch(false); setParentSearchTerm(''); }} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowParentSearch(true)}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-500 hover:text-primary-600"
+          >
+            <Plus className="w-4 h-4" /> Set Parent Claim
+          </button>
+        )}
+      </div>
+
+      {/* Child Claims */}
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <ChevronRight className="w-4 h-4 text-primary-500 rotate-90" />
+            Child Claims
+            {childClaims.length > 0 && (
+              <span className="text-xs font-normal text-slate-400">({childClaims.length})</span>
+            )}
+          </h3>
+          <button
+            onClick={() => setShowLinkChild(!showLinkChild)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary-500 hover:text-primary-600"
+          >
+            <Plus className="w-3.5 h-3.5" /> Link Child
+          </button>
+        </div>
+
+        {showLinkChild && (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={childSearchTerm}
+              onChange={(e) => setChildSearchTerm(e.target.value)}
+              placeholder="Search by claim number or PRO..."
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white text-sm"
+              autoFocus
+            />
+            {childSearchResults.length > 0 && (
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                {childSearchResults.filter((c: any) => c.id !== claimId).map((c: any) => (
+                  <button
+                    key={c.id}
+                    onClick={() => linkChildMutation.mutate(c.id)}
+                    className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors text-sm"
+                  >
+                    <span className="font-mono font-medium text-slate-900 dark:text-white">{c.claimNumber}</span>
+                    {c.customerName && <span className="text-slate-400 ml-2">{c.customerName}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {childClaims.length > 0 ? (
+          <div className="space-y-2">
+            {childClaims.map((child: any) => (
+              <Link
+                key={child.id}
+                href={`/claims/${child.id}`}
+                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                <div>
+                  <p className="text-sm font-mono font-medium text-slate-900 dark:text-white">{child.claimNumber}</p>
+                  <p className="text-xs text-slate-400">{child.status} &middot; {formatCurrency(child.claimAmount)}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300" />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No child claims linked.</p>
+        )}
+      </div>
     </div>
   );
 }
 
-function CommentsActivityTab({ comments, timeline, claimId }: { comments: ClaimComment[]; timeline: Claim['timeline']; claimId: string }) {
+function CommentsActivityTab({ comments: initialComments, timeline, claimId }: { comments: ClaimComment[]; timeline: Claim['timeline']; claimId: string }) {
   const [newComment, setNewComment] = useState('');
+  const [isInternal, setIsInternal] = useState(false);
+  const [isBold, setIsBold] = useState(false);
+  const [isItalic, setIsItalic] = useState(false);
+  const [isUnderline, setIsUnderline] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
   const [viewMode, setViewMode] = useState<'comments' | 'activity'>('comments');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionedIds, setMentionedIds] = useState<string[]>([]);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
 
+  const { data: comments = initialComments } = useQuery({
+    queryKey: ['claim-comments', claimId],
+    queryFn: () => getList<any>(`/claims/${claimId}/comments`),
+    initialData: initialComments,
+    refetchInterval: 30000,
+  });
+
+  const { data: teamUsers = [] } = useQuery({
+    queryKey: ['team-users-mention'],
+    queryFn: () => getList<any>('/users?limit=100'),
+    staleTime: 60000,
+  });
+
+  const filteredMentionUsers = mentionQuery
+    ? teamUsers.filter((u: any) => `${u.firstName} ${u.lastName}`.toLowerCase().includes(mentionQuery.toLowerCase()) || u.email.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+    : [];
+
+  function handleCommentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    setNewComment(val);
+    const cursor = e.target.selectionStart || 0;
+    const before = val.substring(0, cursor);
+    const atMatch = before.match(/@(\w*)$/);
+    if (atMatch) {
+      setMentionQuery(atMatch[1]);
+      setShowMentions(true);
+    } else {
+      setShowMentions(false);
+      setMentionQuery('');
+    }
+  }
+
+  function insertMention(user: any) {
+    const cursor = commentRef.current?.selectionStart || 0;
+    const before = newComment.substring(0, cursor).replace(/@\w*$/, '');
+    const after = newComment.substring(cursor);
+    const mention = `@${user.firstName} ${user.lastName} `;
+    setNewComment(before + mention + after);
+    setMentionedIds(prev => [...prev, user.id]);
+    setShowMentions(false);
+    setMentionQuery('');
+    setTimeout(() => commentRef.current?.focus(), 50);
+  }
+
   const addComment = useMutation({
-    mutationFn: (content: string) => post(`/claims/${claimId}/comments`, { content, type: 'comment' }),
+    mutationFn: (data: any) => post(`/claims/${claimId}/comments`, data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-comments', claimId] });
       queryClient.invalidateQueries({ queryKey: ['claim', claimId] });
-      setNewComment('');
+      setNewComment(''); setReplyTo(null); setIsInternal(false); setMentionedIds([]);
       toast.success('Comment added');
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
+      put(`/claims/${claimId}/comments/${commentId}`, { content }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-comments', claimId] });
+      setEditingId(null); setEditContent('');
+      toast.success('Comment updated');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (commentId: string) => del(`/claims/${claimId}/comments/${commentId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['claim-comments', claimId] });
+      toast.success('Comment deleted');
+    },
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: ({ commentId, isPinned }: { commentId: string; isPinned: boolean }) =>
+      post(`/claims/${claimId}/comments/${commentId}/pin`, { isPinned }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['claim-comments', claimId] }),
+  });
+
+  const topLevel = (comments as any[]).filter((c: any) => !c.parentId);
+  const sorted = sortOrder === 'newest' ? topLevel : [...topLevel].reverse();
+  const pinnedComments = sorted.filter((c: any) => c.isPinned);
+  const unpinnedComments = sorted.filter((c: any) => !c.isPinned);
+  const orderedComments = [...pinnedComments, ...unpinnedComments];
+
+  function handleSubmit() {
+    if (!newComment.trim()) return;
+    addComment.mutate({
+      content: newComment.trim(), type: 'comment',
+      parentId: replyTo || undefined, isInternal: isInternal || undefined,
+      mentionedUserIds: mentionedIds.length ? mentionedIds.join(',') : undefined,
+    });
+  }
+
+  function applyFormat(format: 'bold' | 'italic' | 'underline') {
+    const textarea = commentRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = newComment.substring(start, end);
+    if (!selected) {
+      if (format === 'bold') setIsBold(!isBold);
+      if (format === 'italic') setIsItalic(!isItalic);
+      if (format === 'underline') setIsUnderline(!isUnderline);
+      return;
+    }
+    const tags: Record<string, [string, string]> = { bold: ['**', '**'], italic: ['_', '_'], underline: ['__', '__'] };
+    const [open, close] = tags[format];
+    const replacement = `${open}${selected}${close}`;
+    setNewComment(newComment.substring(0, start) + replacement + newComment.substring(end));
+  }
+
+  function renderComment(comment: any, depth = 0) {
+    const authorName = comment.user ? `${comment.user.firstName} ${comment.user.lastName}` : 'User';
+    const isEditing = editingId === comment.id;
+    const replies = (comment.replies || []) as any[];
+
+    return (
+      <div key={comment.id} className={cn('card p-4', depth > 0 && 'ml-8 border-l-2 border-primary-200 dark:border-primary-800')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-[10px] font-bold text-primary-700 dark:text-primary-300">
+              {authorName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+            </div>
+            <div>
+              <span className="text-sm font-medium text-slate-900 dark:text-white">{authorName}</span>
+              <span className="text-xs text-slate-400 ml-2">{relativeTime(comment.createdAt)}</span>
+              {comment.editedAt && <span className="text-[10px] text-slate-400 ml-1">(edited)</span>}
+            </div>
+            {comment.isPinned && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded">Pinned</span>}
+            {comment.isInternal && <span className="text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-500/10 px-1.5 py-0.5 rounded">Internal</span>}
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => { setReplyTo(comment.id); setNewComment(''); }} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-primary-500 text-xs" title="Reply">↩</button>
+            <button onClick={() => { setEditingId(comment.id); setEditContent(comment.content); }} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500" title="Edit"><Edit2 className="w-3 h-3" /></button>
+            <button onClick={() => pinMutation.mutate({ commentId: comment.id, isPinned: !comment.isPinned })} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-amber-500" title={comment.isPinned ? 'Unpin' : 'Pin'}>
+              {comment.isPinned ? '★' : '☆'}
+            </button>
+            <button onClick={() => { if (confirm('Delete comment?')) deleteMutation.mutate(comment.id); }} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        </div>
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600" />
+            <div className="flex gap-2">
+              <button onClick={() => editMutation.mutate({ commentId: comment.id, content: editContent })} className="bg-primary-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Save</button>
+              <button onClick={() => setEditingId(null)} className="px-3 py-1.5 border rounded-lg text-xs">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{comment.content}</p>
+        )}
+        {replies.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {replies.map((r: any) => renderComment(r, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {/* Toggle */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setViewMode('comments')}
-          className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', viewMode === 'comments' ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300' : 'text-slate-500')}
-        >
-          Comments ({comments.length})
-        </button>
-        <button
-          onClick={() => setViewMode('activity')}
-          className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', viewMode === 'activity' ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300' : 'text-slate-500')}
-        >
-          Activity Log ({timeline?.length || 0})
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <button onClick={() => setViewMode('comments')} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', viewMode === 'comments' ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300' : 'text-slate-500')}>
+            Comments ({comments.length})
+          </button>
+          <button onClick={() => setViewMode('activity')} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', viewMode === 'activity' ? 'bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300' : 'text-slate-500')}>
+            Activity Log ({timeline?.length || 0})
+          </button>
+        </div>
+        {viewMode === 'comments' && (
+          <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} className="text-xs text-slate-500 border rounded px-2 py-1 dark:bg-slate-700 dark:border-slate-600">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        )}
       </div>
 
       {viewMode === 'comments' ? (
         <>
-          <div className="card p-4">
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment..."
-              rows={3}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            />
-            <div className="flex justify-end mt-2">
-              <button
-                onClick={() => addComment.mutate(newComment)}
-                disabled={!newComment.trim() || addComment.isPending}
-                className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {addComment.isPending ? 'Posting...' : 'Post Comment'}
+          <div className="card p-4 space-y-2">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Comments</h4>
+            {replyTo && (
+              <div className="flex items-center gap-2 text-xs text-primary-600 bg-primary-50 dark:bg-primary-950 px-3 py-1.5 rounded-lg">
+                <span>Replying to comment</span>
+                <button onClick={() => setReplyTo(null)} className="text-red-500 font-medium ml-auto">Cancel</button>
+              </div>
+            )}
+            {/* Rich text toolbar */}
+            <div className="flex items-center gap-0.5 border rounded-t-lg px-2 py-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-600 flex-wrap">
+              <button type="button" onClick={() => applyFormat('bold')} className={cn('px-2 py-1 rounded text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700', isBold && 'bg-slate-200 dark:bg-slate-700')}>B</button>
+              <button type="button" onClick={() => applyFormat('italic')} className={cn('px-2 py-1 rounded text-xs italic hover:bg-slate-200 dark:hover:bg-slate-700', isItalic && 'bg-slate-200 dark:bg-slate-700')}>I</button>
+              <button type="button" onClick={() => applyFormat('underline')} className={cn('px-2 py-1 rounded text-xs underline hover:bg-slate-200 dark:hover:bg-slate-700', isUnderline && 'bg-slate-200 dark:bg-slate-700')}>U</button>
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600 mx-1" />
+              <button type="button" onClick={() => { const t = commentRef.current; if (t) { const s = t.selectionStart; setNewComment(newComment.substring(0, s) + '• ' + newComment.substring(s)); } }} className="px-2 py-1 rounded text-xs hover:bg-slate-200 dark:hover:bg-slate-700">• List</button>
+              <button type="button" onClick={() => { const t = commentRef.current; if (t) { const s = t.selectionStart; setNewComment(newComment.substring(0, s) + '1. ' + newComment.substring(s)); } }} className="px-2 py-1 rounded text-xs hover:bg-slate-200 dark:hover:bg-slate-700">1. List</button>
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600 mx-1" />
+              <span className="text-[10px] text-slate-400">Type @ to mention and notify someone</span>
+            </div>
+            <div className="relative">
+              <textarea ref={commentRef} value={newComment} onChange={handleCommentChange}
+                placeholder={replyTo ? 'Write a reply...' : 'Type @ to mention and notify someone.'}
+                rows={4} className="w-full px-3 py-2 border border-t-0 rounded-b-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+              {showMentions && filteredMentionUsers.length > 0 && (
+                <div className="absolute left-0 bottom-full mb-1 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                  {filteredMentionUsers.map((u: any) => (
+                    <button key={u.id} onClick={() => insertMention(u)} className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-[9px] font-bold text-primary-700 dark:text-primary-300">
+                        {(u.firstName?.[0] || '')}{(u.lastName?.[0] || '')}
+                      </div>
+                      <span>{u.firstName} {u.lastName}</span>
+                      <span className="text-xs text-slate-400 ml-auto">{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} className="rounded border-slate-300" />
+                Internal only
+              </label>
+              <button onClick={handleSubmit} disabled={!newComment.trim() || addComment.isPending}
+                className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                {addComment.isPending ? 'Posting...' : replyTo ? 'Reply' : 'Post Comment'}
               </button>
             </div>
           </div>
-          {comments.length === 0 ? (
+          {orderedComments.length === 0 ? (
             <EmptyState message="No comments yet" />
           ) : (
             <div className="space-y-3">
-              {comments.map((comment) => (
-                <div key={comment.id} className="card p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={cn('badge text-xs', comment.type === 'system' ? 'badge-neutral' : 'badge-info')}>
-                      {comment.type}
-                    </span>
-                    <span className="text-xs text-slate-400">{formatDateTime(comment.createdAt)}</span>
-                  </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{comment.content}</p>
-                </div>
-              ))}
+              {orderedComments.map((c: any) => renderComment(c))}
             </div>
           )}
         </>

@@ -146,20 +146,24 @@ const localBackend = {
 
   async list(prefix: string) {
     const dir = path.join(uploadDir, ...prefix.split('/'));
-    try {
-      const entries = await fs.readdir(dir, { withFileTypes: true, recursive: true });
-      const results: { key: string; size: number; lastModified: Date }[] = [];
-      for (const entry of entries) {
-        if (entry.isFile() && !entry.name.endsWith('.meta.json')) {
-          const fullPath = path.join(dir, entry.name);
-          const stat = await fs.stat(fullPath);
-          results.push({ key: prefix + entry.name, size: stat.size, lastModified: stat.mtime });
+    const results: { key: string; size: number; lastModified: Date }[] = [];
+    async function walk(current: string, relPrefix: string) {
+      try {
+        const entries = await fs.readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            await walk(full, rel);
+          } else if (!entry.name.endsWith('.meta.json')) {
+            const stat = await fs.stat(full);
+            results.push({ key: prefix + rel, size: stat.size, lastModified: stat.mtime });
+          }
         }
-      }
-      return results;
-    } catch {
-      return [];
+      } catch {}
     }
+    await walk(dir, '');
+    return results;
   },
 
   async download(key: string): Promise<{ body: Buffer; contentType: string }> {
@@ -219,8 +223,9 @@ export const storageService = {
     logger.info({ key }, 'Document deleted');
   },
 
-  async listDocuments(claimId: string): Promise<{ key: string; size: number; lastModified: Date }[]> {
-    return backend.list(`claims/${claimId}/`);
+  async listDocuments(claimId: string, corporateId?: string): Promise<{ key: string; size: number; lastModified: Date }[]> {
+    const tenant = corporateId || '_global';
+    return backend.list(`tenant/${tenant}/claims/${claimId}/`);
   },
 
   async downloadDocument(key: string): Promise<{ body: Buffer; contentType: string }> {

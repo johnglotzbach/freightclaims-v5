@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getList, post, del, uploadFile, fetchDocumentBlob } from '@/lib/api-client';
 import { toast } from 'sonner';
@@ -13,6 +13,7 @@ import {
   Sparkles, Eye, RotateCcw, Check, X as XIcon, Search,
   ArrowLeft, ZoomIn, ZoomOut, ChevronLeft, Link2, Plus,
   Image as ImageIcon, FileSpreadsheet, File, Trash2, Edit,
+  GitMerge, Loader2, AlertTriangle, Layers,
 } from 'lucide-react';
 
 interface ExtractedField {
@@ -74,6 +75,12 @@ function formatType(type: string) {
   return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function getConfidenceColor(confidence: number) {
+  if (confidence >= 0.80) return 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400';
+  if (confidence >= 0.50) return 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400';
+  return 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400';
+}
+
 function getFileIcon(mimeType?: string) {
   if (mimeType?.startsWith('image/')) return <ImageIcon className="w-5 h-5 text-emerald-500 flex-shrink-0" />;
   if (mimeType?.includes('spreadsheet') || mimeType?.includes('excel') || mimeType?.includes('csv')) return <FileSpreadsheet className="w-5 h-5 text-green-600 flex-shrink-0" />;
@@ -88,6 +95,124 @@ function getStatusIcon(status: string) {
   return <AlertCircle className="w-4 h-4 text-slate-400" />;
 }
 
+function GroupDocumentsModal({
+  documents,
+  onClose,
+  onGroup,
+  isPending,
+}: {
+  documents: ProcessedDocument[];
+  onClose: () => void;
+  onGroup: (ids: string[]) => void;
+  isPending: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!isPending) { setProgress(0); return; }
+    const interval = setInterval(() => {
+      setProgress(p => Math.min(p + Math.random() * 15, 90));
+    }, 400);
+    return () => clearInterval(interval);
+  }, [isPending]);
+
+  const toggle = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            <Layers className="w-5 h-5 text-primary-500" />
+            <h2 className="font-bold text-slate-900 dark:text-white">Group Documents</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+            <XIcon className="w-4 h-4 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          <p className="text-sm text-slate-500 mb-3">Select documents to group into a single claim batch.</p>
+          {documents.map(doc => {
+            const type = doc.category || doc.documentType || 'other';
+            return (
+              <label
+                key={doc.id}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                  selected.has(doc.id)
+                    ? 'border-primary-300 bg-primary-50/50 dark:border-primary-600 dark:bg-primary-500/5'
+                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300"
+                  checked={selected.has(doc.id)}
+                  onChange={() => toggle(doc.id)}
+                />
+                {getFileIcon(doc.mimeType)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                    {doc.documentName || doc.fileName || 'Document'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded', getTypeColor(type))}>
+                      {formatType(type)}
+                    </span>
+                    <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded', getConfidenceColor(doc.confidence))}>
+                      {Math.round(doc.confidence * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {isPending && (
+          <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span className="text-xs text-slate-500 font-medium">{Math.round(progress)}%</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Grouping documents and matching to claim...</p>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200 dark:border-slate-700">
+          <span className="text-sm text-slate-500">{selected.size} document{selected.size !== 1 ? 's' : ''} selected</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400">
+              Cancel
+            </button>
+            <button
+              onClick={() => onGroup(Array.from(selected))}
+              disabled={selected.size < 2 || isPending}
+              className="flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
+            >
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+              {isPending ? 'Grouping...' : 'Group & Create Claim'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AIEntryPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -96,6 +221,7 @@ export default function AIEntryPage() {
   const [search, setSearch] = useState('');
   const [editingFields, setEditingFields] = useState<Record<string, string>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showGroupModal, setShowGroupModal] = useState(false);
 
   const createClaimMutation = useMutation({
     mutationFn: async (doc: ProcessedDocument) => {
@@ -131,10 +257,7 @@ export default function AIEntryPage() {
         const d = (documents as ProcessedDocument[]).find(dd => dd.id === id);
         return d?.documentId || id;
       });
-      return post<any>('/documents/link', {
-        documentIds,
-        createClaim: true,
-      });
+      return post<any>('/ai/documents/match-claim', { documentIds });
     },
     onSuccess: (data) => {
       const claimId = data?.data?.claimId || data?.claimId;
@@ -145,6 +268,7 @@ export default function AIEntryPage() {
         toast.success('Documents grouped successfully');
       }
       setSelectedIds(new Set());
+      setShowGroupModal(false);
       queryClient.invalidateQueries({ queryKey: ['ai-documents'] });
     },
     onError: () => toast.error('Failed to group documents'),
@@ -214,14 +338,6 @@ export default function AIEntryPage() {
     });
   }, []);
 
-  const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map(d => d.id)));
-    }
-  }, [selectedIds.size]);
-
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['ai-documents'],
     queryFn: () => getList<ProcessedDocument>('/ai/documents'),
@@ -236,6 +352,14 @@ export default function AIEntryPage() {
     (d.documentName || d.fileName || '').toLowerCase().includes(search.toLowerCase()) ||
     (d.category || d.documentType || '').toLowerCase().includes(search.toLowerCase())
   );
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(d => d.id)));
+    }
+  }, [selectedIds.size, filtered]);
 
   if (isLoading) {
     return (
@@ -290,6 +414,14 @@ export default function AIEntryPage() {
             >
               <Link2 className="w-4 h-4" />
               {groupClaimMutation.isPending ? 'Grouping...' : `Group ${selectedIds.size} Docs → Claim`}
+            </button>
+          )}
+          {documents.length >= 2 && (
+            <button
+              onClick={() => setShowGroupModal(true)}
+              className="flex items-center gap-2 border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Layers className="w-4 h-4" /> Group Documents
             </button>
           )}
           <button
@@ -438,6 +570,15 @@ export default function AIEntryPage() {
           </div>
         </div>
       )}
+
+      {showGroupModal && (
+        <GroupDocumentsModal
+          documents={documents}
+          onClose={() => setShowGroupModal(false)}
+          onGroup={(ids) => groupClaimMutation.mutate(ids)}
+          isPending={groupClaimMutation.isPending}
+        />
+      )}
     </div>
   );
 }
@@ -461,11 +602,79 @@ function ReviewDataCapture({
   isApproving: boolean;
   onSelectDoc: (d: ProcessedDocument) => void;
 }) {
+  const router = useRouter();
   const [zoom, setZoom] = useState(100);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [blobType, setBlobType] = useState<string>('');
   const blobUrlRef = useRef<string | null>(null);
   const currentDocIdx = allDocuments.findIndex(d => d.id === doc.id);
+  const [matchResults, setMatchResults] = useState<any[] | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [conflictOverrides, setConflictOverrides] = useState<Record<string, string>>({});
+
+  const conflicts = useMemo(() => {
+    if (allDocuments.length < 2) return [];
+    const fieldMap = new Map<string, { docId: string; docName: string; value: string; label: string }[]>();
+    for (const d of allDocuments) {
+      for (const f of (d.extractedFields ?? [])) {
+        const existing = fieldMap.get(f.key) || [];
+        existing.push({
+          docId: d.id,
+          docName: d.documentName || d.fileName || 'Unknown',
+          value: f.value,
+          label: f.label,
+        });
+        fieldMap.set(f.key, existing);
+      }
+    }
+    const result: Array<{
+      key: string;
+      label: string;
+      entries: Array<{ docId: string; docName: string; value: string }>;
+    }> = [];
+    for (const [key, entries] of fieldMap) {
+      const uniqueValues = new Set(entries.map(e => e.value.trim().toLowerCase()));
+      if (uniqueValues.size > 1 && entries.length > 1) {
+        result.push({ key, label: entries[0].label, entries });
+      }
+    }
+    return result;
+  }, [allDocuments]);
+
+  function handleConflictChoice(fieldKey: string, value: string) {
+    setConflictOverrides(prev => ({ ...prev, [fieldKey]: value }));
+    setEditingFields({ ...editingFields, [`${doc.id}-${fieldKey}`]: value });
+  }
+
+  async function handleMatchToClaim() {
+    setMatchLoading(true);
+    try {
+      const res = await post<any>('/ai/documents/match-claim', { documentId: doc.documentId || doc.id });
+      const matches = res?.matches || [];
+      setMatchResults(matches);
+      if (matches.length === 0) {
+        toast.info('No matching claims found. The document may belong to a new claim.');
+      } else {
+        toast.success(`Found ${matches.length} potential matching claim${matches.length > 1 ? 's' : ''}`);
+      }
+    } catch {
+      toast.error('Failed to search for matching claims');
+    } finally {
+      setMatchLoading(false);
+    }
+  }
+
+  async function handleAttachToClaim(claimId: string) {
+    try {
+      const docId = doc.documentId || doc.id;
+      await post('/documents/link', { claimId, documentIds: [docId] });
+      toast.success('Document attached to claim');
+      router.push(`/claims/${claimId}`);
+    } catch {
+      toast.error('Failed to attach document to claim');
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -473,6 +682,7 @@ function ReviewDataCapture({
     if (docId) {
       setBlobUrl(null);
       setBlobType('');
+      setCurrentPage(1);
       fetchDocumentBlob(docId).then(({ blobUrl: url, contentType }) => {
         if (!cancelled) {
           setBlobUrl(url);
@@ -503,6 +713,10 @@ function ReviewDataCapture({
     return editingFields[editKey] !== undefined && editingFields[editKey] !== f.value;
   });
 
+  const pageCount = doc.pages || 1;
+  const isMultiPage = pageCount > 1;
+  const isImage = blobType.startsWith('image/');
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -515,9 +729,18 @@ function ReviewDataCapture({
             AI analyzed the document content to determine its type and extract key fields. Edit any incorrect values below.
           </p>
         </div>
-        <span className="text-xs text-slate-400">{currentDocIdx + 1} / {allDocuments.length}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={goToPrev} disabled={currentDocIdx <= 0} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <span className="text-xs text-slate-400 font-medium">{currentDocIdx + 1} / {allDocuments.length}</span>
+          <button onClick={goToNext} disabled={currentDocIdx >= allDocuments.length - 1} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 disabled:opacity-30 transition-colors">
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
+      {/* Document tab bar */}
       <div className="flex gap-2 flex-wrap overflow-x-auto pb-1">
         {allDocuments.map((d, idx) => {
           const type = d.category || d.documentType || 'other';
@@ -538,12 +761,16 @@ function ReviewDataCapture({
               <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded', getTypeColor(type))}>
                 {formatType(type)}
               </span>
+              <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded', getConfidenceColor(d.confidence))}>
+                {Math.round(d.confidence * 100)}%
+              </span>
             </button>
           );
         })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[600px]">
+        {/* Document preview with page thumbnails */}
         <div className="card overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
             <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">
@@ -558,31 +785,54 @@ function ReviewDataCapture({
               <button onClick={goToNext} disabled={currentDocIdx >= allDocuments.length - 1} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
-          <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex items-center justify-center overflow-auto min-h-[400px]">
-            {blobUrl ? (
-              blobType.startsWith('image/') ? (
-                <img
-                  src={blobUrl}
-                  alt={doc.documentName || 'Document'}
-                  className="max-w-full max-h-full object-contain transition-transform"
-                  style={{ transform: `scale(${zoom / 100})` }}
-                />
-              ) : (
-                <iframe
-                  src={`${blobUrl}#toolbar=0&zoom=${zoom}`}
-                  className="w-full h-full border-0 min-h-[500px]"
-                  title={doc.documentName || 'Document'}
-                />
-              )
-            ) : (
-              <div className="text-center p-8">
-                <div className="w-12 h-12 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-sm text-slate-500 font-medium">Loading document preview...</p>
+          <div className="flex flex-1 min-h-0">
+            {/* Page thumbnails sidebar */}
+            {isMultiPage && !isImage && (
+              <div className="w-16 flex-shrink-0 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700 overflow-y-auto p-2 space-y-2">
+                {Array.from({ length: pageCount }, (_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={cn(
+                      'w-full aspect-[3/4] rounded border-2 flex items-center justify-center text-xs font-bold transition-all',
+                      currentPage === i + 1
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-600 dark:text-primary-400 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-600 text-slate-400 hover:border-primary-300 hover:text-primary-500'
+                    )}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
               </div>
             )}
+            {/* Preview area */}
+            <div className="flex-1 bg-slate-50 dark:bg-slate-900 flex items-center justify-center overflow-auto min-h-[400px]">
+              {blobUrl ? (
+                isImage ? (
+                  <img
+                    src={blobUrl}
+                    alt={doc.documentName || 'Document'}
+                    className="max-w-full max-h-full object-contain transition-transform"
+                    style={{ transform: `scale(${zoom / 100})` }}
+                  />
+                ) : (
+                  <iframe
+                    src={`${blobUrl}#toolbar=0&zoom=${zoom}&page=${currentPage}`}
+                    className="w-full h-full border-0 min-h-[500px]"
+                    title={doc.documentName || 'Document'}
+                  />
+                )
+              ) : (
+                <div className="text-center p-8">
+                  <div className="w-12 h-12 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-sm text-slate-500 font-medium">Loading document preview...</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Extracted data panel */}
         <div className="card overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
             <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Extracted Data</h3>
@@ -590,9 +840,7 @@ function ReviewDataCapture({
               {hasEdits && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full">Edited</span>}
               <span className={cn(
                 'text-xs font-medium px-2 py-1 rounded-full',
-                doc.confidence >= 0.95 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-                  : doc.confidence >= 0.85 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
-                    : 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+                getConfidenceColor(doc.confidence)
               )}>
                 {Math.round(doc.confidence * 100)}% confidence
               </span>
@@ -602,6 +850,40 @@ function ReviewDataCapture({
           {doc.summary && (
             <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{doc.summary}</p>
+            </div>
+          )}
+
+          {/* Conflict detection banner */}
+          {conflicts.length > 0 && (
+            <div className="px-4 py-3 bg-amber-50/80 dark:bg-amber-500/5 border-b border-amber-200 dark:border-amber-500/20">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                  {conflicts.length} Field Conflict{conflicts.length !== 1 ? 's' : ''} Detected
+                </span>
+              </div>
+              <div className="space-y-3">
+                {conflicts.map(conflict => (
+                  <div key={conflict.key} className="bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-500/20 p-3">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">{conflict.label}</p>
+                    <div className="space-y-1.5">
+                      {conflict.entries.map((entry, i) => (
+                        <label key={`${entry.docId}-${i}`} className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="radio"
+                            name={`conflict-${conflict.key}`}
+                            checked={(conflictOverrides[conflict.key] ?? '') === entry.value}
+                            onChange={() => handleConflictChoice(conflict.key, entry.value)}
+                            className="text-primary-500"
+                          />
+                          <span className="text-sm text-slate-900 dark:text-white font-medium group-hover:text-primary-600">{entry.value}</span>
+                          <span className="text-[10px] text-slate-400 truncate">from {entry.docName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -639,9 +921,7 @@ function ReviewDataCapture({
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{field.label}</label>
                         <span className={cn(
                           'text-[10px] font-semibold px-1.5 py-0.5 rounded',
-                          field.confidence >= 0.95 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
-                            : field.confidence >= 0.85 ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
-                              : 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                          getConfidenceColor(field.confidence)
                         )}>
                           {Math.round(field.confidence * 100)}%
                         </span>
@@ -664,10 +944,46 @@ function ReviewDataCapture({
             )}
           </div>
 
+          {matchResults && matchResults.length > 0 && (
+            <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-amber-50/50 dark:bg-amber-500/5">
+              <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1.5">
+                <GitMerge className="w-3.5 h-3.5" /> Matching Claims Found
+              </div>
+              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                {matchResults.map((m: any) => (
+                  <button
+                    key={m.claimId}
+                    onClick={() => handleAttachToClaim(m.claimId)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-500 text-xs transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-slate-900 dark:text-white">{m.claimNumber}</span>
+                      {m.proNumber && <span className="text-slate-400">PRO: {m.proNumber}</span>}
+                      {m.carrierName && <span className="text-slate-400 truncate">{m.carrierName}</span>}
+                    </div>
+                    <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase',
+                      m.status === 'open' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                    )}>{m.status}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 bg-white dark:bg-slate-800">
-            <button onClick={onBack} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
-              Cancel
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={onBack} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={handleMatchToClaim}
+                disabled={matchLoading}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-amber-300 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {matchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitMerge className="w-3.5 h-3.5" />}
+                Attach to Claim
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <Link
                 href={`/claims/new?aiDocId=${doc.id}`}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
+import { ClaimSelector } from '@/components/claim-selector';
 import { cn } from '@/lib/utils';
 import {
   TrendingUp, Search, AlertTriangle, CheckCircle, XCircle,
@@ -58,15 +59,11 @@ export default function AIPredictPage() {
 
       {/* Input */}
       <div className="card p-6">
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Claim ID</label>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Select Claim</label>
         <div className="flex gap-3">
-          <input
-            type="text"
-            value={claimId}
-            onChange={(e) => setClaimId(e.target.value)}
-            placeholder="Enter a claim ID to analyze..."
-            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-          />
+          <div className="flex-1">
+            <ClaimSelector value={claimId} onChange={(id) => setClaimId(id)} placeholder="Search or select a claim to predict..." />
+          </div>
           <button
             onClick={handlePredict}
             disabled={predictMutation.isPending || !claimId}

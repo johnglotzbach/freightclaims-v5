@@ -95,6 +95,8 @@ export const aiController = {
           confidence: Number(ad.confidence) || 0,
           status: ad.status,
           extractedFields: extracted?.extractedFields || [],
+          commodities: extracted?.commodities || [],
+          matchingIdentifiers: extracted?.matchingIdentifiers || {},
           summary: extracted?.summary || '',
           claimId: ad.claimId,
           claimNumber: ad.claim?.claimNumber,
@@ -144,6 +146,79 @@ export const aiController = {
 
     await prisma.aiDocument.delete({ where: { id: aiDocId } });
     res.status(204).send();
+  }),
+
+  matchDocumentToClaim: asyncHandler(async (req, res) => {
+    const user = getUser(req);
+    const { documentId } = req.body;
+    if (!documentId) {
+      res.status(400).json({ error: 'documentId is required' });
+      return;
+    }
+
+    const aiDoc = await prisma.aiDocument.findFirst({
+      where: { OR: [{ id: documentId }, { documentId }] },
+    });
+    if (!aiDoc) {
+      res.status(404).json({ error: 'AI document not found' });
+      return;
+    }
+
+    const extracted = aiDoc.extractedData as any;
+    const ids = extracted?.matchingIdentifiers || {};
+    const fields = (extracted?.extractedFields || []) as Array<{ key: string; value: string }>;
+    const fieldMap: Record<string, string> = {};
+    for (const f of fields) fieldMap[f.key.toLowerCase().replace(/[\s-]+/g, '_')] = f.value;
+
+    const proNumber = ids.pro_number || fieldMap.pro_number || fieldMap.pro || '';
+    const bolNumber = ids.bol_number || fieldMap.bol_number || fieldMap.bol || '';
+    const poNumber = ids.po_number || fieldMap.po_number || fieldMap.purchase_order || '';
+    const refNumber = ids.reference_number || fieldMap.reference_number || '';
+
+    const searchTerms = [proNumber, bolNumber, poNumber, refNumber].filter(Boolean);
+    if (searchTerms.length === 0) {
+      res.json({ matches: [], message: 'No identifiers found in document to match against claims' });
+      return;
+    }
+
+    const corporateFilter = user.isSuperAdmin ? {} : { corporateId: user.corporateId || '__none__' };
+
+    const claims = await prisma.claim.findMany({
+      where: {
+        ...corporateFilter,
+        OR: [
+          ...(proNumber ? [{ proNumber: { contains: proNumber, mode: 'insensitive' as const } }] : []),
+          ...(bolNumber ? [{ identifiers: { some: { type: 'bol', value: { contains: bolNumber, mode: 'insensitive' as const } } } }] : []),
+          ...(poNumber ? [{ identifiers: { some: { type: 'po', value: { contains: poNumber, mode: 'insensitive' as const } } } }] : []),
+          ...(refNumber ? [{ identifiers: { some: { value: { contains: refNumber, mode: 'insensitive' as const } } } }] : []),
+        ],
+      },
+      take: 10,
+      select: {
+        id: true,
+        claimNumber: true,
+        proNumber: true,
+        status: true,
+        claimType: true,
+        claimAmount: true,
+        createdAt: true,
+        parties: { take: 1, where: { type: 'carrier' }, select: { name: true } },
+      },
+    });
+
+    res.json({
+      matches: claims.map(c => ({
+        claimId: c.id,
+        claimNumber: c.claimNumber,
+        proNumber: c.proNumber,
+        status: c.status,
+        claimType: c.claimType,
+        claimAmount: Number(c.claimAmount),
+        carrierName: c.parties[0]?.name || null,
+        createdAt: c.createdAt,
+      })),
+      searchedIdentifiers: { proNumber, bolNumber, poNumber, refNumber },
+    });
   }),
 
   // Agent status

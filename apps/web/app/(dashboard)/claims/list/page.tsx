@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { get, getList, put, del, apiClient } from '@/lib/api-client';
+import { get, getList, put, del, post, apiClient } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatDate, CLAIM_TYPES } from 'shared';
@@ -15,7 +15,7 @@ import {
   Search, Plus, X, ChevronLeft, ChevronRight,
   ArrowUpDown, ArrowUp, ArrowDown,
   BarChart3, Clock, TrendingUp, AlertCircle,
-  Download, Trash2, RefreshCw,
+  Download, Trash2, RefreshCw, RotateCcw,
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────────────────────
@@ -230,6 +230,19 @@ export default function ClaimsListPage() {
       queryClient.invalidateQueries({ queryKey: ['claims'] });
     },
     onError: () => toast.error('Failed to update some claims'),
+  });
+
+  const bulkRestoreMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(cid => post(`/claims/${cid}/restore`, {})));
+    },
+    onSuccess: (_d, ids) => {
+      toast.success(`${ids.length} claim(s) restored`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['claims'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
+    onError: () => toast.error('Failed to restore some claims'),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -492,9 +505,17 @@ export default function ClaimsListPage() {
             {selectedIds.size} selected
           </span>
           <div className="h-4 w-px bg-blue-200 dark:bg-blue-800" />
-          <BulkButton icon={RefreshCw} onClick={() => setBulkStatusModal(true)}>Change Status</BulkButton>
+          {activeTab === 'deleted' ? (
+            <BulkButton icon={RotateCcw} onClick={() => {
+              if (confirm(`Restore ${selectedIds.size} claim(s)?`)) bulkRestoreMutation.mutate(Array.from(selectedIds));
+            }}>Restore</BulkButton>
+          ) : (
+            <>
+              <BulkButton icon={RefreshCw} onClick={() => setBulkStatusModal(true)}>Change Status</BulkButton>
+              <BulkButton icon={Trash2} danger onClick={handleBulkDelete}>Delete</BulkButton>
+            </>
+          )}
           <BulkButton icon={Download} onClick={handleBulkExport}>Export</BulkButton>
-          <BulkButton icon={Trash2} danger onClick={handleBulkDelete}>Delete</BulkButton>
           <button
             onClick={() => setSelectedIds(new Set())}
             className="ml-auto text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"

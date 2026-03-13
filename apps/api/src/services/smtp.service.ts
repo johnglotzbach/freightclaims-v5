@@ -20,6 +20,7 @@ interface EmailPayload {
   from?: string;
   replyTo?: string;
   cc?: string | string[];
+  bcc?: string | string[];
   attachments?: Array<{
     filename: string;
     content: Buffer | string;
@@ -72,6 +73,7 @@ export const smtpService = {
       from,
       to: Array.isArray(payload.to) ? payload.to.join(', ') : payload.to,
       cc: payload.cc ? (Array.isArray(payload.cc) ? payload.cc.join(', ') : payload.cc) : undefined,
+      bcc: payload.bcc ? (Array.isArray(payload.bcc) ? payload.bcc.join(', ') : payload.bcc) : undefined,
       subject: payload.subject,
       html: payload.html,
       text: payload.text,

@@ -48,6 +48,7 @@ import { webhooksRouter } from './routes/webhooks.routes';
 import { scheduledReportsRouter } from './routes/scheduled-reports.routes';
 import { acknowledgeRouter } from './routes/acknowledge.routes';
 import { carriersRouter } from './routes/carriers.routes';
+import { workflowsRouter } from './routes/workflows.routes';
 
 const app: express.Application = express();
 
@@ -211,6 +212,7 @@ v1.use('/news', newsRouter);
 v1.use('/usage', usageRouter);
 v1.use('/dashboards', dashboardsRouter);
 v1.use('/carriers', carriersRouter);
+v1.use('/workflows', workflowsRouter);
 
 app.use('/api/v1', v1);
 
@@ -236,23 +238,167 @@ async function ensureSchemaSync() {
     } catch (_) { /* already applied or not needed */ }
   };
 
+  // --- Existing columns ---
   await run(`ALTER TABLE claim_documents ALTER COLUMN claim_id DROP NOT NULL`, 'claim_documents.claim_id nullable');
   await run(`ALTER TABLE claim_documents ALTER COLUMN category_id DROP NOT NULL`, 'claim_documents.category_id nullable');
-  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS plan_type TEXT`, 'customers.plan_type added');
-  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS max_users INT DEFAULT 1`, 'customers.max_users added');
-  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_email TEXT`, 'customers.billing_email added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0`, 'users.failed_login_attempts added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`, 'users.locked_until added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT`, 'users.two_factor_secret added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE`, 'users.two_factor_enabled added');
-  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS owner_id TEXT`, 'customers.owner_id added');
-  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filing_status TEXT DEFAULT 'unfiled'`, 'claim_parties.filing_status added');
-  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filed_date TIMESTAMP`, 'claim_parties.filed_date added');
-  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS acknowledged_date TIMESTAMP`, 'claim_parties.acknowledged_date added');
-  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_claim_number TEXT`, 'claim_parties.carrier_claim_number added');
-  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_response TEXT`, 'claim_parties.carrier_response added');
-  await run(`ALTER TABLE claim_documents ADD COLUMN IF NOT EXISTS thumbnail_key TEXT`, 'claim_documents.thumbnail_key added');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS plan_type TEXT`, 'customers.plan_type');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS max_users INT DEFAULT 1`, 'customers.max_users');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_email TEXT`, 'customers.billing_email');
+  await run(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS owner_id TEXT`, 'customers.owner_id');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0`, 'users.failed_login_attempts');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`, 'users.locked_until');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT`, 'users.two_factor_secret');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE`, 'users.two_factor_enabled');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`, 'users.avatar_url');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`, 'users.email_verified');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT`, 'users.verification_token');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filing_status TEXT DEFAULT 'unfiled'`, 'claim_parties.filing_status');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS filed_date TIMESTAMP`, 'claim_parties.filed_date');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS acknowledged_date TIMESTAMP`, 'claim_parties.acknowledged_date');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_claim_number TEXT`, 'claim_parties.carrier_claim_number');
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS carrier_response TEXT`, 'claim_parties.carrier_response');
+  await run(`ALTER TABLE claim_documents ADD COLUMN IF NOT EXISTS thumbnail_key TEXT`, 'claim_documents.thumbnail_key');
 
+  // --- Enterprise overhaul: new claim columns ---
+  await run(`ALTER TABLE claims ADD COLUMN IF NOT EXISTS reserve_amount DECIMAL(12,2)`, 'claims.reserve_amount');
+  await run(`ALTER TABLE claims ADD COLUMN IF NOT EXISTS parent_claim_id TEXT`, 'claims.parent_claim_id');
+  await run(`ALTER TABLE claims ADD COLUMN IF NOT EXISTS assigned_to_id TEXT`, 'claims.assigned_to_id');
+  await run(`CREATE INDEX IF NOT EXISTS idx_claims_assigned ON claims(assigned_to_id)`, 'claims.assigned_to_id idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_claims_parent ON claims(parent_claim_id)`, 'claims.parent_claim_id idx');
+
+  // --- Enterprise overhaul: ClaimParty new columns ---
+  await run(`ALTER TABLE claim_parties ADD COLUMN IF NOT EXISTS contact_name TEXT`, 'claim_parties.contact_name');
+
+  // --- Enterprise overhaul: ClaimProduct new columns ---
+  await run(`ALTER TABLE claim_products ADD COLUMN IF NOT EXISTS claim_amount DECIMAL(12,2)`, 'claim_products.claim_amount');
+  await run(`ALTER TABLE claim_products ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(12,2)`, 'claim_products.unit_cost');
+  await run(`ALTER TABLE claim_products ADD COLUMN IF NOT EXISTS sku TEXT`, 'claim_products.sku');
+  await run(`ALTER TABLE claim_products ADD COLUMN IF NOT EXISTS po_number TEXT`, 'claim_products.po_number');
+  await run(`ALTER TABLE claim_products ADD COLUMN IF NOT EXISTS condition TEXT`, 'claim_products.condition');
+
+  // --- Enterprise overhaul: ClaimComment new columns ---
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS content_html TEXT`, 'claim_comments.content_html');
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS parent_id TEXT`, 'claim_comments.parent_id');
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS mentioned_user_ids TEXT`, 'claim_comments.mentioned_user_ids');
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE`, 'claim_comments.is_pinned');
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT FALSE`, 'claim_comments.is_internal');
+  await run(`ALTER TABLE claim_comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`, 'claim_comments.edited_at');
+  await run(`CREATE INDEX IF NOT EXISTS idx_comments_parent ON claim_comments(parent_id)`, 'claim_comments.parent_id idx');
+
+  // --- Enterprise overhaul: ClaimDocument new columns ---
+  await run(`ALTER TABLE claim_documents ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`, 'claim_documents.sort_order');
+
+  // --- Enterprise overhaul: ClaimTask new columns ---
+  await run(`ALTER TABLE claim_tasks ADD COLUMN IF NOT EXISTS reminder_minutes INT`, 'claim_tasks.reminder_minutes');
+  await run(`ALTER TABLE claim_tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`, 'claim_tasks.completed_at');
+  await run(`ALTER TABLE claim_tasks ADD COLUMN IF NOT EXISTS email_log_id TEXT`, 'claim_tasks.email_log_id');
+  await run(`CREATE INDEX IF NOT EXISTS idx_tasks_due ON claim_tasks(due_date)`, 'claim_tasks.due_date idx');
+
+  // --- Enterprise overhaul: ClaimPayment expanded ---
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS claim_party_id TEXT`, 'claim_payments.claim_party_id');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS transaction_type TEXT DEFAULT 'inbound_payment'`, 'claim_payments.transaction_type');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'inbound'`, 'claim_payments.direction');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'cleared'`, 'claim_payments.payment_status');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS check_number TEXT`, 'claim_payments.check_number');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS gl_code TEXT`, 'claim_payments.gl_code');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS payee_name TEXT`, 'claim_payments.payee_name');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS vendor_name TEXT`, 'claim_payments.vendor_name');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS vendor_phone TEXT`, 'claim_payments.vendor_phone');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS notes TEXT`, 'claim_payments.notes');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'USD'`, 'claim_payments.currency');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS expected_date TIMESTAMP`, 'claim_payments.expected_date');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS created_by_id TEXT`, 'claim_payments.created_by_id');
+  await run(`ALTER TABLE claim_payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`, 'claim_payments.updated_at');
+  await run(`CREATE INDEX IF NOT EXISTS idx_payments_party ON claim_payments(claim_party_id)`, 'claim_payments.party idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_payments_type ON claim_payments(transaction_type)`, 'claim_payments.type idx');
+
+  // --- Enterprise overhaul: EmailLog expanded ---
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS cc TEXT`, 'email_logs.cc');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS bcc TEXT`, 'email_logs.bcc');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS content_html TEXT`, 'email_logs.content_html');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS message_id TEXT`, 'email_logs.message_id');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS in_reply_to TEXT`, 'email_logs.in_reply_to');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS thread_id TEXT`, 'email_logs.thread_id');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS attachment_ids JSONB`, 'email_logs.attachment_ids');
+  await run(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS open_count INT DEFAULT 0`, 'email_logs.open_count');
+  await run(`CREATE INDEX IF NOT EXISTS idx_email_thread ON email_logs(thread_id)`, 'email_logs.thread_id idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_email_msg ON email_logs(message_id)`, 'email_logs.message_id idx');
+
+  // --- Enterprise overhaul: EmailTemplate new columns ---
+  await run(`ALTER TABLE email_templates ADD COLUMN IF NOT EXISTS corporate_id TEXT`, 'email_templates.corporate_id');
+
+  // --- Enterprise overhaul: Notification new columns ---
+  await run(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS category TEXT`, 'notifications.category');
+
+  // --- Enterprise overhaul: ActivityLog expanded ---
+  await run(`ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS old_values JSONB`, 'activity_logs.old_values');
+  await run(`ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS new_values JSONB`, 'activity_logs.new_values');
+
+  // --- Enterprise overhaul: Carrier expanded ---
+  await run(`ALTER TABLE carriers ADD COLUMN IF NOT EXISTS address TEXT`, 'carriers.address');
+  await run(`ALTER TABLE carriers ADD COLUMN IF NOT EXISTS city TEXT`, 'carriers.city');
+  await run(`ALTER TABLE carriers ADD COLUMN IF NOT EXISTS state TEXT`, 'carriers.state');
+  await run(`ALTER TABLE carriers ADD COLUMN IF NOT EXISTS zip_code TEXT`, 'carriers.zip_code');
+  await run(`ALTER TABLE carriers ADD COLUMN IF NOT EXISTS capacity_type TEXT`, 'carriers.capacity_type');
+
+  // --- Enterprise overhaul: CarrierContact expanded ---
+  await run(`ALTER TABLE carrier_contacts ADD COLUMN IF NOT EXISTS address TEXT`, 'carrier_contacts.address');
+  await run(`ALTER TABLE carrier_contacts ADD COLUMN IF NOT EXISTS city TEXT`, 'carrier_contacts.city');
+  await run(`ALTER TABLE carrier_contacts ADD COLUMN IF NOT EXISTS state TEXT`, 'carrier_contacts.state');
+  await run(`ALTER TABLE carrier_contacts ADD COLUMN IF NOT EXISTS zip_code TEXT`, 'carrier_contacts.zip_code');
+
+  // --- Enterprise overhaul: NotificationPreference table ---
+  await run(`CREATE TABLE IF NOT EXISTS notification_preferences (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    event_type TEXT NOT NULL,
+    in_app_setting TEXT NOT NULL DEFAULT 'all_claims',
+    email_setting TEXT NOT NULL DEFAULT 'all_claims',
+    UNIQUE(user_id, event_type)
+  )`, 'notification_preferences table');
+
+  // --- Enterprise overhaul: Workflow tables ---
+  await run(`CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    corporate_id TEXT,
+    trigger TEXT NOT NULL,
+    trigger_config JSONB,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_by_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, 'workflows table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_workflows_corp ON workflows(corporate_id)`, 'workflows.corporate_id idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_workflows_trigger ON workflows(trigger)`, 'workflows.trigger idx');
+
+  await run(`CREATE TABLE IF NOT EXISTS workflow_steps (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    step_order INT NOT NULL,
+    action_type TEXT NOT NULL,
+    config JSONB NOT NULL DEFAULT '{}',
+    condition_logic JSONB
+  )`, 'workflow_steps table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wfsteps_wf ON workflow_steps(workflow_id)`, 'workflow_steps.workflow_id idx');
+
+  await run(`CREATE TABLE IF NOT EXISTS workflow_executions (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id TEXT NOT NULL REFERENCES workflows(id),
+    claim_id TEXT,
+    current_step INT DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    log JSONB
+  )`, 'workflow_executions table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wfexec_wf ON workflow_executions(workflow_id)`, 'workflow_executions.workflow_id idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wfexec_status ON workflow_executions(status)`, 'workflow_executions.status idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wfexec_next ON workflow_executions(next_run_at)`, 'workflow_executions.next_run_at idx');
+
+  // --- Existing tables ---
   await run(`CREATE TABLE IF NOT EXISTS usage_records (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     corporate_id TEXT NOT NULL,
@@ -262,7 +408,7 @@ async function ensureSchemaSync() {
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(corporate_id, type, period)
-  )`, 'usage_records table created');
+  )`, 'usage_records table');
 
   await run(`CREATE TABLE IF NOT EXISTS plan_limits (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -274,7 +420,7 @@ async function ensureSchemaSync() {
     overage_per_claim DECIMAL(10,2),
     overage_per_ai_req DECIMAL(10,2),
     overage_per_document DECIMAL(10,2)
-  )`, 'plan_limits table created');
+  )`, 'plan_limits table');
 
   await run(`INSERT INTO plan_limits (id, plan_type, max_users, max_claims, max_ai_requests, max_documents, overage_per_claim, overage_per_ai_req, overage_per_document) VALUES
     (gen_random_uuid(), 'starter', 1, 25, 50, 100, 2.00, 0.10, 0.05),
@@ -282,10 +428,6 @@ async function ensureSchemaSync() {
     (gen_random_uuid(), 'pro', 15, 500, 1000, 2500, 1.00, 0.05, 0.03),
     (gen_random_uuid(), 'enterprise', 999, 999999, 999999, 999999, NULL, NULL, NULL)
   ON CONFLICT (plan_type) DO NOTHING`, 'plan_limits seeded');
-
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`, 'users.avatar_url added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`, 'users.email_verified added');
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT`, 'users.verification_token added');
 
   await run(`CREATE TABLE IF NOT EXISTS fraud_flags (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,9 +440,9 @@ async function ensureSchemaSync() {
     reviewed_by TEXT,
     reviewed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`, 'fraud_flags table created');
-  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_claim ON fraud_flags(claim_id)`, 'fraud_flags.claim_id index');
-  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_status ON fraud_flags(status)`, 'fraud_flags.status index');
+  )`, 'fraud_flags table');
+  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_claim ON fraud_flags(claim_id)`, 'fraud_flags.claim_id idx');
+  await run(`CREATE INDEX IF NOT EXISTS idx_fraud_flags_status ON fraud_flags(status)`, 'fraud_flags.status idx');
 
   if (fixes.length > 0) {
     logger.info({ fixes }, 'Schema sync: applied database fixes on startup');

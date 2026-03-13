@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { prisma } from '../config/database';
+import { logger } from '../utils/logger';
 import path from 'path';
 import fs from 'fs/promises';
 import { env } from '../config/env';
@@ -245,6 +246,141 @@ adminRouter.get('/storage-stats', authorize(['admin']), async (req: Request, res
           totalTrackedBytes: Number(dbDocStats._sum?.fileSize ?? 0),
         },
         byWorkspace: byWorkspace.sort((a, b) => b.bytes - a.bytes),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /admin/storage-cleanup
+ * Finds and removes orphaned files (on disk but no DB record) and
+ * orphaned DB records (in DB but file missing from disk). Also cleans
+ * stale .meta.json files whose parent file no longer exists.
+ * Dry-run by default — pass { "execute": true } to actually delete.
+ */
+adminRouter.post('/storage-cleanup', authorize(['admin']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!(req as any).user?.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'Super admin required' });
+    }
+
+    const execute = req.body.execute === true;
+    const baseDir = path.resolve(env.LOCAL_UPLOAD_DIR);
+
+    async function collectFiles(dir: string, prefix = ''): Promise<string[]> {
+      const keys: string[] = [];
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            keys.push(...await collectFiles(path.join(dir, entry.name), relPath));
+          } else {
+            keys.push(relPath);
+          }
+        }
+      } catch {}
+      return keys;
+    }
+
+    const allDiskFiles = await collectFiles(baseDir);
+
+    const dataFiles = allDiskFiles.filter(f => !f.endsWith('.meta.json'));
+    const metaFiles = allDiskFiles.filter(f => f.endsWith('.meta.json'));
+
+    const dbDocs = await prisma.claimDocument.findMany({ select: { id: true, s3Key: true } });
+    const dbKeys = new Set(dbDocs.map(d => d.s3Key));
+
+    const orphanedDiskFiles: string[] = [];
+    for (const diskKey of dataFiles) {
+      if (!dbKeys.has(diskKey)) {
+        orphanedDiskFiles.push(diskKey);
+      }
+    }
+
+    const orphanedDbRecords: string[] = [];
+    for (const doc of dbDocs) {
+      if (!doc.s3Key) continue;
+      const filePath = path.join(baseDir, ...doc.s3Key.split('/'));
+      try {
+        await fs.access(filePath);
+      } catch {
+        orphanedDbRecords.push(doc.id);
+      }
+    }
+
+    const staleMetaFiles: string[] = [];
+    for (const meta of metaFiles) {
+      const parentFile = meta.replace('.meta.json', '');
+      if (!dataFiles.includes(parentFile)) {
+        staleMetaFiles.push(meta);
+      }
+    }
+
+    let removedFiles = 0;
+    let removedDbRecords = 0;
+    let removedMeta = 0;
+
+    if (execute) {
+      for (const key of orphanedDiskFiles) {
+        try {
+          await fs.unlink(path.join(baseDir, ...key.split('/')));
+          removedFiles++;
+        } catch (err) {
+          logger.warn({ err, key }, 'Failed to remove orphaned file');
+        }
+      }
+
+      for (const meta of staleMetaFiles) {
+        try {
+          await fs.unlink(path.join(baseDir, ...meta.split('/')));
+          removedMeta++;
+        } catch (err) {
+          logger.warn({ err, meta }, 'Failed to remove stale meta file');
+        }
+      }
+
+      if (orphanedDbRecords.length > 0) {
+        const result = await prisma.claimDocument.deleteMany({
+          where: { id: { in: orphanedDbRecords } },
+        });
+        removedDbRecords = result.count;
+      }
+
+      async function pruneEmpty(dir: string): Promise<boolean> {
+        try {
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          let allEmpty = true;
+          for (const e of entries) {
+            if (e.isDirectory()) {
+              const childEmpty = await pruneEmpty(path.join(dir, e.name));
+              if (!childEmpty) allEmpty = false;
+            } else {
+              allEmpty = false;
+            }
+          }
+          if (allEmpty && dir !== baseDir) {
+            await fs.rmdir(dir);
+          }
+          return allEmpty;
+        } catch { return true; }
+      }
+      await pruneEmpty(baseDir);
+    }
+
+    res.json({
+      success: true,
+      dryRun: !execute,
+      orphanedDiskFiles: orphanedDiskFiles.length,
+      orphanedDbRecords: orphanedDbRecords.length,
+      staleMetaFiles: staleMetaFiles.length,
+      ...(execute ? { removedFiles, removedDbRecords, removedMeta } : {}),
+      details: {
+        diskFilesWithoutDb: orphanedDiskFiles.slice(0, 50),
+        dbRecordsWithoutFile: orphanedDbRecords.slice(0, 50),
+        staleMeta: staleMetaFiles.slice(0, 50),
       },
     });
   } catch (err) {

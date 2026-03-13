@@ -494,154 +494,271 @@ export default function NewClaimPage() {
     ).slice(0, 10);
   };
 
-  async function handleAiAutofill(file: File) {
+  const AI_CATEGORY_MAP: Record<string, string> = {
+    bill_of_lading: 'bol', proof_of_delivery: 'pod', delivery_receipt: 'pod',
+    product_invoice: 'product-invoice', commercial_invoice: 'product-invoice',
+    freight_bill: 'freight-invoice', claim_form: 'other', damage_photos: 'photos',
+    inspection_report: 'inspection', weight_certificate: 'other', packing_list: 'other',
+    rate_confirmation: 'freight-invoice', notice_of_claim: 'other', carrier_response: 'other',
+    insurance_certificate: 'insurance', purchase_order: 'other', correspondence: 'misc',
+  };
+
+  async function handleAiAutofill(files: File[]) {
     setAiProcessing(true);
+    let filled = 0;
     try {
       const formData = new FormData();
-      formData.append('files', file);
-      formData.append('documentName', file.name);
-      const uploadRes = await uploadFile('/documents/upload', formData);
-      const uploaded = uploadRes?.data?.uploaded || (Array.isArray(uploadRes) ? uploadRes : [uploadRes]);
-      const doc = Array.isArray(uploaded) ? uploaded[0] : uploaded;
-      if (!doc?.id) throw new Error('Upload failed');
+      files.forEach(f => formData.append('files', f));
+      let uploadRes: any;
+      try {
+        uploadRes = await uploadFile('/documents/upload', formData);
+      } catch (uploadErr: any) {
+        throw new Error(uploadErr?.response?.data?.error || uploadErr?.message || 'Upload failed');
+      }
+      const uploaded = uploadRes?.data?.uploaded || uploadRes?.uploaded || (Array.isArray(uploadRes) ? uploadRes : [uploadRes]);
+      const uploadedArr = (Array.isArray(uploaded) ? uploaded : [uploaded]).filter(Boolean);
+      const docIds = uploadedArr.filter((d: any) => d?.id).map((d: any) => d.id);
+      if (docIds.length === 0) throw new Error('No documents were uploaded successfully');
 
-      setDocuments(prev => [...prev, { file, category: 'other' }]);
-
+      const remaining = new Set<string>(docIds);
       let attempts = 0;
-      const maxAttempts = 20;
-      while (attempts < maxAttempts) {
+      const maxAttempts = 30;
+      while (remaining.size > 0 && attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 2000));
         attempts++;
         try {
           const aiDocs = await getList<any>('/ai/documents');
-          const aiDoc = aiDocs.find((d: any) => d.documentId === doc.id);
-          if (aiDoc && aiDoc.status === 'completed') {
-            applyExtractedData(aiDoc);
-            setAiFilled(true);
-            toast.success('AI extracted data from your document and filled the form');
-            break;
+          for (const docId of [...remaining]) {
+            const aiDoc = aiDocs.find((d: any) => d.documentId === docId);
+            if (aiDoc && aiDoc.status === 'completed') {
+              try {
+                applyExtractedData(aiDoc);
+                const cat = AI_CATEGORY_MAP[(aiDoc.category || '').toLowerCase()] || 'other';
+                const matchingFile = files[docIds.indexOf(docId)];
+                if (matchingFile) {
+                  setDocuments(prev => {
+                    if (prev.some(d => d.file.name === matchingFile.name && d.file.size === matchingFile.size)) return prev;
+                    return [...prev, { file: matchingFile, category: cat }];
+                  });
+                }
+              } catch (applyErr) {
+                // Silently continue -- partial data is better than none
+              }
+              remaining.delete(docId);
+              filled++;
+            } else if (aiDoc && aiDoc.status === 'failed') {
+              const matchingFile = files[docIds.indexOf(docId)];
+              if (matchingFile) {
+                setDocuments(prev => [...prev, { file: matchingFile, category: 'other' }]);
+              }
+              remaining.delete(docId);
+            }
           }
-          if (aiDoc && aiDoc.status === 'failed') {
-            toast.error('AI could not extract data from this document. Fill the form manually.');
-            break;
-          }
-        } catch { break; }
+        } catch { /* continue polling */ }
       }
-      if (attempts >= maxAttempts) {
-        toast.error('AI extraction timed out. You can fill the form manually.');
+      if (filled > 0) {
+        setAiFilled(true);
+        toast.success(`AI extracted data from ${filled} document${filled > 1 ? 's' : ''} and auto-filled the form`);
+      } else if (remaining.size === 0) {
+        toast.error('AI could not extract data from the uploaded documents. Fill the form manually.');
+      }
+      if (remaining.size > 0) {
+        for (const docId of remaining) {
+          const matchingFile = files[docIds.indexOf(docId)];
+          if (matchingFile) setDocuments(prev => [...prev, { file: matchingFile, category: 'other' }]);
+        }
+        toast.error(`${remaining.size} document(s) timed out during AI analysis. They were still added as attachments.`);
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to upload document for AI analysis');
+      toast.error(err?.message || 'Failed to upload documents for AI analysis');
     } finally {
       setAiProcessing(false);
     }
   }
 
+  function normalizeDate(raw: string): string {
+    if (!raw) return '';
+    const trimmed = raw.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+    const parts = trimmed.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+    if (parts) {
+      const yr = parts[3].length === 2 ? '20' + parts[3] : parts[3];
+      return `${yr}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+    return '';
+  }
+
   function applyExtractedData(aiDoc: any) {
     const fields: Array<{ key: string; value: string }> = aiDoc.extractedFields || [];
-    const fieldMap: Record<string, string> = {};
+    const fm: Record<string, string> = {};
     for (const f of fields) {
-      fieldMap[f.key.toLowerCase().replace(/[\s_-]+/g, '_')] = f.value;
+      fm[f.key.toLowerCase().replace(/[\s_-]+/g, '_')] = f.value;
     }
 
-    if (fieldMap.pro_number || fieldMap.pro) {
-      setPrimaryIdentifier(fieldMap.pro_number || fieldMap.pro);
-      setIdentifierType('pro');
-    }
-    if (fieldMap.bol_number || fieldMap.bol) setBolNumber(fieldMap.bol_number || fieldMap.bol);
-    if (fieldMap.po_number || fieldMap.purchase_order) setPoNumber(fieldMap.po_number || fieldMap.purchase_order);
-    if (fieldMap.reference_number) setReferenceNumber(fieldMap.reference_number);
+    // --- Identifiers ---
+    const pro = fm.pro_number || fm.pro || '';
+    const bol = fm.bol_number || fm.bol || '';
+    const po = fm.po_number || fm.purchase_order || '';
+    const ref = fm.reference_number || fm.tracking_number || '';
 
-    if (fieldMap.ship_date) setShipDate(fieldMap.ship_date);
-    if (fieldMap.delivery_date) setDeliveryDate(fieldMap.delivery_date);
+    if (pro && !primaryIdentifier) { setPrimaryIdentifier(pro); setIdentifierType('pro'); }
+    else if (bol && !primaryIdentifier) { setPrimaryIdentifier(bol); setIdentifierType('bol'); }
+    else if (po && !primaryIdentifier) { setPrimaryIdentifier(po); setIdentifierType('po'); }
+    if (bol) setBolNumber(prev => prev || bol);
+    if (po) setPoNumber(prev => prev || po);
+    if (ref) setReferenceNumber(prev => prev || ref);
 
-    if (fieldMap.description || fieldMap.damage_description) {
-      setDescription(fieldMap.description || fieldMap.damage_description);
-    }
+    // --- ALL Dates ---
+    const sd = normalizeDate(fm.ship_date || fm.shipped_date || fm.pickup_date || '');
+    const dd = normalizeDate(fm.delivery_date || fm.delivered_date || fm.received_date || '');
+    const fd = normalizeDate(fm.filing_date || fm.claim_date || fm.incident_date || '');
+    if (sd) setShipDate(prev => prev || sd);
+    if (dd) setDeliveryDate(prev => prev || dd);
+    if (fd) setFilingDate(prev => prev || fd);
 
+    // --- Description & Notes ---
+    const desc = fm.damage_description || fm.description || fm.damage_detail || fm.notes || '';
+    if (desc) setDescription(prev => prev || desc);
+
+    const notes = fm.special_instructions || fm.notes || fm.remarks || '';
+    if (notes && notes !== desc) setNote(prev => prev ? prev + '\n' + notes : notes);
+
+    // --- Claim Type ---
     const category = (aiDoc.category || '').toLowerCase();
-    if (category.includes('damage') || fieldMap.damage_description) setClaimType('damage');
-    else if (category.includes('shortage') || category.includes('short')) setClaimType('shortage');
-    else if (category.includes('loss') || category.includes('lost')) setClaimType('loss');
-    else if (category.includes('concealed')) setClaimType('concealed_damage');
+    const dmgType = (fm.damage_type || fm.claim_type || '').toLowerCase();
+    if (!claimType) {
+      if (category.includes('damage') || dmgType.includes('damage') || fm.damage_description || fm.visible_damage) setClaimType('damage');
+      else if (category.includes('shortage') || category.includes('short') || dmgType.includes('short')) setClaimType('shortage');
+      else if (category.includes('loss') || category.includes('lost') || dmgType.includes('loss')) setClaimType('loss');
+      else if (category.includes('concealed') || dmgType.includes('concealed') || fm.concealed_damage) setClaimType('concealed_damage');
+      else if (fm.claim_amount || fm.amount) setClaimType('damage');
+    }
 
-    if (fieldMap.carrier_name || fieldMap.carrier) {
-      const carrierName = fieldMap.carrier_name || fieldMap.carrier;
+    // --- Transport Mode ---
+    const mode = (fm.transport_mode || fm.mode || '').toLowerCase();
+    if (mode && !claimMode) {
+      if (mode.includes('ltl')) setClaimMode('LTL');
+      else if (mode.includes('ftl') || mode.includes('full') || mode.includes('truckload')) setClaimMode('FTL');
+      else if (mode.includes('air')) setClaimMode('Air');
+      else if (mode.includes('ocean') || mode.includes('sea')) setClaimMode('Ocean');
+      else if (mode.includes('rail')) setClaimMode('Rail');
+      else if (mode.includes('parcel')) setClaimMode('Parcel');
+      else if (mode.includes('flat')) setClaimMode('Flatbed');
+    }
+
+    // --- Salvage ---
+    const salvage = fm.salvage_value || fm.salvage || '';
+    if (salvage) setSalvageAllowance(prev => prev || salvage.replace(/[$,]/g, ''));
+
+    // --- Carrier ---
+    const carrierName = fm.carrier_name || fm.carrier || '';
+    if (carrierName) {
       setParties(prev => {
         if (prev.some(p => p.type === 'carrier')) return prev;
         return [...prev, {
-          type: 'carrier',
-          name: carrierName,
-          scacCode: fieldMap.scac || fieldMap.carrier_scac || fieldMap.scac_code || '',
-          email: fieldMap.carrier_email || '',
-          phone: fieldMap.carrier_phone || '',
-          contactName: fieldMap.carrier_contact || '',
-          address: '', city: '', state: '', zipCode: '',
+          type: 'carrier', name: carrierName,
+          scacCode: fm.scac || fm.carrier_scac || fm.scac_code || '',
+          email: fm.carrier_email || '', phone: fm.carrier_phone || '',
+          contactName: fm.carrier_contact || fm.driver_name || '',
+          address: fm.carrier_address || '', city: '', state: '', zipCode: '',
         }];
       });
     }
 
-    if (fieldMap.shipper || fieldMap.shipper_name) {
-      const name = fieldMap.shipper || fieldMap.shipper_name;
+    // --- Shipper ---
+    const shipperName = fm.shipper || fm.shipper_name || '';
+    if (shipperName) {
       setParties(prev => {
         if (prev.some(p => p.type === 'shipper')) return prev;
         return [...prev, {
-          type: 'shipper', name, scacCode: '', email: '', phone: '', contactName: '',
-          address: fieldMap.shipper_address || fieldMap.origin_address || '',
-          city: fieldMap.shipper_city || fieldMap.origin_city || '',
-          state: fieldMap.shipper_state || fieldMap.origin_state || '',
-          zipCode: fieldMap.shipper_zip || fieldMap.origin_zip || '',
+          type: 'shipper', name: shipperName, scacCode: '', contactName: '',
+          email: fm.shipper_email || '', phone: fm.shipper_phone || '',
+          address: fm.shipper_address || fm.origin_address || '',
+          city: fm.shipper_city || fm.origin_city || '',
+          state: fm.shipper_state || fm.origin_state || '',
+          zipCode: fm.shipper_zip || fm.origin_zip || '',
         }];
       });
     }
 
-    if (fieldMap.consignee || fieldMap.consignee_name) {
-      const name = fieldMap.consignee || fieldMap.consignee_name;
+    // --- Consignee ---
+    const consigneeName = fm.consignee || fm.consignee_name || '';
+    if (consigneeName) {
       setParties(prev => {
         if (prev.some(p => p.type === 'consignee')) return prev;
         return [...prev, {
-          type: 'consignee', name, scacCode: '', email: '', phone: '', contactName: '',
-          address: fieldMap.consignee_address || fieldMap.destination_address || '',
-          city: fieldMap.consignee_city || fieldMap.destination_city || '',
-          state: fieldMap.consignee_state || fieldMap.destination_state || '',
-          zipCode: fieldMap.consignee_zip || fieldMap.destination_zip || '',
+          type: 'consignee', name: consigneeName, scacCode: '', contactName: '',
+          email: fm.consignee_email || '', phone: fm.consignee_phone || '',
+          address: fm.consignee_address || fm.destination_address || '',
+          city: fm.consignee_city || fm.destination_city || '',
+          state: fm.consignee_state || fm.destination_state || '',
+          zipCode: fm.consignee_zip || fm.destination_zip || '',
         }];
       });
     }
 
-    // Auto-fill origin address
-    const oAddr = fieldMap.origin_address || fieldMap.shipper_address || '';
-    const oCity = fieldMap.origin_city || fieldMap.shipper_city || '';
-    const oState = fieldMap.origin_state || fieldMap.shipper_state || '';
-    const oZip = fieldMap.origin_zip || fieldMap.shipper_zip || '';
-    if (oCity || oAddr) {
-      setOrigin({ address: oAddr, city: oCity, state: oState, zip: oZip });
-    }
+    // --- Origin ---
+    const oAddr = fm.origin_address || fm.shipper_address || '';
+    const oCity = fm.origin_city || fm.shipper_city || '';
+    const oState = fm.origin_state || fm.shipper_state || '';
+    const oZip = fm.origin_zip || fm.shipper_zip || '';
+    if (oCity || oAddr) setOrigin(prev => ({
+      address: prev.address || oAddr, city: prev.city || oCity,
+      state: prev.state || oState, zip: prev.zip || oZip,
+    }));
 
-    // Auto-fill destination address
-    const dAddr = fieldMap.destination_address || fieldMap.consignee_address || '';
-    const dCity = fieldMap.destination_city || fieldMap.consignee_city || '';
-    const dState = fieldMap.destination_state || fieldMap.consignee_state || '';
-    const dZip = fieldMap.destination_zip || fieldMap.consignee_zip || '';
-    if (dCity || dAddr) {
-      setDestination({ address: dAddr, city: dCity, state: dState, zip: dZip });
-    }
+    // --- Destination ---
+    const dAddr = fm.destination_address || fm.consignee_address || '';
+    const dCity = fm.destination_city || fm.consignee_city || '';
+    const dState = fm.destination_state || fm.consignee_state || '';
+    const dZip = fm.destination_zip || fm.consignee_zip || '';
+    if (dCity || dAddr) setDestination(prev => ({
+      address: prev.address || dAddr, city: prev.city || dCity,
+      state: prev.state || dState, zip: prev.zip || dZip,
+    }));
 
-    if (fieldMap.commodity || fieldMap.product || fieldMap.description) {
-      const amount = parseFloat(fieldMap.amount || fieldMap.claim_amount || fieldMap.value || '0');
-      const weight = fieldMap.weight || fieldMap.total_weight || '';
-      const pieces = parseInt(fieldMap.pieces || fieldMap.quantity || '1', 10);
-      setProducts([{
-        productName: fieldMap.commodity || fieldMap.product || fieldMap.description || '',
+    // --- Commodities (from structured array first, then fallback to flat fields) ---
+    const commoditiesArr: Array<any> = aiDoc.commodities || [];
+    if (commoditiesArr.length > 0) {
+      const mapped = commoditiesArr.map((c: any) => ({
+        productName: c.description || c.product || '',
+        claimType: c.claim_type || claimType || 'damage',
+        claimCondition: c.condition || fm.damage_severity || fm.damage_type || '',
+        quantity: Number(c.quantity) || 1,
+        weight: String(c.weight || '').replace(/[^\d.]/g, ''),
+        unitCost: c.unit_cost ? String(c.unit_cost).replace(/[$,]/g, '') : '',
+        claimAmount: c.claim_amount ? String(c.claim_amount).replace(/[$,]/g, '') : '',
+        sku: c.sku || '',
+        poNumber: c.po_number || po || '',
+      }));
+      setProducts(prev => {
+        const hasData = prev.some(p => p.productName.trim());
+        return hasData ? [...prev, ...mapped] : mapped;
+      });
+    } else if (fm.commodity || fm.product || fm.description) {
+      const amt = parseFloat((fm.amount || fm.claim_amount || fm.invoice_total || fm.value || '0').replace(/[$,]/g, ''));
+      const wt = (fm.weight || fm.total_weight || '').replace(/[^\d.]/g, '');
+      const qty = parseInt(fm.pieces || fm.quantity || '1', 10);
+      const condition = fm.damage_severity || fm.damage_type || fm.damage_condition || '';
+      const newProduct = {
+        productName: fm.commodity || fm.product || fm.description || '',
         claimType: claimType || 'damage',
-        claimCondition: fieldMap.damage_severity || fieldMap.damage_type || '',
-        quantity: pieces,
-        weight,
-        unitCost: amount > 0 ? (amount / Math.max(pieces, 1)).toFixed(2) : '',
-        claimAmount: amount > 0 ? amount.toFixed(2) : '',
-        sku: fieldMap.sku || '',
-        poNumber: fieldMap.po_number || '',
-      }]);
+        claimCondition: condition,
+        quantity: qty,
+        weight: wt,
+        unitCost: amt > 0 ? (amt / Math.max(qty, 1)).toFixed(2) : (fm.unit_cost || '').replace(/[$,]/g, ''),
+        claimAmount: amt > 0 ? amt.toFixed(2) : '',
+        sku: fm.sku || fm.item_number || '',
+        poNumber: fm.po_number || po || '',
+      };
+      setProducts(prev => {
+        const hasData = prev.some(p => p.productName.trim());
+        return hasData ? [...prev, newProduct] : [newProduct];
+      });
     }
   }
 
@@ -667,14 +784,14 @@ export default function NewClaimPage() {
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">AI Auto-Fill</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Upload a BOL, invoice, POD, or any shipping document — AI will extract the data and fill the form for you.
+              Upload one or multiple documents (BOL, invoice, POD, photos) — AI will extract and merge data into the form.
             </p>
           </div>
           <div className="flex-shrink-0">
             {aiProcessing ? (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-primary-500/10 rounded-xl">
                 <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
-                <span className="text-sm font-medium text-primary-600 dark:text-primary-400">Analyzing document...</span>
+                <span className="text-sm font-medium text-primary-600 dark:text-primary-400">Analyzing documents...</span>
               </div>
             ) : (
               <button
@@ -688,11 +805,12 @@ export default function NewClaimPage() {
             <input
               ref={aiFileRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.tiff,.webp"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.tiff,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt"
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleAiAutofill(file);
+                const files = e.target.files;
+                if (files && files.length > 0) handleAiAutofill(Array.from(files));
                 e.target.value = '';
               }}
             />

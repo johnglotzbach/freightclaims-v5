@@ -22,15 +22,20 @@ interface ClaimFilters {
   hasTasks?: boolean;
   hasOverdueTasks?: boolean;
   unreadEmails?: boolean;
+  parentClaimId?: string;
 }
 
 export const claimsRepository = {
   async findMany(filters: ClaimFilters, pagination: { limit: number; offset: number }) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const showDeleted = filters.status === 'deleted';
+    const where: Record<string, unknown> = showDeleted
+      ? { deletedAt: { not: null } }
+      : { deletedAt: null };
 
     if (filters.corporateId) where.corporateId = filters.corporateId;
-    if (filters.status) where.status = filters.status;
+    if (filters.status && !showDeleted) where.status = filters.status;
     if (filters.customerId) where.customerId = filters.customerId;
+    if (filters.parentClaimId) where.parentClaimId = filters.parentClaimId;
     if (filters.search) {
       where.OR = [
         { claimNumber: { contains: filters.search, mode: 'insensitive' } },
@@ -106,6 +111,10 @@ export const claimsRepository = {
     return prisma.claim.update({ where: { id }, data: { deletedAt: new Date() } });
   },
 
+  async restore(id: string) {
+    return prisma.claim.update({ where: { id }, data: { deletedAt: null } });
+  },
+
   async updateStatus(id: string, status: string, userId: string) {
     return prisma.$transaction([
       prisma.claim.update({ where: { id }, data: { status } }),
@@ -126,7 +135,29 @@ export const claimsRepository = {
   async removeProduct(_claimId: string, productId: string) { return prisma.claimProduct.delete({ where: { id: productId } }); },
 
   // Comments 
-  async getComments(claimId: string) { return prisma.claimComment.findMany({ where: { claimId }, orderBy: { createdAt: 'desc' } }); },
+  async getComments(claimId: string) {
+    return prisma.claimComment.findMany({
+      where: { claimId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        replies: {
+          orderBy: { createdAt: 'asc' },
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+        },
+      },
+    });
+  },
+  async updateComment(commentId: string, data: Record<string, unknown>) {
+    return prisma.claimComment.update({ where: { id: commentId }, data: { ...data, editedAt: new Date() } as any });
+  },
+  async deleteComment(commentId: string) {
+    await prisma.claimComment.deleteMany({ where: { parentId: commentId } });
+    return prisma.claimComment.delete({ where: { id: commentId } });
+  },
+  async pinComment(commentId: string, isPinned: boolean) {
+    return prisma.claimComment.update({ where: { id: commentId }, data: { isPinned } });
+  },
   async addComment(claimId: string, data: Record<string, unknown>) { return prisma.claimComment.create({ data: { ...data, claimId } as any }); },
 
   // Tasks
@@ -139,6 +170,66 @@ export const claimsRepository = {
   async getPayments(claimId: string) { return prisma.claimPayment.findMany({ where: { claimId } }); },
   async addPayment(claimId: string, data: Record<string, unknown>) { return prisma.claimPayment.create({ data: { ...data, claimId } as any }); },
   async updatePayment(_claimId: string, paymentId: string, data: Record<string, unknown>) { return prisma.claimPayment.update({ where: { id: paymentId }, data: data as any }); },
+
+  async deletePayment(_claimId: string, paymentId: string) {
+    return prisma.claimPayment.delete({ where: { id: paymentId } });
+  },
+
+  async getPaymentSummary(claimId: string) {
+    const payments = await prisma.claimPayment.findMany({ where: { claimId } });
+    const claim = await prisma.claim.findUnique({
+      where: { id: claimId },
+      select: { claimAmount: true, reserveAmount: true },
+    });
+    const summary: Record<string, { filed: number; inbound: number; outbound: number; concession: number; writeOff: number; directToCustomer: number; balance: number }> = {};
+    const parties = await prisma.claimParty.findMany({ where: { claimId }, select: { id: true, name: true, type: true } });
+    for (const party of parties) {
+      summary[party.id] = { filed: 0, inbound: 0, outbound: 0, concession: 0, writeOff: 0, directToCustomer: 0, balance: 0 };
+    }
+    let totalInbound = 0, totalOutbound = 0, totalConcession = 0, totalWriteOff = 0, totalDirect = 0;
+    for (const p of payments) {
+      const amt = Number(p.amount) || 0;
+      const partyId = p.claimPartyId || '_unassigned';
+      if (!summary[partyId]) summary[partyId] = { filed: 0, inbound: 0, outbound: 0, concession: 0, writeOff: 0, directToCustomer: 0, balance: 0 };
+      const txType = (p as any).transactionType || p.type || 'inbound_payment';
+      switch (txType) {
+        case 'inbound_payment': summary[partyId].inbound += amt; totalInbound += amt; break;
+        case 'outbound_payment': summary[partyId].outbound += amt; totalOutbound += amt; break;
+        case 'concession': summary[partyId].concession += amt; totalConcession += amt; break;
+        case 'write_off': summary[partyId].writeOff += amt; totalWriteOff += amt; break;
+        case 'direct_to_customer': summary[partyId].directToCustomer += amt; totalDirect += amt; break;
+        default: summary[partyId].inbound += amt; totalInbound += amt;
+      }
+    }
+    for (const key of Object.keys(summary)) {
+      const s = summary[key];
+      s.balance = s.inbound - s.outbound - s.concession - s.writeOff - s.directToCustomer;
+    }
+    const filedAmount = Number(claim?.claimAmount) || 0;
+    const reserveAmount = Number(claim?.reserveAmount) || 0;
+    const fundsAvailable = filedAmount - totalInbound + totalOutbound;
+    const hasPending = payments.some((p: any) => (p as any).paymentStatus === 'pending');
+    return {
+      filedAmount,
+      reserveAmount,
+      totalInbound,
+      totalOutbound,
+      totalConcession,
+      totalWriteOff,
+      totalDirect,
+      fundsAvailable,
+      hasPendingTransactions: hasPending,
+      perParty: summary,
+      parties: parties.map(p => ({ id: p.id, name: p.name, type: p.type })),
+    };
+  },
+
+  async getPaymentsByType(claimId: string, transactionType: string) {
+    return prisma.claimPayment.findMany({
+      where: { claimId, transactionType } as any,
+      orderBy: { createdAt: 'desc' },
+    });
+  },
 
   // Identifiers
   async getIdentifiers(claimId: string) { return prisma.claimIdentifier.findMany({ where: { claimId } }); },

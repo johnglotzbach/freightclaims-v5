@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { post } from '@/lib/api-client';
+import { ClaimSelector } from '@/components/claim-selector';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/loading';
 import {
@@ -79,15 +80,8 @@ export default function CarrierCommunicationPage() {
       <div className="card p-6 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Claim ID</label>
-            <input
-              type="text"
-              value={claimId}
-              onChange={(e) => setClaimId(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-              placeholder="Enter claim ID..."
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-            />
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Select Claim</label>
+            <ClaimSelector value={claimId} onChange={(id) => setClaimId(id)} placeholder="Search or select a claim..." />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Action Type</label>

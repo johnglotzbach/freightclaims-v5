@@ -592,7 +592,7 @@ export const reportsRepository = {
   },
 
   async getInsightsReport(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -625,7 +625,7 @@ export const reportsRepository = {
   },
 
   async getTopCustomers(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -657,7 +657,7 @@ export const reportsRepository = {
   },
 
   async getTopCarriers(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -697,7 +697,7 @@ export const reportsRepository = {
   },
 
   async getCollectionPercentage(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -730,7 +730,7 @@ export const reportsRepository = {
   },
 
   async getMetricsPerCarrier(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -778,7 +778,7 @@ export const reportsRepository = {
   },
 
   async getMetricsPerDestination(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -820,7 +820,7 @@ export const reportsRepository = {
   },
 
   async getWriteOffAmount(body: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null, status: { in: ['denied', 'cancelled'] } };
+    const where: Record<string, unknown> = { status: { in: ['denied', 'cancelled'] } };
     if (corporateId) where.corporateId = corporateId;
     const dateFilter = buildDateWhere(body);
     if (dateFilter) where.createdAt = dateFilter;
@@ -849,7 +849,7 @@ export const reportsRepository = {
   },
 
   async exportReport(reportType: string, format: string, query: Record<string, unknown>, corporateId?: string) {
-    const where: Record<string, unknown> = { deletedAt: null };
+    const where: Record<string, unknown> = {};
     if (corporateId) where.corporateId = corporateId;
 
     const dateFilter = parseDateRange(query.dateRange as string);
