@@ -278,7 +278,7 @@ export default function ClaimDetailPage() {
       <div className="animate-fade-in">
         {activeTab === 'status' && <StatusTab claim={claim} claimId={id} />}
         {activeTab === 'transportation' && <TransportationTab claim={claim} />}
-        {activeTab === 'form-data' && <FormDataTab claim={claim} claimId={claimId} />}
+        {activeTab === 'form-data' && <FormDataTab claim={claim} claimId={id} />}
         {activeTab === 'documents' && <DocumentsTab documents={claim.documents || []} claimId={id} />}
         {activeTab === 'tasks' && <TasksTab tasks={claim.tasks || []} claimId={id} />}
         {activeTab === 'deadlines' && <DeadlinesTab claimId={id} />}
